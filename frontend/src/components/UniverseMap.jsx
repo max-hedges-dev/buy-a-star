@@ -17,7 +17,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
     // This runs once and creates the huge gas cloud structure
     // We generate EXTRA points (50,000) just for the visual gas
     const nebulaData = useMemo(() => {
-        const gen = GalaxyGenerator.generate();
+        const gen = GalaxyGenerator.generateGalaxy();
         // We use the generator's output directly for the nebula points
         return gen;
     }, []);

@@ -1,90 +1,90 @@
 import * as THREE from 'three';
 
 /**
- * Galaxy Generator - Photorealistic Version (Restored)
- * Generates coordinate data for a multi-layered spiral galaxy.
+ * Galaxy Generator - Tighter & Thicker
+ * Increased Spin and Randomness for requested look.
  */
 class GalaxyGenerator {
-    constructor() {
-        this.baseParams = {
-            count: 80000,
-            arms: 6,
-            radius: 1300,
-            spin: 6,
-            randomness: 0.6,
-            randomnessPower: 3,
-            coreRadius: 200,
+    constructor(parameters = {}) {
+        this.params = {
+            count: 80000,          // Increased for density
+            arms: 2,
+            radius: 2000,
+            coreRadiusX: 250,
+            coreRadiusZ: 100,
+            spin: 12,              // Tighter (Was 8)
+            randomness: 1.2,       // Thicker (Was 0.9)
+            insideColor: '#aa8866',
+            outsideColor: '#4488ff',
+            ...parameters
         };
     }
 
-    /*
-     * Generates a complex color for a particle based on radius and randomness.
-     * Pallete:
-     * - Core: White/Yellow/Warm (#fff8e7)
-     * - Inner Arms: Rusty/Orange/Brown (#ff8c00 -> #8b4500)
-     * - Outer Arms: Blue/Purple/Cyan (#4169e1 -> #00bfff)
-     * - Dust Darkeners: Some particles are darker to simulate depth
-     */
-    getGalaxyColor(r, maxR, randomVal) {
-        const ratio = r / maxR;
-        const color = new THREE.Color();
+    generateGalaxy() {
+        const positions = new Float32Array(this.params.count * 3);
+        const colors = new Float32Array(this.params.count * 3);
+        const scales = new Float32Array(this.params.count);
 
-        if (ratio < 0.15) {
-            // CORE: Bright Yellow/White
-            color.setHSL(0.12, 0.8, 0.8 + (Math.random() * 0.2));
-        } else if (ratio < 0.45) {
-            // INNER ARMS: Rusty/Red/Orange (Dust heavy)
-            // HSL: Orange/Red is around 0.05 - 0.08
-            color.setHSL(0.05 + Math.random() * 0.05, 0.9, 0.5 + (Math.random() * 0.2));
-        } else {
-            // OUTER ARMS: Blue/Purple/White
-            // HSL: Blue is 0.6
-            color.setHSL(0.6 + Math.random() * 0.1, 0.8, 0.5 + (Math.random() * 0.4));
+        const colorInside = new THREE.Color(this.params.insideColor);
+        const colorOutside = new THREE.Color(this.params.outsideColor);
+
+        for (let i = 0; i < this.params.count; i++) {
+            const isCore = Math.random() < 0.2;
+
+            let x, y, z;
+            let mixedColor;
+
+            if (isCore) {
+                // --- DIM OVAL CORE ---
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.pow(Math.random(), 0.5);
+
+                x = r * Math.cos(theta) * this.params.coreRadiusX;
+                z = r * Math.sin(theta) * this.params.coreRadiusZ;
+                y = (Math.random() - 0.5) * (this.params.coreRadiusX * 0.2);
+
+                mixedColor = colorInside.clone().lerp(new THREE.Color('#000000'), 0.3 + Math.random() * 0.3);
+
+            } else {
+                // --- ARMS ---
+                const r = this.params.coreRadiusX + Math.random() * (this.params.radius - this.params.coreRadiusX);
+                const spinAngle = (r - this.params.coreRadiusX) / (this.params.radius - this.params.coreRadiusX) * this.params.spin;
+                const armIndex = i % this.params.arms;
+                const armAngle = armIndex * Math.PI;
+                const finalAngle = spinAngle + armAngle;
+
+                // --- CIRCULAR SCATTER (THICK) ---
+                // Power 1.5 allows more spread away from center than Power 2
+                const scatterRadius = Math.pow(Math.random(), 1.5) * this.params.randomness * r;
+                const scatterAngle = Math.random() * Math.PI * 2;
+
+                const randomX = Math.cos(scatterAngle) * scatterRadius;
+                const randomZ = Math.sin(scatterAngle) * scatterRadius;
+
+                x = Math.cos(finalAngle) * r + randomX;
+                z = Math.sin(finalAngle) * r + randomZ;
+                y = (Math.random() - 0.5) * (r * 0.2); // Thicker vertical too
+
+                // Color Gradient
+                mixedColor = colorInside.clone().lerp(colorOutside, r / (this.params.radius * 0.6));
+
+                if (Math.random() < 0.2) mixedColor.lerp(new THREE.Color('#ffffff'), 0.4);
+            }
+
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+
+            colors[i * 3] = mixedColor.r;
+            colors[i * 3 + 1] = mixedColor.g;
+            colors[i * 3 + 2] = mixedColor.b;
+
+            scales[i] = Math.random();
         }
 
-        // Variation: Make some particles darker (Dust effect)
-        // If we can't do subtractive blending, we just make them dark red/brown
-        if (Math.random() > 0.8) {
-            color.setHSL(0.02, 0.9, 0.2); // Dark brown
-        }
-
-        return color;
-    }
-
-    generate() {
-        const params = this.baseParams;
-        const positions = new Float32Array(params.count * 3);
-        const colors = new Float32Array(params.count * 3);
-        const sizes = new Float32Array(params.count);
-
-        for (let i = 0; i < params.count; i++) {
-            // Logarithmic Spiral Math
-            const r = Math.pow(Math.random(), 1.5) * params.radius;
-            const spinAngle = r * params.spin / params.radius;
-            const branchAngle = (i % params.arms) / params.arms * Math.PI * 2;
-
-            // Randomness with "clumping" 
-            const randomX = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * r;
-            const randomY = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * (r / 3);
-            const randomZ = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * r;
-
-            const finalAngle = spinAngle + branchAngle;
-
-            positions[i * 3] = Math.cos(finalAngle) * r + randomX;
-            positions[i * 3 + 1] = randomY;
-            positions[i * 3 + 2] = Math.sin(finalAngle) * r + randomZ;
-
-            // Colors
-            const color = this.getGalaxyColor(r, params.radius, Math.random());
-            colors[i * 3] = color.r;
-            colors[i * 3 + 1] = color.g;
-            colors[i * 3 + 2] = color.b;
-
-            sizes[i] = Math.random();
-        }
-
-        return { positions, colors, sizes };
+        return { positions, colors, scales };
     }
 }
 
 export default new GalaxyGenerator();
+export { GalaxyGenerator };

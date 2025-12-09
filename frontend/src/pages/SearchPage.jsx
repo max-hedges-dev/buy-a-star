@@ -248,7 +248,7 @@ const SearchPage = () => {
                         enableZoom={true}
                         enableRotate={true}
                         minDistance={5}
-                        maxDistance={2500} // Limited zoom out as requested
+                        maxDistance={3500} // Limited zoom out (increased)
                         enabled={viewMode === VIEW_MODE.MAP} // Disable controls during transition
                     />
                 </Canvas>

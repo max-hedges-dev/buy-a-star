@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import { fetchStars } from '../services/api';
 import { Search, ShoppingCart, Loader2 } from 'lucide-react';
@@ -7,6 +7,7 @@ import { OrbitControls, Stars } from '@react-three/drei';
 import CheckoutModal from '../components/CheckoutModal';
 import UniverseMap from '../components/UniverseMap';
 import StarViewer from '../components/StarViewer';
+import GalaxyBackground from '../components/GalaxyBackground';
 import * as THREE from 'three';
 
 const VIEW_MODE = {
@@ -14,8 +15,6 @@ const VIEW_MODE = {
     TRANSITION: 'TRANSITION',
     DISPLAY: 'DISPLAY'
 };
-
-
 
 // --- IDLE CONTROLLER COMPONENT ---
 // Handles the 10s timer, auto-reset, and spinning logic
@@ -230,7 +229,8 @@ const SearchPage = () => {
                         targetStar={targetStar}
                     />
 
-
+                    {/* Nebula Background - Visual Only */}
+                    <GalaxyBackground count={400} />
 
                     {!loading && stars.length > 0 && (
                         <UniverseMap

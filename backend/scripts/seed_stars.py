@@ -18,71 +18,83 @@ AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_com
 
 CATALOG_PREFIXES = ["HIP", "HD", "SAO", "TYC"]
 
+# Galaxy parameters (match frontend v2)
+RADIUS = 1500           # Smaller
+ARMS = 4
+SPIN = 0.7              # Looser spirals
+BULGE_RADIUS_X = 250    # Narrower
+BULGE_RADIUS_Z = 100
+
 def generate_star_name():
     return f"{random.choice(CATALOG_PREFIXES)}-{random.randint(1000, 9999)}-{random.randint(10, 99)}"
 
+def get_spiral_position(arm_index, t, scatter=80):
+    """Generate position on spiral arm"""
+    r = BULGE_RADIUS_X + t * (RADIUS - BULGE_RADIUS_X)
+    
+    arm_offset = (arm_index / ARMS) * math.pi * 2
+    spiral_angle = arm_offset + t * SPIN * math.pi * 2
+    
+    x = math.cos(spiral_angle) * r
+    z = math.sin(spiral_angle) * r
+    
+    if scatter > 0:
+        scatter_angle = random.random() * math.pi * 2
+        scatter_dist = math.pow(random.random(), 0.7) * scatter
+        x += math.cos(scatter_angle) * scatter_dist
+        z += math.sin(scatter_angle) * scatter_dist
+    
+    y_thickness = 50 * (1 - t * 0.7)
+    y = (random.random() - 0.5) * y_thickness
+    
+    return x, y, z
+
+def get_bulge_position():
+    """Generate position in central bulge"""
+    theta = random.random() * math.pi * 2
+    r = math.pow(random.random(), 0.5)
+    
+    x = math.cos(theta) * r * BULGE_RADIUS_X
+    z = math.sin(theta) * r * BULGE_RADIUS_Z
+    y = (random.random() - 0.5) * BULGE_RADIUS_Z * 0.4
+    
+    return x, y, z
+
 async def seed():
-    print("Seeding database with Tighter & Thicker Spirals...")
+    print("Seeding database with looser 4-arm Milky Way structure...")
     async with AsyncSessionLocal() as session:
         print("Clearing existing data...")
         await session.execute(delete(Transaction))
         await session.execute(delete(Star))
         
         stars = []
-        
-        # --- PARAMS (MATCH FRONTEND) ---
         COUNT = 1000
-        RADIUS = 2000
-        CORE_RADIUS_X = 250 
-        CORE_RADIUS_Z = 100 
-        SPIN = 12       # Tighter
-        ARMS = 2 
-        RANDOMNESS = 1.2 # Thicker
         
         for i in range(COUNT):
             scientific_name = generate_star_name()
-            is_core = random.random() < 0.2
+            in_bulge = random.random() < 0.15
             
-            x = 0; y = 0; z = 0
-            category = "White Dwarf" 
-            
-            if is_core:
-                # --- DIM OVAL CORE ---
-                theta = random.random() * math.pi * 2
-                r = math.pow(random.random(), 0.5)
-                x = r * math.cos(theta) * CORE_RADIUS_X
-                z = r * math.sin(theta) * CORE_RADIUS_Z
-                y = (random.random() - 0.5) * (CORE_RADIUS_X * 0.2)
-                
+            if in_bulge:
+                x, y, z = get_bulge_position()
                 rv = random.random()
-                if rv < 0.6: category = "Red Dwarf" 
-                elif rv < 0.9: category = "Red Giant"
-                else: category = "Yellow Dwarf"
-                
+                if rv < 0.5:
+                    category = "Yellow Dwarf"
+                elif rv < 0.85:
+                    category = "Red Giant"
+                else:
+                    category = "Red Dwarf"
             else:
-                # --- ARMS ---
-                current_radius = CORE_RADIUS_X + random.random() * (RADIUS - CORE_RADIUS_X)
-                spin_angle = (current_radius - CORE_RADIUS_X) / (RADIUS - CORE_RADIUS_X) * SPIN
                 arm_index = i % ARMS
-                arm_angle = arm_index * math.pi
-                final_angle = spin_angle + arm_angle
-                
-                # --- CIRCULAR SCATTER (THICK) ---
-                # Match frontend power 1.5
-                scatter_radius = math.pow(random.random(), 1.5) * RANDOMNESS * current_radius
-                scatter_angle = random.random() * math.pi * 2
-                
-                rx = math.cos(scatter_angle) * scatter_radius
-                rz = math.sin(scatter_angle) * scatter_radius
-                
-                x = math.cos(final_angle) * current_radius + rx
-                z = math.sin(final_angle) * current_radius + rz
-                y = (random.random() - 0.5) * (current_radius * 0.2) # Thicker Y
+                t = math.pow(random.random(), 0.7)
+                x, y, z = get_spiral_position(arm_index, t, scatter=80)
                 
                 rv = random.random()
-                if rv < 0.4: category = "Blue Giant"
-                elif rv < 0.8: category = "White Dwarf" 
-                else: category = "Yellow Dwarf"
+                if rv < 0.6:
+                    category = "Blue Giant"
+                elif rv < 0.85:
+                    category = "White Dwarf"
+                else:
+                    category = "Yellow Dwarf"
 
             stars.append(Star(
                 scientific_name=scientific_name,

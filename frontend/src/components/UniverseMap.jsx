@@ -3,46 +3,33 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
+// Change this number to force galaxy regeneration during development
+const GALAXY_VERSION = 9;
+
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
     const meshRef = useRef();
-    const nebulaRef = useRef();
-    const coreRef = useRef();
     const tempObject = useMemo(() => new THREE.Object3D(), []);
     const tempColor = useMemo(() => new THREE.Color(), []);
     const hoveredInstanceRef = useRef(-1);
     const { camera } = useThree();
 
+    // Generate unified galaxy data - regenerates when GALAXY_VERSION changes
+    const galaxyData = useMemo(() => {
+        console.log('Regenerating galaxy with version:', GALAXY_VERSION);
+        return GalaxyGenerator.generateGalaxy();
+    }, [GALAXY_VERSION]);
 
-    // --- 1. NEBULA / GAS FIELD GENERATION ---
-    // This runs once and creates the huge gas cloud structure
-    // We generate EXTRA points (50,000) just for the visual gas
-    const nebulaData = useMemo(() => {
-        const gen = GalaxyGenerator.generateGalaxy();
-        // We use the generator's output directly for the nebula points
-        return gen;
-    }, []);
-
-    // --- 2. INTERACTIVE STARS (Mapped relative to real data OR visual?) ---
-    // The user wants the interactive stars to MATCH the gas.
-    // Currently, our 'stars' prop comes from the backend seed.
-    // Ideally, the backend seed should match this shape.
-    // For now, we render the 'stars' as is (assuming we will fixing backend next).
-
-    // SETUP STARS MESH
+    // Setup interactive stars
     useLayoutEffect(() => {
         if (!meshRef.current) return;
 
         stars.forEach((star, i) => {
             tempObject.position.set(star.x, star.y, star.z);
-
-            // Random scale (Stars are small, sharp points)
             const scale = Math.random() * 0.8 + 0.5;
             tempObject.scale.set(scale, scale, scale);
-
             tempObject.updateMatrix();
             meshRef.current.setMatrixAt(i, tempObject.matrix);
 
-            // COLOR PALETTE - Slightly warmer/natural
             if (star.category.includes('Blue')) tempColor.set('#aaccff');
             else if (star.category.includes('Red Giant')) tempColor.set('#ff8866');
             else if (star.category.includes('Red')) tempColor.set('#ffaa88');
@@ -55,12 +42,9 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
 
         meshRef.current.instanceMatrix.needsUpdate = true;
         if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
-
     }, [stars, tempObject, tempColor]);
 
-    // --- SHADERS & MATERIALS ---
-
-    // A. Star Shader (Sharp, glinting points)
+    // Star shader
     const starMaterial = useMemo(() => {
         const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
         mat.onBeforeCompile = (shader) => {
@@ -90,22 +74,16 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
                 '#include <dithering_fragment>',
                 `
                 #include <dithering_fragment>
-                
-                // DISTANCE FADE (Atmosphere)
                 float dist = distance(cameraPosition, vWorldPosition);
                 float fade = 1.0 - smoothstep(100.0, 2500.0, dist);
-                gl_FragColor.a = fade; // Use alpha?
-
-                // TWINKLE
+                gl_FragColor.a = fade;
                 float randomVal = fract(sin(vInstanceID * 12.9898) * 43758.5453);
                 float twinkle = 0.8 + 0.4 * sin(time * 3.0 + randomVal * 10.0);
                 gl_FragColor.rgb *= twinkle;
-
-                // HOVER
                 float isHover = 1.0 - step(0.1, abs(vInstanceID - hoveredInstance));
                 if(isHover > 0.5) {
                     gl_FragColor.rgb = vec3(1.0, 1.0, 1.0); 
-                    gl_FragColor.rgb *= 3.0; // Bloom intensity
+                    gl_FragColor.rgb *= 3.0;
                 }
                 `
             );
@@ -115,39 +93,37 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         return mat;
     }, []);
 
-    // B. Nebula Texture (Improved for "Cloud" look)
-    const nebulaTexture = useMemo(() => {
+    // Soft particle texture
+    const cloudTexture = useMemo(() => {
         const canvas = document.createElement('canvas');
-        canvas.width = 128; // Higher res for smoothness
-        canvas.height = 128;
+        canvas.width = 64;
+        canvas.height = 64;
         const ctx = canvas.getContext('2d');
-        // Very soft radial gradient
-        const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        // Bright core, slow fade
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-        grad.addColorStop(0.2, 'rgba(255, 255, 255, 0.4)');
-        grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+        const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        grad.addColorStop(0.3, 'rgba(255, 255, 255, 0.5)');
+        grad.addColorStop(0.7, 'rgba(255, 255, 255, 0.1)');
         grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 128, 128);
+        ctx.fillRect(0, 0, 64, 64);
         return new THREE.CanvasTexture(canvas);
     }, []);
 
-    // C. Core Glow Texture (Intense)
-    const coreTexture = useMemo(() => {
+    // Bulge texture
+    const bulgeTexture = useMemo(() => {
         const canvas = document.createElement('canvas');
         canvas.width = 128;
         canvas.height = 128;
         const ctx = canvas.getContext('2d');
-        const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 60);
-        grad.addColorStop(0, 'rgba(255, 240, 200, 1)'); // Warm White
-        grad.addColorStop(0.4, 'rgba(255, 180, 100, 0.3)'); // Orange Glow
+        const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+        grad.addColorStop(0, 'rgba(255, 255, 220, 1)');   // Warm cream
+        grad.addColorStop(0.3, 'rgba(255, 245, 160, 0.8)'); // More yellow
+        grad.addColorStop(0.6, 'rgba(255, 240, 140, 0.3)'); // Yellow
         grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 128, 128);
         return new THREE.CanvasTexture(canvas);
     }, []);
-
 
     useFrame((state, delta) => {
         if (starMaterial.userData.shader) {
@@ -155,7 +131,6 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
             starMaterial.userData.shader.uniforms.hoveredInstance.value = hoveredInstanceRef.current;
         }
 
-        // Camera Logic
         if (targetStar && viewMode === 'MAP') {
             const targetVec = new THREE.Vector3(targetStar.x, targetStar.y, targetStar.z);
             const offset = targetVec.clone().normalize().multiplyScalar(20);
@@ -165,7 +140,6 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         }
     });
 
-    // Interaction (Only on Stars)
     const handleClick = (e) => {
         if (viewMode !== 'MAP') return;
         e.stopPropagation();
@@ -190,34 +164,84 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
 
     return (
         <group>
-            {/* 1. THE CORE GLOW (Billboards at center) */}
-            <sprite position={[0, 0, 0]} scale={[600, 600, 1]}>
-                <spriteMaterial map={coreTexture} blending={THREE.AdditiveBlending} depthWrite={false} transparent opacity={0.6} />
+            {/* CENTRAL BULGE */}
+            <sprite position={[0, 0, 0]} scale={[300, 150, 1]}>
+                <spriteMaterial
+                    map={bulgeTexture}
+                    blending={THREE.AdditiveBlending}
+                    depthWrite={false}
+                    transparent
+                    opacity={0.1}
+                />
             </sprite>
-            <sprite position={[0, 0, 0]} scale={[1200, 400, 1]}> {/* Outer Halo */}
-                <spriteMaterial map={coreTexture} blending={THREE.AdditiveBlending} depthWrite={false} transparent opacity={0.3} color="#ff8c00" />
+            <sprite position={[0, 0, 0]} scale={[500, 200, 1]}>
+                <spriteMaterial
+                    map={bulgeTexture}
+                    blending={THREE.AdditiveBlending}
+                    depthWrite={false}
+                    transparent
+                    opacity={0.05}
+                    color="#DDAA77"
+                />
             </sprite>
 
-
-            {/* 2. THE NEBULA FIELD (Volumetric Cloud Layer) */}
+            {/* UNIFIED CLOUD - One layer, brightness varies by arm proximity */}
             <points raycast={null}>
                 <bufferGeometry>
-                    <bufferAttribute attach="attributes-position" count={nebulaData.positions.length / 3} array={nebulaData.positions} itemSize={3} />
-                    <bufferAttribute attach="attributes-color" count={nebulaData.colors.length / 3} array={nebulaData.colors} itemSize={3} />
+                    <bufferAttribute
+                        attach="attributes-position"
+                        count={galaxyData.cloud.positions.length / 3}
+                        array={galaxyData.cloud.positions}
+                        itemSize={3}
+                    />
+                    <bufferAttribute
+                        attach="attributes-color"
+                        count={galaxyData.cloud.colors.length / 3}
+                        array={galaxyData.cloud.colors}
+                        itemSize={3}
+                    />
                 </bufferGeometry>
                 <pointsMaterial
-                    map={nebulaTexture}
-                    size={250}
+                    map={cloudTexture}
+                    size={200}
                     sizeAttenuation={true}
                     vertexColors={true}
                     transparent={true}
-                    opacity={0.03} // Restored to 0.03
+                    opacity={0.04}
                     depthWrite={false}
                     blending={THREE.AdditiveBlending}
                 />
             </points>
 
-            {/* 3. THE INTERACTIVE STARS (Bright Points) */}
+            {/* HII REGIONS */}
+            <points raycast={null}>
+                <bufferGeometry>
+                    <bufferAttribute
+                        attach="attributes-position"
+                        count={galaxyData.hii.positions.length / 3}
+                        array={galaxyData.hii.positions}
+                        itemSize={3}
+                    />
+                    <bufferAttribute
+                        attach="attributes-color"
+                        count={galaxyData.hii.colors.length / 3}
+                        array={galaxyData.hii.colors}
+                        itemSize={3}
+                    />
+                </bufferGeometry>
+                <pointsMaterial
+                    map={cloudTexture}
+                    size={40}
+                    sizeAttenuation={true}
+                    vertexColors={true}
+                    transparent={true}
+                    opacity={0.15}
+                    depthWrite={false}
+                    blending={THREE.AdditiveBlending}
+                />
+            </points>
+
+            {/* INTERACTIVE STARS */}
             <instancedMesh
                 ref={meshRef}
                 args={[null, null, stars.length]}

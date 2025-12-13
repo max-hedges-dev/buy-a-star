@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8000/api/v1";
+const API_URL = "http://127.0.0.1:8000/api/v1";
 
 export async function fetchStars({ skip = 0, limit = 100, search = "" } = {}) {
     const params = new URLSearchParams({

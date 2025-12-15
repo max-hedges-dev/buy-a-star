@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
-const GALAXY_VERSION = 19;
+const GALAXY_VERSION = 22;
 
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
     const meshRef = useRef();
@@ -168,7 +168,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
             {/* CENTRAL BULGE */}
             {/* CENTRAL BULGE - Layered for brightness (200%) */}
             {/* Fixed rotation: Using Mesh + PlaneGeometry instead of Sprite so it doesn't face camera */}
-            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[900, 360, 1]}>
+            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[936, 518, 1]}>
                 <planeGeometry args={[1, 1]} />
                 <meshBasicMaterial
                     map={bulgeTexture}
@@ -180,7 +180,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
                 />
             </mesh>
             {/* Duplicate inner layer for extra brightness */}
-            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[900, 360, 1]}>
+            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[936, 518, 1]}>
                 <planeGeometry args={[1, 1]} />
                 <meshBasicMaterial
                     map={bulgeTexture}
@@ -191,7 +191,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
                     side={THREE.DoubleSide}
                 />
             </mesh>
-            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1500, 480, 1]}>
+            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1560, 691, 1]}>
                 <planeGeometry args={[1, 1]} />
                 <meshBasicMaterial
                     map={bulgeTexture}

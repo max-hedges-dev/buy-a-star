@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
-const GALAXY_VERSION = 9;
+const GALAXY_VERSION = 18;
 
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
     const meshRef = useRef();
@@ -116,14 +116,15 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         canvas.height = 128;
         const ctx = canvas.getContext('2d');
         const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        grad.addColorStop(0, 'rgba(255, 255, 220, 1)');   // Warm cream
-        grad.addColorStop(0.3, 'rgba(255, 245, 160, 0.8)'); // More yellow
-        grad.addColorStop(0.6, 'rgba(255, 240, 140, 0.3)'); // Yellow
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        grad.addColorStop(0, 'rgba(255, 255, 245, 1)');     // Bright White-Yellow center
+        grad.addColorStop(0.25, 'rgba(255, 240, 150, 0.8)'); // Yellow body
+        grad.addColorStop(0.5, 'rgba(255, 200, 100, 0.4)');  // Yellow-Orange edge
+        grad.addColorStop(0.75, 'rgba(200, 150, 50, 0.15)'); // Faint Orange aura
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');            // Fade to black
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 128, 128);
         return new THREE.CanvasTexture(canvas);
-    }, []);
+    }, [GALAXY_VERSION]);
 
     useFrame((state, delta) => {
         if (starMaterial.userData.shader) {
@@ -165,22 +166,33 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
     return (
         <group>
             {/* CENTRAL BULGE */}
-            <sprite position={[0, 0, 0]} scale={[300, 150, 1]}>
+            {/* CENTRAL BULGE - Layered for brightness (200%) */}
+            <sprite position={[0, 0, 0]} scale={[900, 360, 1]}>
                 <spriteMaterial
                     map={bulgeTexture}
                     blending={THREE.AdditiveBlending}
                     depthWrite={false}
                     transparent
-                    opacity={0.1}
+                    opacity={1.0}
                 />
             </sprite>
-            <sprite position={[0, 0, 0]} scale={[500, 200, 1]}>
+            {/* Duplicate inner layer for extra brightness */}
+            <sprite position={[0, 0, 0]} scale={[900, 360, 1]}>
                 <spriteMaterial
                     map={bulgeTexture}
                     blending={THREE.AdditiveBlending}
                     depthWrite={false}
                     transparent
-                    opacity={0.05}
+                    opacity={0.5}
+                />
+            </sprite>
+            <sprite position={[0, 0, 0]} scale={[1500, 480, 1]}>
+                <spriteMaterial
+                    map={bulgeTexture}
+                    blending={THREE.AdditiveBlending}
+                    depthWrite={false}
+                    transparent
+                    opacity={0.8}
                     color="#DDAA77"
                 />
             </sprite>

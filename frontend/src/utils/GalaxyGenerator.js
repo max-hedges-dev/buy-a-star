@@ -104,7 +104,8 @@ class GalaxyGenerator {
         while (placed < cloudCount && attempts < maxAttempts) {
             attempts++;
 
-            const inBulge = Math.random() < 0.05;  // Reduced from 15% to 5%
+            // Disable bulge particles - rely on sprite for center
+            const inBulge = false;  // Reduced from 15% to 5%
 
             let x, y, z;
             let color;
@@ -149,10 +150,12 @@ class GalaxyGenerator {
                     keepProbability = Math.max(0.5, 1 - armPenalty * 0.25);
                 }
 
-                // Edge rejection for natural arm-following shape (>60%)
+                // Edge rejection logic - preventing total black out
                 if (radiusFraction > 0.6) {
                     const edgeProgress = (radiusFraction - 0.6) / 0.7;
-                    keepProbability *= Math.max(0, 1 - edgeProgress * armPenalty * 1.5);
+                    // Lower the penalty to allow some 'mist' to remain
+                    // Changed max(0, ...) to max(0.15, ...) to keep background dust
+                    keepProbability *= Math.max(0.15, 1 - edgeProgress * armPenalty * 1.5);
                     keepProbability *= 0.5 + Math.random() * 0.5;
                 }
 
@@ -164,7 +167,20 @@ class GalaxyGenerator {
 
                 color = armColor.clone().lerp(baseColor, armDist * 0.8);
 
+                // Inter-arm "void" color handling
+                // If far from arm, blend towards a uniform deep blue to fill gaps
+                if (armDist > 0.4) {
+                    const voidColor = new THREE.Color('#334466'); // Dim uniform blue
+                    const voidMix = Math.min((armDist - 0.4) * 2.0, 1.0);
+                    color.lerp(voidColor, voidMix * 0.8);
+                }
+
                 let brightness = 1.0 - armDist * 0.5;
+
+                // Ensure inter-arm particles have a minimum brightness ("uniform blue light")
+                if (armDist > 0.5) {
+                    brightness = Math.max(brightness, 0.3);
+                }
 
                 if (!isPrimary) {
                     brightness *= 0.6;

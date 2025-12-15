@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
-const GALAXY_VERSION = 18;
+const GALAXY_VERSION = 19;
 
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
     const meshRef = useRef();
@@ -167,35 +167,42 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         <group>
             {/* CENTRAL BULGE */}
             {/* CENTRAL BULGE - Layered for brightness (200%) */}
-            <sprite position={[0, 0, 0]} scale={[900, 360, 1]}>
-                <spriteMaterial
+            {/* Fixed rotation: Using Mesh + PlaneGeometry instead of Sprite so it doesn't face camera */}
+            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[900, 360, 1]}>
+                <planeGeometry args={[1, 1]} />
+                <meshBasicMaterial
                     map={bulgeTexture}
                     blending={THREE.AdditiveBlending}
                     depthWrite={false}
                     transparent
                     opacity={1.0}
+                    side={THREE.DoubleSide}
                 />
-            </sprite>
+            </mesh>
             {/* Duplicate inner layer for extra brightness */}
-            <sprite position={[0, 0, 0]} scale={[900, 360, 1]}>
-                <spriteMaterial
+            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[900, 360, 1]}>
+                <planeGeometry args={[1, 1]} />
+                <meshBasicMaterial
                     map={bulgeTexture}
                     blending={THREE.AdditiveBlending}
                     depthWrite={false}
                     transparent
                     opacity={0.5}
+                    side={THREE.DoubleSide}
                 />
-            </sprite>
-            <sprite position={[0, 0, 0]} scale={[1500, 480, 1]}>
-                <spriteMaterial
+            </mesh>
+            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1500, 480, 1]}>
+                <planeGeometry args={[1, 1]} />
+                <meshBasicMaterial
                     map={bulgeTexture}
                     blending={THREE.AdditiveBlending}
                     depthWrite={false}
                     transparent
                     opacity={0.8}
                     color="#DDAA77"
+                    side={THREE.DoubleSide}
                 />
-            </sprite>
+            </mesh>
 
             {/* UNIFIED CLOUD - One layer, brightness varies by arm proximity */}
             <points raycast={null}>

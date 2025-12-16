@@ -11,7 +11,7 @@ class GalaxyGenerator {
             radius: 1500,
 
             arms: 4,
-            spin: 0.7,
+            spin: 0.55,
 
             bulgeRadiusX: 250,
             bulgeRadiusZ: 100,
@@ -20,7 +20,7 @@ class GalaxyGenerator {
             hiiCount: 600,
 
             baseColor: '#5566AA',
-            armColor: '#88AADD',
+            armColor: '#AACCFF', // Balanced pale blue
             bulgeColor: '#FFFFCC',  // Light yellow
             hiiColor: '#CC5577',
 
@@ -138,9 +138,9 @@ class GalaxyGenerator {
 
                 const radiusFraction = r / radius;
 
-                // Arm tolerance - slightly tighter near center
+                // Arm tolerance - even tighter near center (0.05) expanding to edge
                 const baseArmTolerance = isPrimary ? 0.5 : 0.35;
-                const armTolerance = 0.2 + (baseArmTolerance - 0.2) * Math.min(radiusFraction * 1.5, 1);
+                const armTolerance = 0.05 + (baseArmTolerance - 0.05) * Math.min(radiusFraction * 1.5, 1);
 
                 let keepProbability = 1.0;
                 const armPenalty = armDist / armTolerance;
@@ -170,16 +170,17 @@ class GalaxyGenerator {
                 // Inter-arm "void" color handling
                 // If far from arm, blend towards a uniform deep blue to fill gaps
                 if (armDist > 0.4) {
-                    const voidColor = new THREE.Color('#334466'); // Dim uniform blue
+                    const voidColor = new THREE.Color('#446699'); // Brighter uniform blue
                     const voidMix = Math.min((armDist - 0.4) * 2.0, 1.0);
-                    color.lerp(voidColor, voidMix * 0.8);
+                    color.lerp(voidColor, voidMix * 0.9);
                 }
 
                 let brightness = 1.0 - armDist * 0.5;
 
-                // Ensure inter-arm particles have a minimum brightness ("uniform blue light")
-                if (armDist > 0.5) {
-                    brightness = Math.max(brightness, 0.3);
+                // Ensure inter-arm particles have a higher minimum brightness
+                // This creates the "uniform blue light" effect
+                if (armDist > 0.45) {
+                    brightness = Math.max(brightness, 0.5);
                 }
 
                 if (!isPrimary) {
@@ -190,7 +191,15 @@ class GalaxyGenerator {
                     brightness *= 1 - (radiusFraction - 0.8) / 0.5;
                 }
 
-                color.multiplyScalar(Math.max(0.1, brightness));
+                // Global dimming of arms
+                brightness *= 0.7;
+
+                // Extra dimming for inner arms to reduce core saturation
+                if (radiusFraction < 0.4) {
+                    brightness *= 0.6 + (radiusFraction / 0.4) * 0.4; // Fade from 0.6 to 1.0
+                }
+
+                color.multiplyScalar(Math.max(0.05, brightness));
 
                 if (Math.random() < 0.08) {
                     color.lerp(new THREE.Color('#FFFFFF'), Math.random() * 0.3);

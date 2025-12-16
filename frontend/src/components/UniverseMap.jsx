@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
-const GALAXY_VERSION = 22;
+const GALAXY_VERSION = 28;
 
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
     const meshRef = useRef();

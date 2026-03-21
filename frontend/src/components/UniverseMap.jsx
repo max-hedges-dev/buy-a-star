@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
-const GALAXY_VERSION = 28;
+const GALAXY_VERSION = 29;
 
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
     const meshRef = useRef();
@@ -109,22 +109,63 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         return new THREE.CanvasTexture(canvas);
     }, []);
 
-    // Bulge texture
-    const bulgeTexture = useMemo(() => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        grad.addColorStop(0, 'rgba(255, 255, 245, 1)');     // Bright White-Yellow center
-        grad.addColorStop(0.25, 'rgba(255, 240, 150, 0.8)'); // Yellow body
-        grad.addColorStop(0.5, 'rgba(255, 200, 100, 0.4)');  // Yellow-Orange edge
-        grad.addColorStop(0.75, 'rgba(200, 150, 50, 0.15)'); // Faint Orange aura
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');            // Fade to black
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 128, 128);
-        return new THREE.CanvasTexture(canvas);
-    }, [GALAXY_VERSION]);
+    // Volumetric bulge glow shader materials
+    const bulgeGlowMaterials = useMemo(() => {
+        const vertexShader = `
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+            void main() {
+                vNormal = normalize(normalMatrix * normal);
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                vViewPosition = -mvPosition.xyz;
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `;
+
+        const createMaterial = (innerCol, outerCol, intensity, falloff) => {
+            return new THREE.ShaderMaterial({
+                uniforms: {
+                    innerColor: { value: new THREE.Color(innerCol) },
+                    outerColor: { value: new THREE.Color(outerCol) },
+                    intensity: { value: intensity },
+                    falloff: { value: falloff },
+                },
+                vertexShader,
+                fragmentShader: `
+                    uniform vec3 innerColor;
+                    uniform vec3 outerColor;
+                    uniform float intensity;
+                    uniform float falloff;
+                    varying vec3 vNormal;
+                    varying vec3 vViewPosition;
+                    void main() {
+                        vec3 viewDir = normalize(vViewPosition);
+                        float facing = abs(dot(normalize(vNormal), viewDir));
+                        // Smooth exponential falloff for soft volumetric glow
+                        float glow = pow(facing, falloff);
+                        // Soften edges with exponential decay to avoid hard sphere outline
+                        float edgeSoftness = smoothstep(0.0, 0.5, facing);
+                        vec3 color = mix(outerColor, innerColor, glow);
+                        float alpha = glow * edgeSoftness * intensity;
+                        gl_FragColor = vec4(color, alpha);
+                    }
+                `,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+            });
+        };
+
+        return {
+            // Inner bright core - white-yellow center fading to warm orange
+            inner: createMaterial('#FFFFF5', '#FFC060', 0.84, 0.8),
+            // Duplicate layer for extra brightness at core center
+            innerBright: createMaterial('#FFFFF5', '#FFD080', 0.42, 0.6),
+            // Outer aura - warm amber glow, softer falloff
+            outerAura: createMaterial('#DDAA77', '#664422', 0.63, 1.2),
+        };
+    }, []);
 
     useFrame((state, delta) => {
         if (starMaterial.userData.shader) {
@@ -165,43 +206,19 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
 
     return (
         <group>
-            {/* CENTRAL BULGE */}
-            {/* CENTRAL BULGE - Layered for brightness (200%) */}
-            {/* Fixed rotation: Using Mesh + PlaneGeometry instead of Sprite so it doesn't face camera */}
-            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[936, 518, 1]}>
-                <planeGeometry args={[1, 1]} />
-                <meshBasicMaterial
-                    map={bulgeTexture}
-                    blending={THREE.AdditiveBlending}
-                    depthWrite={false}
-                    transparent
-                    opacity={1.0}
-                    side={THREE.DoubleSide}
-                />
+            {/* CENTRAL BULGE - 3D Ellipsoid */}
+            {/* Sphere scaled to ellipsoid: XZ cross-section matches original plane dimensions */}
+            {/* Y axis provides the visible vertical bulge from side view */}
+            <mesh position={[0, 0, 0]} scale={[374, 240, 207]} material={bulgeGlowMaterials.inner}>
+                <sphereGeometry args={[1, 32, 24]} />
             </mesh>
-            {/* Duplicate inner layer for extra brightness */}
-            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[936, 518, 1]}>
-                <planeGeometry args={[1, 1]} />
-                <meshBasicMaterial
-                    map={bulgeTexture}
-                    blending={THREE.AdditiveBlending}
-                    depthWrite={false}
-                    transparent
-                    opacity={0.5}
-                    side={THREE.DoubleSide}
-                />
+            {/* Duplicate inner layer for extra core brightness */}
+            <mesh position={[0, 0, 0]} scale={[374, 240, 207]} material={bulgeGlowMaterials.innerBright}>
+                <sphereGeometry args={[1, 32, 24]} />
             </mesh>
-            <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1560, 691, 1]}>
-                <planeGeometry args={[1, 1]} />
-                <meshBasicMaterial
-                    map={bulgeTexture}
-                    blending={THREE.AdditiveBlending}
-                    depthWrite={false}
-                    transparent
-                    opacity={0.8}
-                    color="#DDAA77"
-                    side={THREE.DoubleSide}
-                />
+            {/* Outer aura - larger ellipsoid with warm amber glow */}
+            <mesh position={[0, 0, 0]} scale={[430, 275, 240]} material={bulgeGlowMaterials.outerAura}>
+                <sphereGeometry args={[1, 32, 24]} />
             </mesh>
 
             {/* UNIFIED CLOUD - One layer, brightness varies by arm proximity */}

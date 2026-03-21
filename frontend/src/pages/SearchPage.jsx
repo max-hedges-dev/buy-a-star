@@ -14,7 +14,7 @@ import * as THREE from 'three';
 const DEFAULT_CAM_POS = new THREE.Vector3(0, 800, 2400);
 const DEFAULT_TARGET = new THREE.Vector3(0, 0, 0);
 const MIN_DIST = 5;
-const MAX_DIST = 3500;
+const MAX_DIST = 4200;
 const IDLE_TIMEOUT = 10000; // 10 seconds
 
 const VIEW_MODE = {
@@ -54,7 +54,10 @@ const IdleController = ({ galaxyRef, lastInteractionRef, isHoveringStar, viewMod
             // 1. Slowly spin galaxy
             galaxyRef.current.rotation.y += delta * 0.08;
 
-            // 2. Lerp galaxy position back to origin (undo drags)
+            // 2. Lerp tilt (rotation.x) back to 0
+            galaxyRef.current.rotation.x *= 0.97;
+
+            // 3. Lerp galaxy position back to origin (undo drags)
             galaxyRef.current.position.lerp(DEFAULT_TARGET, 0.03);
 
             // 3. Return camera to default position and angle
@@ -67,7 +70,7 @@ const IdleController = ({ galaxyRef, lastInteractionRef, isHoveringStar, viewMod
 };
 
 // --- GALAXY DRAGGER ---
-// Left-click drag SPINS the galaxy group around the Y axis
+// Left-click drag: horizontal = spin (Y rotation), vertical = tilt (X rotation)
 const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
     const { gl } = useThree();
 
@@ -76,11 +79,13 @@ const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
         const canvas = gl.domElement;
         let isDragging = false;
         let lastX = 0;
+        let lastY = 0;
 
         const onDown = (e) => {
             if (e.button !== 0) return;
             isDragging = true;
             lastX = e.clientX;
+            lastY = e.clientY;
             lastInteractionRef.current = Date.now();
             canvas.style.cursor = 'grabbing';
         };
@@ -88,8 +93,17 @@ const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
         const onMove = (e) => {
             if (!isDragging || !galaxyRef.current) return;
             const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+
+            // Horizontal drag = spin around Y
             galaxyRef.current.rotation.y += dx * 0.004;
+
+            // Vertical drag = tilt around X (clamped to ±60°)
+            const newTilt = galaxyRef.current.rotation.x + dy * 0.003;
+            galaxyRef.current.rotation.x = THREE.MathUtils.clamp(newTilt, -Math.PI / 3, Math.PI / 3);
+
             lastX = e.clientX;
+            lastY = e.clientY;
             lastInteractionRef.current = Date.now();
         };
 
@@ -177,9 +191,10 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
                     camera.quaternion.slerp(defaultQuat, 0.12);
                 }
 
-                // Also lerp galaxy group back toward origin (undo drags)
+                // Also lerp galaxy group back toward origin (undo drags + tilt)
                 if (galaxyRef.current) {
                     galaxyRef.current.position.lerp(DEFAULT_TARGET, 0.08);
+                    galaxyRef.current.rotation.x *= 0.92; // Smoothly undo tilt
                 }
             }
 

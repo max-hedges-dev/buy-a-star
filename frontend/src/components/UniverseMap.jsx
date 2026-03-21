@@ -8,10 +8,11 @@ const GALAXY_VERSION = 29;
 
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
     const meshRef = useRef();
+    const groupRef = useRef();
     const tempObject = useMemo(() => new THREE.Object3D(), []);
     const tempColor = useMemo(() => new THREE.Color(), []);
     const hoveredInstanceRef = useRef(-1);
-    const { camera } = useThree();
+    const { camera, gl } = useThree();
 
     // Generate unified galaxy data - regenerates when GALAXY_VERSION changes
     const galaxyData = useMemo(() => {
@@ -167,6 +168,9 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         };
     }, []);
 
+    // Dummy camera for calculating target rotations without allocating every frame
+    const dummyCam = useMemo(() => new THREE.PerspectiveCamera(), []);
+
     useFrame((state, delta) => {
         if (starMaterial.userData.shader) {
             starMaterial.userData.shader.uniforms.time.value += delta;
@@ -174,11 +178,25 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         }
 
         if (targetStar && viewMode === 'MAP') {
-            const targetVec = new THREE.Vector3(targetStar.x, targetStar.y, targetStar.z);
-            const offset = targetVec.clone().normalize().multiplyScalar(20);
-            const camTargetPos = targetVec.clone().add(offset);
+            // Get star's world position (accounting for galaxy group rotation/translation)
+            const localPos = new THREE.Vector3(targetStar.x, targetStar.y, targetStar.z);
+            let worldPos = localPos;
+            if (groupRef.current) {
+                worldPos = localPos.clone();
+                // Walk up to the parent galaxy group to get world matrix
+                groupRef.current.updateWorldMatrix(true, false);
+                worldPos.applyMatrix4(groupRef.current.matrixWorld);
+            }
+            const offset = worldPos.clone().sub(state.camera.position).normalize().multiplyScalar(-20);
+            const camTargetPos = worldPos.clone().add(offset);
+            
+            // Calculate target rotation using the dummy camera
+            dummyCam.position.copy(state.camera.position);
+            dummyCam.lookAt(worldPos);
+
+            // Interpolate position and rotation smoothly
             state.camera.position.lerp(camTargetPos, 0.05);
-            state.camera.lookAt(targetVec);
+            state.camera.quaternion.slerp(dummyCam.quaternion, 0.05);
         }
     });
 
@@ -193,19 +211,19 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         if (viewMode !== 'MAP') return;
         e.stopPropagation();
         if (e.instanceId !== undefined) {
-            document.body.style.cursor = 'pointer';
+            gl.domElement.style.cursor = 'pointer';
             hoveredInstanceRef.current = e.instanceId;
             if (onHoverChange) onHoverChange(true);
         }
     };
     const handlePointerOut = () => {
-        document.body.style.cursor = 'auto';
+        gl.domElement.style.cursor = 'grab';
         hoveredInstanceRef.current = -1;
         if (onHoverChange) onHoverChange(false);
     };
 
     return (
-        <group>
+        <group ref={groupRef}>
             {/* CENTRAL BULGE - 3D Ellipsoid */}
             {/* Sphere scaled to ellipsoid: XZ cross-section matches original plane dimensions */}
             {/* Y axis provides the visible vertical bulge from side view */}

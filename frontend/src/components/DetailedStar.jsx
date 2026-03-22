@@ -139,25 +139,29 @@ const DetailedStar = ({ star }) => {
                 <starMaterial ref={materialRef} color={color} />
             </mesh>
 
-            {/* Corona / Glow (Simple Sprite or Mesh) */}
-            <mesh scale={[2.5, 2.5, 2.5]}>
-                <sphereGeometry args={[1, 32, 32]} />
-                <meshBasicMaterial
-                    color={color}
-                    transparent
-                    opacity={0.15}
-                    side={THREE.BackSide}
-                    depthWrite={false}
-                />
-            </mesh>
+            {/* Outer Glow */}
             <mesh scale={[3.5, 3.5, 3.5]}>
                 <sphereGeometry args={[1, 32, 32]} />
                 <meshBasicMaterial
                     color={color}
                     transparent
-                    opacity={0.05}
+                    opacity={0.06}
                     side={THREE.BackSide}
                     depthWrite={false}
+                    blending={THREE.AdditiveBlending}
+                />
+            </mesh>
+            
+            {/* Huge faint aura */}
+            <mesh scale={[5, 5, 5]}>
+                <sphereGeometry args={[1, 32, 32]} />
+                <meshBasicMaterial
+                    color={color}
+                    transparent
+                    opacity={0.03}
+                    side={THREE.BackSide}
+                    depthWrite={false}
+                    blending={THREE.AdditiveBlending}
                 />
             </mesh>
         </group>

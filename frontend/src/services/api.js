@@ -1,10 +1,11 @@
 const API_URL = "http://127.0.0.1:8000/api/v1";
 
-export async function fetchStars({ skip = 0, limit = 100, search = "" } = {}) {
+export async function fetchStars({ skip = 0, limit = 100, search = "", isBought = undefined } = {}) {
     const params = new URLSearchParams({
         skip: skip.toString(),
         limit: limit.toString(),
         ...(search && { search }),
+        ...(isBought !== undefined && { is_bought: isBought })
     });
 
     const response = await fetch(`${API_URL}/stars?${params}`);

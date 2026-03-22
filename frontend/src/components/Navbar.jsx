@@ -23,7 +23,8 @@ const Navbar = () => {
 
             <div style={{ display: 'flex', gap: '30px', alignItems: 'center', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '1px' }}>
                 <Link to="/">Home</Link>
-                <Link to="/search">Search Stars</Link>
+                <Link to="/buy">Buy a Star</Link>
+                <Link to="/search">Search Galaxy</Link>
                 <Link to="/about">About</Link>
                 <Link to="/faq">FAQ</Link>
             </div>

@@ -1,5 +1,6 @@
-import React, { useRef, useMemo, useLayoutEffect } from 'react';
+import React, { useRef, useMemo, useLayoutEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
@@ -12,6 +13,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
     const tempObject = useMemo(() => new THREE.Object3D(), []);
     const tempColor = useMemo(() => new THREE.Color(), []);
     const hoveredInstanceRef = useRef(-1);
+    const [hoveredStar, setHoveredStar] = useState(null);
     const { camera, gl } = useThree();
 
     // Generate unified galaxy data - regenerates when GALAXY_VERSION changes
@@ -189,7 +191,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
             }
             const offset = worldPos.clone().sub(state.camera.position).normalize().multiplyScalar(-20);
             const camTargetPos = worldPos.clone().add(offset);
-            
+
             // Calculate target rotation using the dummy camera
             dummyCam.position.copy(state.camera.position);
             dummyCam.lookAt(worldPos);
@@ -213,12 +215,17 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
         if (e.instanceId !== undefined) {
             gl.domElement.style.cursor = 'pointer';
             hoveredInstanceRef.current = e.instanceId;
+            const star = stars[e.instanceId];
+            if (!hoveredStar || hoveredStar.id !== star.id) {
+                setHoveredStar(star);
+            }
             if (onHoverChange) onHoverChange(true);
         }
     };
     const handlePointerOut = () => {
         gl.domElement.style.cursor = 'grab';
         hoveredInstanceRef.current = -1;
+        setHoveredStar(null);
         if (onHoverChange) onHoverChange(false);
     };
 
@@ -306,6 +313,57 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
             >
                 <sphereGeometry args={[1.5, 8, 8]} />
             </instancedMesh>
+
+            {/* HOVER TOOLTIP */}
+            {hoveredStar && viewMode === 'MAP' && (
+                <Html
+                    position={[hoveredStar.x, hoveredStar.y, hoveredStar.z]}
+                    style={{ pointerEvents: 'none' }}
+                    zIndexRange={[100, 0]}
+                >
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '15px',
+                        left: '15px',
+                        pointerEvents: 'none'
+                    }}>
+                        {/* Diagonal SVG line connecting origin (star) to tooltip bottom-left */}
+                        <svg style={{
+                            position: 'absolute',
+                            left: '-15px',
+                            bottom: '-15px',
+                            width: '15px', height: '15px',
+                            overflow: 'visible'
+                        }}>
+                            <line x1="0" y1="15" x2="15" y2="0" stroke="rgba(255,255,255,0.5)" strokeWidth="1" />
+                        </svg>
+
+                        <div style={{
+                            background: hoveredStar.is_bought ? 'rgba(0,0,0,0.85)' : 'rgba(20,20,30,0.8)',
+                            backdropFilter: 'blur(5px)',
+                            padding: '10px 15px',
+                            borderRadius: '8px',
+                            border: `1px solid ${hoveredStar.is_bought ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.2)'}`,
+                            color: 'white',
+                            width: 'max-content',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
+                        }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '2px', fontFamily: 'serif' }}>
+                                {hoveredStar.common_name || hoveredStar.scientific_name}
+                            </div>
+                            {hoveredStar.is_bought ? (
+                                <div style={{ fontSize: '0.8rem', color: '#aaa', textTransform: 'uppercase' }}>
+                                    Owned by: <span style={{ color: 'white', fontWeight: 'bold' }}>{hoveredStar.owner_name}</span>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: '0.85rem', color: '#88cc88', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                                    CLAIMABLE
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </Html>
+            )}
         </group>
     );
 };

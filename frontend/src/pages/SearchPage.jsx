@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchStars } from '../services/api';
 import { Search, ShoppingCart, Loader2 } from 'lucide-react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars } from '@react-three/drei';
-import CheckoutModal from '../components/CheckoutModal';
 import UniverseMap from '../components/UniverseMap';
 import StarViewer from '../components/StarViewer';
 import GalaxyBackground from '../components/GalaxyBackground';
+import BuyAStarGrid from '../components/BuyAStarGrid';
 import * as THREE from 'three';
 
 // Default camera position and constants
@@ -20,7 +21,8 @@ const IDLE_TIMEOUT = 10000; // 10 seconds
 const VIEW_MODE = {
     MAP: 'MAP',
     TRANSITION: 'TRANSITION',
-    DISPLAY: 'DISPLAY'
+    DISPLAY: 'DISPLAY',
+    GRID: 'GRID' // New mode for the "Buy a Star" marketplace
 };
 
 // --- IDLE CONTROLLER ---
@@ -176,25 +178,26 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
                 camera.position.y = Math.max(camera.position.y, 5);
 
             } else {
-                // Zoom OUT: lerp camera position AND angle back to default
-                const distToDefault = camera.position.distanceTo(DEFAULT_CAM_POS);
+                // Zoom OUT: pull back locally first, then lerp to default macro view once high up
+                const height = Math.max(camera.position.y, 5);
+                const moveAmount = Math.max(height * 0.15, 2); // 15% of current height
 
-                if (distToDefault < 5) {
-                    camera.position.copy(DEFAULT_CAM_POS);
-                    camera.quaternion.copy(defaultQuat);
-                } else {
-                    const moveAmount = Math.max(distToDefault * zoomFraction, 15);
-                    const moveDir = new THREE.Vector3().subVectors(DEFAULT_CAM_POS, camera.position).normalize();
-                    camera.position.addScaledVector(moveDir, moveAmount);
+                // Move backwards along look direction
+                const fwd = new THREE.Vector3();
+                camera.getWorldDirection(fwd);
+                camera.position.addScaledVector(fwd, -moveAmount);
 
-                    // Blend angle back toward default
-                    camera.quaternion.slerp(defaultQuat, 0.12);
-                }
+                // As we zoom out further, start pulling toward DEFAULT_CAM_POS and default angle
+                if (height > 50) {
+                    const blendFactor = Math.min((height - 50) / 1000, 0.1); // Max 10% per tick
+                    camera.position.lerp(DEFAULT_CAM_POS, blendFactor);
+                    camera.quaternion.slerp(defaultQuat, blendFactor);
 
-                // Also lerp galaxy group back toward origin (undo drags + tilt)
-                if (galaxyRef.current) {
-                    galaxyRef.current.position.lerp(DEFAULT_TARGET, 0.08);
-                    galaxyRef.current.rotation.x *= 0.92; // Smoothly undo tilt
+                    // Also slowly undo drags and tilt
+                    if (galaxyRef.current) {
+                        galaxyRef.current.rotation.x *= (1 - blendFactor);
+                        galaxyRef.current.position.lerp(DEFAULT_TARGET, blendFactor);
+                    }
                 }
             }
 
@@ -213,13 +216,17 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
 };
 
 const SearchPage = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+
     // Data State
     const [stars, setStars] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     // View State
-    const [viewMode, setViewMode] = useState(VIEW_MODE.MAP);
+    const [viewMode, setViewMode] = useState(location.pathname === '/buy' ? VIEW_MODE.GRID : VIEW_MODE.MAP);
+    const [previousViewMode, setPreviousViewMode] = useState(null); // Tracks where we came from
     const [selectedStar, setSelectedStar] = useState(null); // The star currently in focus/display
     const [targetStar, setTargetStar] = useState(null);     // The star map is zooming towards
 
@@ -227,7 +234,6 @@ const SearchPage = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [buyingStar, setBuyingStar] = useState(null); // Modal trigger
 
     // Idle State
     const [isHoveringStar, setIsHoveringStar] = useState(false);
@@ -238,6 +244,19 @@ const SearchPage = () => {
     useEffect(() => {
         loadStars();
     }, []);
+
+    // Sync view mode with navbar navigation
+    useEffect(() => {
+        if (location.pathname === '/buy' && viewMode !== VIEW_MODE.GRID && viewMode !== VIEW_MODE.DISPLAY) {
+            setViewMode(VIEW_MODE.GRID);
+            setSelectedStar(null);
+            setTargetStar(null);
+        } else if (location.pathname === '/search' && viewMode === VIEW_MODE.GRID) {
+            setViewMode(VIEW_MODE.MAP);
+            setSelectedStar(null);
+            setTargetStar(null);
+        }
+    }, [location.pathname, viewMode]);
 
     const loadStars = async (term = "") => {
         setLoading(true);
@@ -286,6 +305,15 @@ const SearchPage = () => {
 
     // --- Transition Logic ---
     const triggerTransitionToStar = (star) => {
+        setPreviousViewMode(viewMode);
+
+        if (viewMode === VIEW_MODE.GRID) {
+            // From grid, we just instantly go to DISPLAY mode (no 3D zoom needed since we can't see the map)
+            setSelectedStar(star);
+            setViewMode(VIEW_MODE.DISPLAY);
+            return;
+        }
+
         if (viewMode !== VIEW_MODE.MAP) return;
 
         setSelectedStar(star);
@@ -311,12 +339,34 @@ const SearchPage = () => {
     };
 
     const handleBackToMap = () => {
+        if (previousViewMode === VIEW_MODE.GRID) {
+            setViewMode(VIEW_MODE.GRID);
+            setSelectedStar(null);
+            navigate('/buy');
+            return;
+        }
+
         setViewMode(VIEW_MODE.TRANSITION);
 
         setTimeout(() => {
             setViewMode(VIEW_MODE.MAP);
             setSelectedStar(null);
+            navigate('/search');
+            lastInteractionRef.current = Infinity; // Disable idle spin until user interacts
         }, 1000);
+    };
+
+    const handleViewInGalaxy = () => {
+        navigate('/search');
+        setTargetStar(selectedStar);
+        setViewMode(VIEW_MODE.MAP);
+        lastInteractionRef.current = Infinity; // Disable idle spin until user interacts
+
+        // Allow camera to zoom for 2.5 seconds, then release lock so user can interact
+        setTimeout(() => {
+            setTargetStar(null);
+            setSelectedStar(null);
+        }, 2500);
     };
 
     return (
@@ -445,15 +495,25 @@ const SearchPage = () => {
                     // Show Display if DISPLAY mode OR if Transitioning BACK (blurring display)
                     opacity: (viewMode === VIEW_MODE.DISPLAY || (viewMode === VIEW_MODE.TRANSITION && !targetStar)) ? 1 : 0,
                     pointerEvents: viewMode === VIEW_MODE.DISPLAY ? 'auto' : 'none',
-                    transition: 'opacity 0.2s ease-in'
+                    transition: location.pathname === '/buy' ? 'none' : 'opacity 0.2s ease-in',
+                    background: location.pathname === '/buy' ? 'black' : 'transparent' // Solid background for grid transition
                 }}>
                     <StarViewer
                         star={selectedStar}
                         onBack={handleBackToMap}
-                        onBuy={() => setBuyingStar(selectedStar)}
+                        onSuccess={() => { loadStars(); alert("Star Purchased!"); }}
+                        onViewInGalaxy={handleViewInGalaxy}
                     />
                 </div>
             )}
+
+            {/* --- GRID LAYER (Marketplace) --- */}
+            <div style={{
+                display: viewMode === VIEW_MODE.GRID ? 'block' : 'none',
+                position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10
+            }}>
+                <BuyAStarGrid onSelectStar={triggerTransitionToStar} />
+            </div>
 
             {/* --- TRANSITION BLUR OVERLAY --- */}
             <div style={{
@@ -469,14 +529,6 @@ const SearchPage = () => {
             {/* Modals & Loading */}
             {error && <div style={{ position: 'absolute', bottom: 20, left: 20, color: 'red', zIndex: 200 }}>{error}</div>}
             {loading && <div style={{ position: 'absolute', bottom: 20, left: 20, color: 'white', zIndex: 200 }}>Loading...</div>}
-
-            {buyingStar && (
-                <CheckoutModal
-                    star={buyingStar}
-                    onClose={() => setBuyingStar(null)}
-                    onSuccess={() => { loadStars(); setBuyingStar(null); alert("Star Purchased!"); }}
-                />
-            )}
         </div>
     );
 };

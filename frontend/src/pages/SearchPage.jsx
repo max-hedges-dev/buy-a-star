@@ -215,6 +215,8 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
     return null;
 };
 
+const CAMERA_SETTINGS = { position: [0, 800, 2400], fov: 60, far: 100000 };
+
 const SearchPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -234,6 +236,8 @@ const SearchPage = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [forceTooltipStar, setForceTooltipStar] = useState(null);
+    const [macroFlyInMode, setMacroFlyInMode] = useState(false);
 
     // Idle State
     const [isHoveringStar, setIsHoveringStar] = useState(false);
@@ -246,17 +250,25 @@ const SearchPage = () => {
     }, []);
 
     // Sync view mode with navbar navigation
+    const prevLocationRef = useRef(location.pathname);
     useEffect(() => {
-        if (location.pathname === '/buy' && viewMode !== VIEW_MODE.GRID && viewMode !== VIEW_MODE.DISPLAY) {
-            setViewMode(VIEW_MODE.GRID);
-            setSelectedStar(null);
-            setTargetStar(null);
-        } else if (location.pathname === '/search' && viewMode === VIEW_MODE.GRID) {
-            setViewMode(VIEW_MODE.MAP);
-            setSelectedStar(null);
-            setTargetStar(null);
+        if (location.pathname !== prevLocationRef.current) {
+            prevLocationRef.current = location.pathname;
+            
+            // Allow programmatic navigation (e.g. View in Galaxy) to safely manage its own state
+            if (location.state?.preserveTarget) return;
+
+            if (location.pathname === '/buy') {
+                setViewMode(VIEW_MODE.GRID);
+                setSelectedStar(null);
+                setTargetStar(null);
+            } else if (location.pathname === '/search') {
+                setViewMode(VIEW_MODE.MAP);
+                setSelectedStar(null);
+                setTargetStar(null);
+            }
         }
-    }, [location.pathname, viewMode]);
+    }, [location.pathname, location.state]);
 
     const loadStars = async (term = "") => {
         setLoading(true);
@@ -316,6 +328,7 @@ const SearchPage = () => {
 
         if (viewMode !== VIEW_MODE.MAP) return;
 
+        setMacroFlyInMode(false); // Smooth local glide
         setSelectedStar(star);
         setTargetStar(star); // Tells UniverseMap to zoom camera towards this point
 
@@ -325,7 +338,7 @@ const SearchPage = () => {
         // 1. Zoom starts via UniverseMap (useEffect on targetStar) OR we animate here?
         // Let's let UniverseMap handle the 'glimpse' zoom for 1.5s, then blur.
 
-        // Wait for zoom to happen partially
+        // Wait for zoom to nearly finish before blurring
         setTimeout(() => {
             setViewMode(VIEW_MODE.TRANSITION);
 
@@ -335,7 +348,7 @@ const SearchPage = () => {
                 setTargetStar(null); // Stop map zoom
             }, 1000); // 1s blur in
 
-        }, 1200); // 1.2s zoom time before blur covers it
+        }, 2800); // 2.8s zoom time before blur covers the remaining frames
     };
 
     const handleBackToMap = () => {
@@ -357,16 +370,48 @@ const SearchPage = () => {
     };
 
     const handleViewInGalaxy = () => {
-        navigate('/search');
-        setTargetStar(selectedStar);
+        const star = selectedStar;
+        // Navigate securely without wiping state via the router sync hook
+        navigate('/search', { state: { preserveTarget: true } });
+        
+        // Hide the grid / overlay seamlessly
         setViewMode(VIEW_MODE.MAP);
-        lastInteractionRef.current = Infinity; // Disable idle spin until user interacts
+        
+        // Critical: Unmount StarViewer immediately while canvas context transitions
+        setSelectedStar(null);
 
-        // Allow camera to zoom for 2.5 seconds, then release lock so user can interact
+        // Map takes over execution
+        // If we arrived from the Grid, fly in from the macro edge. If we arrived from the Map, smoothly reveal where we already are.
+        if (previousViewMode !== VIEW_MODE.MAP) {
+            setMacroFlyInMode(true);
+            setTargetStar(star);
+            // Allow camera to zoom for full 4.0 seconds to comfortably finish the slow animated sweep
+            setTimeout(() => {
+                setTargetStar(null);
+                setMacroFlyInMode(false);
+            }, 4000);
+        }
+        
+        lastInteractionRef.current = Infinity; 
+        
+        // Display temporary tooltip using forceTooltipStar
+        setForceTooltipStar(star);
+
+        let timeoutId;
+        const cleanUpTooltip = () => {
+            setForceTooltipStar(null);
+            clearTimeout(timeoutId);
+            window.removeEventListener('wheel', cleanUpTooltip);
+            window.removeEventListener('click', cleanUpTooltip);
+        };
+        
+        timeoutId = setTimeout(cleanUpTooltip, 5000); // 5 sec default limit
+        
+        // Subtly delay listeners so the immediate click doesn't trigger destruction
         setTimeout(() => {
-            setTargetStar(null);
-            setSelectedStar(null);
-        }, 2500);
+            window.addEventListener('wheel', cleanUpTooltip, { once: true });
+            window.addEventListener('click', cleanUpTooltip, { once: true });
+        }, 500);
     };
 
     return (
@@ -385,7 +430,7 @@ const SearchPage = () => {
                     Camera position set to allow good initial view of galaxy
                     Default Position: [0, 800, 2400] approx max zoom (radius ~2500)
                 */}
-                <Canvas camera={{ position: [0, 800, 2400], fov: 60, far: 100000 }}>
+                <Canvas camera={CAMERA_SETTINGS}>
                     <color attach="background" args={['#050505']} />
                     <ambientLight intensity={0.5} />
 
@@ -419,6 +464,8 @@ const SearchPage = () => {
                                 onSelectStar={triggerTransitionToStar}
                                 targetStar={targetStar}
                                 onHoverChange={setIsHoveringStar}
+                                forceTooltipStar={forceTooltipStar}
+                                macroFlyInMode={macroFlyInMode}
                             />
                         )}
                     </group>
@@ -510,7 +557,7 @@ const SearchPage = () => {
             {/* --- GRID LAYER (Marketplace) --- */}
             <div style={{
                 display: viewMode === VIEW_MODE.GRID ? 'block' : 'none',
-                position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10
+                position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5
             }}>
                 <BuyAStarGrid onSelectStar={triggerTransitionToStar} />
             </div>

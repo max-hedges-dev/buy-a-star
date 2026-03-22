@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useLayoutEffect, useState } from 'react';
+import React, { useRef, useMemo, useLayoutEffect, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -7,13 +7,14 @@ import GalaxyGenerator from '../utils/GalaxyGenerator';
 // Change this number to force galaxy regeneration during development
 const GALAXY_VERSION = 29;
 
-const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange }) => {
+const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange, forceTooltipStar, macroFlyInMode }) => {
     const meshRef = useRef();
     const groupRef = useRef();
     const tempObject = useMemo(() => new THREE.Object3D(), []);
     const tempColor = useMemo(() => new THREE.Color(), []);
     const hoveredInstanceRef = useRef(-1);
     const [hoveredStar, setHoveredStar] = useState(null);
+    const activeHoverStar = forceTooltipStar || hoveredStar;
     const { camera, gl } = useThree();
 
     // Generate unified galaxy data - regenerates when GALAXY_VERSION changes
@@ -172,6 +173,53 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
 
     // Dummy camera for calculating target rotations without allocating every frame
     const dummyCam = useMemo(() => new THREE.PerspectiveCamera(), []);
+    const animRef = useRef(null);
+
+    useEffect(() => {
+        if (targetStar) {
+            // Apply macro jump instantly if requested before starting animation
+            if (macroFlyInMode) {
+                camera.position.set(0, 800, 2400); 
+                camera.lookAt(0, 0, 0); 
+            }
+
+            // Calculate destination in absolute world space
+            const localPos = new THREE.Vector3(targetStar.x, targetStar.y, targetStar.z);
+            let worldPos = localPos.clone();
+            if (groupRef.current) {
+                groupRef.current.updateWorldMatrix(true, false);
+                worldPos.applyMatrix4(groupRef.current.matrixWorld);
+            }
+            
+            // Calculate an offset from the star toward the camera's CURRENT vector
+            // This ensures we glide linearly down the pipe we're already looking through!
+            let toCamera = camera.position.clone().sub(worldPos);
+            if (toCamera.lengthSq() < 0.1) {
+                toCamera.set(0, 1, 0); // fallback orientation if inside the star
+            }
+            toCamera.normalize();
+            
+            const endDist = 8; // Fly much closer to the star
+            const endOffset = toCamera.multiplyScalar(endDist);
+            const endPos = worldPos.clone().add(endOffset);
+
+            // Compute end rotation exactly looking at the star
+            dummyCam.position.copy(endPos);
+            dummyCam.lookAt(worldPos);
+            const endQuat = dummyCam.quaternion.clone();
+
+            animRef.current = {
+                startPos: camera.position.clone(),
+                startQuat: camera.quaternion.clone(),
+                endPos: endPos,
+                endQuat: endQuat,
+                progress: 0,
+                duration: macroFlyInMode ? 3.5 : 3.0 // Properly slowed cinematic pacing
+            };
+        } else {
+            animRef.current = null;
+        }
+    }, [targetStar, camera, macroFlyInMode, dummyCam]);
 
     useFrame((state, delta) => {
         if (starMaterial.userData.shader) {
@@ -179,26 +227,18 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
             starMaterial.userData.shader.uniforms.hoveredInstance.value = hoveredInstanceRef.current;
         }
 
-        if (targetStar && viewMode === 'MAP') {
-            // Get star's world position (accounting for galaxy group rotation/translation)
-            const localPos = new THREE.Vector3(targetStar.x, targetStar.y, targetStar.z);
-            let worldPos = localPos;
-            if (groupRef.current) {
-                worldPos = localPos.clone();
-                // Walk up to the parent galaxy group to get world matrix
-                groupRef.current.updateWorldMatrix(true, false);
-                worldPos.applyMatrix4(groupRef.current.matrixWorld);
-            }
-            const offset = worldPos.clone().sub(state.camera.position).normalize().multiplyScalar(-20);
-            const camTargetPos = worldPos.clone().add(offset);
+        if (animRef.current && viewMode === 'MAP') {
+            const anim = animRef.current;
+            // Guard against massive frame drops destroying the cinematic sequence
+            const safeDelta = Math.min(delta, 0.1);
+            anim.progress += safeDelta / anim.duration;
+            const t = Math.min(anim.progress, 1);
 
-            // Calculate target rotation using the dummy camera
-            dummyCam.position.copy(state.camera.position);
-            dummyCam.lookAt(worldPos);
-
-            // Interpolate position and rotation smoothly
-            state.camera.position.lerp(camTargetPos, 0.05);
-            state.camera.quaternion.slerp(dummyCam.quaternion, 0.05);
+            // Ease in-out cubic for soft gliding starts and perfectly paced stops
+            const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            
+            state.camera.position.copy(anim.startPos).lerp(anim.endPos, ease);
+            state.camera.quaternion.copy(anim.startQuat).slerp(anim.endQuat, ease);
         }
     });
 
@@ -315,9 +355,9 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
             </instancedMesh>
 
             {/* HOVER TOOLTIP */}
-            {hoveredStar && viewMode === 'MAP' && (
+            {activeHoverStar && viewMode === 'MAP' && (
                 <Html
-                    position={[hoveredStar.x, hoveredStar.y, hoveredStar.z]}
+                    position={[activeHoverStar.x, activeHoverStar.y, activeHoverStar.z]}
                     style={{ pointerEvents: 'none' }}
                     zIndexRange={[100, 0]}
                 >
@@ -339,21 +379,21 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange 
                         </svg>
 
                         <div style={{
-                            background: hoveredStar.is_bought ? 'rgba(0,0,0,0.85)' : 'rgba(20,20,30,0.8)',
+                            background: activeHoverStar.is_bought ? 'rgba(0,0,0,0.85)' : 'rgba(20,20,30,0.8)',
                             backdropFilter: 'blur(5px)',
                             padding: '10px 15px',
                             borderRadius: '8px',
-                            border: `1px solid ${hoveredStar.is_bought ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.2)'}`,
+                            border: `1px solid ${activeHoverStar.is_bought ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.2)'}`,
                             color: 'white',
                             width: 'max-content',
                             boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
                         }}>
                             <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '2px', fontFamily: 'serif' }}>
-                                {hoveredStar.common_name || hoveredStar.scientific_name}
+                                {activeHoverStar.common_name || activeHoverStar.scientific_name}
                             </div>
-                            {hoveredStar.is_bought ? (
+                            {activeHoverStar.is_bought ? (
                                 <div style={{ fontSize: '0.8rem', color: '#aaa', textTransform: 'uppercase' }}>
-                                    Owned by: <span style={{ color: 'white', fontWeight: 'bold' }}>{hoveredStar.owner_name}</span>
+                                    Owned by: <span style={{ color: 'white', fontWeight: 'bold' }}>{activeHoverStar.owner_name}</span>
                                 </div>
                             ) : (
                                 <div style={{ fontSize: '0.85rem', color: '#88cc88', fontWeight: 'bold', letterSpacing: '0.5px' }}>

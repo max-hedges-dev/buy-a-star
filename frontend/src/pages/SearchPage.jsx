@@ -350,7 +350,7 @@ const SearchPage = () => {
         setLoading(true);
         setError(null);
         try {
-            const data = await fetchStars({ search: term, limit: 5000 });
+            const data = await fetchStars({ search: term, limit: 20000 });
             setStars(data);
         } catch (error) {
             console.error(error);

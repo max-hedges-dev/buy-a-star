@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Buy A Star API")
+app = FastAPI(title="Aster Atlas API")
 
 # CORS
 app.add_middleware(
@@ -25,4 +25,4 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to Buy A Star API"}
+    return {"message": "Welcome to Aster Atlas API"}

@@ -18,7 +18,7 @@ const Navbar = () => {
             zIndex: 10
         }}>
             <Link to="/" style={{ fontSize: '1.5rem', fontWeight: '800', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                Buy A Star
+                Aster Atlas
             </Link>
 
             <div style={{ display: 'flex', gap: '30px', alignItems: 'center', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '1px' }}>

@@ -1,12 +1,195 @@
 import React, { useRef, useMemo, useLayoutEffect, useState, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
+import { useFrame, useThree, extend } from '@react-three/fiber';
+import { Html, shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
-import DetailedStar from './DetailedStar';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
 const GALAXY_VERSION = 29;
+const MEDIUM_DETAIL_DISTANCE = 320;
+const COLOR_RAMP_START = 55;
+
+const overlayNoise = `
+float hash13(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+float noise3(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+
+  float n000 = hash13(i + vec3(0.0, 0.0, 0.0));
+  float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+  float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+  float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+  float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+  float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+  float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+  float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+
+  float nx00 = mix(n000, n100, f.x);
+  float nx10 = mix(n010, n110, f.x);
+  float nx01 = mix(n001, n101, f.x);
+  float nx11 = mix(n011, n111, f.x);
+  float nxy0 = mix(nx00, nx10, f.y);
+  float nxy1 = mix(nx01, nx11, f.y);
+  return mix(nxy0, nxy1, f.z);
+}
+
+float fbm(vec3 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  float frequency = 1.0;
+  for (int i = 0; i < 4; i++) {
+    value += noise3(p * frequency) * amplitude;
+    frequency *= 2.0;
+    amplitude *= 0.5;
+  }
+  return value;
+}
+`;
+
+const GalaxyOverlayMaterial = shaderMaterial(
+    {
+        time: 0,
+        baseColor: new THREE.Color('#ffd46c'),
+        hotColor: new THREE.Color('#fff8df'),
+        colorBlend: 1.0,
+    },
+    `
+    varying vec3 vNormal;
+    void main() {
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+    `
+    uniform float time;
+    uniform vec3 baseColor;
+    uniform vec3 hotColor;
+    uniform float colorBlend;
+    varying vec3 vNormal;
+    ${overlayNoise}
+
+    void main() {
+      vec3 n = normalize(vNormal);
+      float noise = fbm(n * 4.0 + vec3(time * 0.5));
+      float facing = max(dot(n, vec3(0.0, 0.0, 1.0)), 0.0);
+      float fresnel = 1.0 - facing;
+
+      vec3 body = mix(vec3(1.0), baseColor, colorBlend);
+      vec3 hot = mix(vec3(1.0), hotColor, colorBlend);
+      vec3 finalColor = body * (1.0 + noise * 0.22);
+      finalColor = mix(finalColor, hot, 0.28 + noise * 0.06);
+      finalColor += hot * fresnel * 0.22;
+
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
+);
+
+extend({ GalaxyOverlayMaterial });
+
+const getGalaxyStarPalette = (star) => {
+    const category = star.category || '';
+    if (category.includes('Blue')) {
+        return {
+            surface: new THREE.Color('#2f97ff'),
+            bloom: new THREE.Color('#8fd8ff'),
+        };
+    }
+    if (category.includes('White')) {
+        return {
+            surface: new THREE.Color('#dbefff'),
+            bloom: new THREE.Color('#edf7ff'),
+        };
+    }
+    if (category.includes('Red Giant')) {
+        return {
+            surface: new THREE.Color('#ff8e4f'),
+            bloom: new THREE.Color('#ffc89f'),
+        };
+    }
+    if (category.includes('Red Dwarf')) {
+        return {
+            surface: new THREE.Color('#ff6847'),
+            bloom: new THREE.Color('#ffba96'),
+        };
+    }
+    return {
+        surface: new THREE.Color('#ffc44e'),
+        bloom: new THREE.Color('#ffe6a8'),
+    };
+};
+
+const GalaxyStarOverlay = ({ star, distSq }) => {
+    const materialRef = useRef();
+    const palette = useMemo(() => getGalaxyStarPalette(star), [star]);
+    const distance = Math.sqrt(distSq);
+    const rawBlend = 1 - THREE.MathUtils.smoothstep(distance, COLOR_RAMP_START, MEDIUM_DETAIL_DISTANCE);
+    const colorBlend = Math.pow(rawBlend, 3.8);
+    const bloomTexture = useMemo(() => {
+        const size = 96;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const center = size / 2;
+        const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(0.2, 'rgba(255,255,255,0.72)');
+        gradient.addColorStop(0.55, 'rgba(255,255,255,0.14)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        return texture;
+    }, []);
+    const bloomColor = useMemo(
+        () => new THREE.Color('#ffffff').lerp(palette.bloom.clone(), Math.pow(rawBlend, 1.6)),
+        [palette, rawBlend]
+    );
+    const bloomOpacity = 0.012 + colorBlend * 0.06;
+    const bloomScale = 2.4 + colorBlend * 1.2;
+
+    useFrame((state) => {
+        if (materialRef.current) {
+            materialRef.current.time = state.clock.elapsedTime;
+        }
+    });
+
+    return (
+        <group>
+            <mesh>
+                <sphereGeometry args={[2, 16, 16]} />
+                <galaxyOverlayMaterial
+                    ref={materialRef}
+                    baseColor={palette.surface}
+                    hotColor={palette.bloom}
+                    colorBlend={colorBlend}
+                    transparent={true}
+                    depthWrite={false}
+                    blending={THREE.NormalBlending}
+                />
+            </mesh>
+
+            <sprite scale={[bloomScale, bloomScale, 1]}>
+                <spriteMaterial
+                    map={bloomTexture}
+                    color={bloomColor}
+                    transparent
+                    opacity={bloomOpacity}
+                    depthWrite={false}
+                    blending={THREE.AdditiveBlending}
+                />
+            </sprite>
+        </group>
+    );
+};
 
 const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange, forceTooltipStar, macroFlyInMode }) => {
     const meshRef = useRef();
@@ -192,7 +375,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             const localCamPos = new THREE.Vector3().copy(state.camera.position);
             if (groupRef.current) groupRef.current.worldToLocal(localCamPos);
             
-            const threshold = 400 * 400; // Popping threshold mathematically identical to white-starlight radius
+            const threshold = MEDIUM_DETAIL_DISTANCE * MEDIUM_DETAIL_DISTANCE; // Medium LOD range
             
             const closeStars = [];
             for (let i = 0; i < stars.length; i++) {
@@ -208,10 +391,17 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
                 if (distSq < threshold) closeStars.push({ star: s, distSq });
             }
             closeStars.sort((a, b) => a.distSq - b.distSq);
-            const nearestStars = closeStars.slice(0, 200).map(wrapper => wrapper.star);
+            const nearestStars = closeStars.slice(0, 60);
             
             let changed = nearestStars.length !== nearbyRef.current.length;
-            if (!changed) nearestStars.some((s, i) => { if (s.id !== nearbyRef.current[i].id) changed=true; });
+            if (!changed) {
+                nearestStars.some((entry, i) => {
+                    const prevEntry = nearbyRef.current[i];
+                    const prevStar = prevEntry?.star || prevEntry;
+                    if (!prevStar || entry.star.id !== prevStar.id) changed = true;
+                    return changed;
+                });
+            }
             if (changed) { nearbyRef.current = nearestStars; setNearbyStars(nearestStars); }
         }
     });
@@ -320,7 +510,10 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             </instancedMesh>
 
             {/* High-Poly Proximity Overlays (Replaces white meshes completely seamlessly) */}
-            {(viewMode === 'MAP' || viewMode === 'TRANSITION') && nearbyStars.map((star, i) => {
+            {(viewMode === 'MAP' || viewMode === 'TRANSITION') && nearbyStars.map((entry, i) => {
+                const star = entry?.star || entry;
+                const distSq = entry?.distSq ?? Infinity;
+                if (!star) return null;
                 const seed = (star.id && typeof star.id === 'number') ? star.id : i;
                 // Divided by 5 functionally syncing with the instanced proxy.
                 const scaleMulti = (0.5 + Math.abs(Math.sin(seed * 43.21)) * 1.5) / 5.0;
@@ -349,7 +542,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
                             if (onHoverChange) onHoverChange(false);
                         }}
                     >
-                        <DetailedStar star={star} />
+                        <GalaxyStarOverlay star={star} distSq={distSq} />
                     </group>
                 );
             })}

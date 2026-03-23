@@ -1,4 +1,5 @@
 const API_URL = "http://127.0.0.1:8000/api/v1";
+const STARS_URL = `${API_URL}/stars/`;
 
 export async function fetchStars({ skip = 0, limit = 100, search = "", isBought = undefined } = {}) {
     const params = new URLSearchParams({
@@ -8,7 +9,7 @@ export async function fetchStars({ skip = 0, limit = 100, search = "", isBought 
         ...(isBought !== undefined && { is_bought: isBought })
     });
 
-    const response = await fetch(`${API_URL}/stars?${params}`);
+    const response = await fetch(`${STARS_URL}?${params}`);
     if (!response.ok) {
         throw new Error("Failed to fetch stars");
     }
@@ -16,7 +17,7 @@ export async function fetchStars({ skip = 0, limit = 100, search = "", isBought 
 }
 
 export async function fetchStarById(id) {
-    const response = await fetch(`${API_URL}/stars/${id}`);
+    const response = await fetch(`${STARS_URL}${id}`);
     if (!response.ok) {
         throw new Error("Failed to fetch star");
     }
@@ -24,7 +25,7 @@ export async function fetchStarById(id) {
 }
 
 export async function buyStar(id, ownerName, includeCertificate) {
-    const response = await fetch(`${API_URL}/stars/${id}/buy`, {
+    const response = await fetch(`${STARS_URL}${id}/buy`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

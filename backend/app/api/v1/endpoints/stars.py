@@ -9,6 +9,7 @@ from app.models.star import Star
 
 router = APIRouter()
 
+@router.get("")
 @router.get("/")
 async def read_stars(
     db: AsyncSession = Depends(get_db),

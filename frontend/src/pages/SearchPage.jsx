@@ -146,6 +146,13 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
     const targetPos = useRef(null);
     const targetQuat = useRef(null);
     const lastWheelTime = useRef(0);
+    const zoomPlane = useRef(new THREE.Plane());
+    const planeNormal = useRef(new THREE.Vector3());
+    const planePoint = useRef(new THREE.Vector3());
+    const zoomAnchor = useRef(new THREE.Vector3());
+    const galaxyQuat = useRef(new THREE.Quaternion());
+    const anchorDir = useRef(new THREE.Vector3());
+    const planeOffset = useRef(new THREE.Vector3());
 
     // Store default quaternion
     const defaultQuat = React.useMemo(() => {
@@ -190,11 +197,26 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
             if (!targetPos.current) return;
 
             const zoomingIn = e.deltaY < 0;
-            const height = Math.max(targetPos.current.y, 1);
+            let planeDistance = Math.max(targetPos.current.y, 1);
+            let planeSide = 1;
+
+            if (galaxyRef.current) {
+                galaxyRef.current.updateWorldMatrix(true, false);
+                galaxyRef.current.getWorldPosition(planePoint.current);
+                planeNormal.current
+                    .set(0, 1, 0)
+                    .applyQuaternion(galaxyRef.current.getWorldQuaternion(galaxyQuat.current))
+                    .normalize();
+                zoomPlane.current.setFromNormalAndCoplanarPoint(planeNormal.current, planePoint.current);
+
+                const signedPlaneDistance = zoomPlane.current.distanceToPoint(targetPos.current);
+                planeSide = Math.sign(signedPlaneDistance) || 1;
+                planeDistance = Math.max(Math.abs(signedPlaneDistance), 1);
+            }
             
             // Linear velocity curve — scales with height but has a reasonable minimum.
             // Near the floor, use a much gentler speed to allow fine downward approach.
-            const moveSpeed = Math.max(height * 0.15, 5); 
+            const moveSpeed = Math.max(planeDistance * 0.15, 5); 
 
             if (zoomingIn) {
                 // Zoom IN: Compute NDC from the wheel event position for accurate ray direction
@@ -205,10 +227,36 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
                 
                 raycaster.setFromCamera(mouseNDC, camera);
                 const rayDir = raycaster.ray.direction.clone().normalize();
-                targetPos.current.addScaledVector(rayDir, moveSpeed);
 
-                // Soft floor — allow getting very close to the plane but not through it
-                targetPos.current.y = Math.max(targetPos.current.y, 0.5);
+                let anchoredZoom = false;
+                if (galaxyRef.current) {
+                    // Move straight toward the true cursor anchor on the rotated galaxy plane.
+                    if (raycaster.ray.intersectPlane(zoomPlane.current, zoomAnchor.current)) {
+                        anchorDir.current.copy(zoomAnchor.current).sub(targetPos.current);
+                        const distanceToAnchor = anchorDir.current.length();
+
+                        if (distanceToAnchor > MIN_DIST) {
+                            const step = Math.min(moveSpeed, distanceToAnchor - MIN_DIST);
+                            targetPos.current.addScaledVector(anchorDir.current.normalize(), step);
+                            anchoredZoom = true;
+                        }
+                    }
+                }
+
+                if (!anchoredZoom) {
+                    targetPos.current.addScaledVector(rayDir, moveSpeed);
+                }
+
+                // Stay just above the galaxy plane even when the galaxy is tilted in world space.
+                if (galaxyRef.current) {
+                    const nextPlaneDistance = zoomPlane.current.distanceToPoint(targetPos.current);
+                    if (nextPlaneDistance * planeSide < 0.5) {
+                        planeOffset.current.copy(planeNormal.current).multiplyScalar((planeSide * 0.5) - nextPlaneDistance);
+                        targetPos.current.add(planeOffset.current);
+                    }
+                } else {
+                    targetPos.current.y = Math.max(targetPos.current.y, 0.5);
+                }
             } else {
                 // Zoom OUT: Pull straight backwards out of the camera's local focal rotation
                 const fwd = new THREE.Vector3();
@@ -216,8 +264,8 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
                 targetPos.current.addScaledVector(fwd, -moveSpeed);
 
                 // Auto-Leveling constraint slowly pulls camera back to standard cinematic wide-view
-                if (height > 50) {
-                    const blendFactor = Math.min((height - 50) / 1000, 0.15); // Faster 15% angular recovery
+                if (planeDistance > 50) {
+                    const blendFactor = Math.min((planeDistance - 50) / 1000, 0.15); // Faster 15% angular recovery
                     targetPos.current.lerp(DEFAULT_CAM_POS, blendFactor);
                     targetQuat.current.slerp(defaultQuat, blendFactor);
 

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -11,10 +11,13 @@ const StarMaterial = shaderMaterial(
     `
     varying vec2 vUv;
     varying vec3 vNormal;
+    varying vec3 vWorldP;
     void main() {
       vUv = uv;
       vNormal = normalize(normalMatrix * normal);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vWorldP = wp.xyz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
     }
   `,
     // Fragment Shader
@@ -23,6 +26,7 @@ const StarMaterial = shaderMaterial(
     uniform vec3 color;
     varying vec2 vUv;
     varying vec3 vNormal;
+    varying vec3 vWorldP;
 
     // Simplex Noise (simplified for brevity)
     vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -108,6 +112,13 @@ const StarMaterial = shaderMaterial(
       float fresnel = dot(vNormal, vec3(0.0, 0.0, 1.0));
       finalColor += vec3(0.2) * (1.0 - fresnel);
 
+      // Color distance white-balance transition 
+      // Fades the true rich color dynamically to pure white starlight proportionally over massive distances
+      float dist = distance(cameraPosition, vWorldP);
+      float colorMix = smoothstep(80.0, 400.0, dist);
+      finalColor = mix(finalColor, vec3(1.0, 1.0, 1.0), colorMix);
+
+      // Distance cross-fade for High-poly Shader (Removed per user request for permanent visibility)
       gl_FragColor = vec4(finalColor, 1.0);
     }
   `
@@ -117,32 +128,57 @@ extend({ StarMaterial });
 
 const DetailedStar = ({ star }) => {
     const materialRef = useRef();
+    const coreRef = useRef();
+    const glow1Ref = useRef();
+    const glow2Ref = useRef();
+    const vecPos = useMemo(() => new THREE.Vector3(), []);
 
     useFrame((state, delta) => {
         if (materialRef.current) {
             materialRef.current.time += delta;
         }
+
+        // Apply identical shader cross-fade mathematically to the secondary glowing aura meshes
+        if (coreRef.current && glow1Ref.current && glow2Ref.current) {
+            coreRef.current.getWorldPosition(vecPos);
+            const dist = state.camera.position.distanceTo(vecPos);
+            
+            // Hermite interpolation preventing the Halos from popping immediately when the LOD instance spawns at 400.
+            let t = Math.max(0.0, Math.min(1.0, (dist - 300.0) / (400.0 - 300.0)));
+            let smoothFade = 1.0 - (t * t * (3.0 - 2.0 * t));
+            
+            glow1Ref.current.opacity = 0.06 * smoothFade;
+            glow2Ref.current.opacity = 0.03 * smoothFade;
+        }
     });
 
-    // Map category to color
+    // Map category to color or use injected color
     let color = new THREE.Color('#ffaa00');
-    if (star.category.includes('Blue')) color.set('#00aaff');
-    else if (star.category.includes('Red Giant')) color.set('#ff2200');
-    else if (star.category.includes('Red Dwarf')) color.set('#ff5533');
-    else if (star.category.includes('White')) color.set('#ffffff');
+    if (star.baseColor) {
+        color = star.baseColor.clone ? star.baseColor.clone() : new THREE.Color(star.baseColor);
+    } else if (star.category?.includes('Blue')) {
+        color.set('#00aaff');
+    } else if (star.category?.includes('Red Giant')) {
+        color.set('#ff2200');
+    } else if (star.category?.includes('Red Dwarf')) {
+        color.set('#ff5533');
+    } else if (star.category?.includes('White')) {
+        color.set('#ffffff');
+    }
 
     return (
-        <group>
+        <group ref={coreRef}>
             {/* Core Star */}
             <mesh>
                 <sphereGeometry args={[2, 64, 64]} />
-                <starMaterial ref={materialRef} color={color} />
+                <starMaterial ref={materialRef} color={color} transparent={true} depthWrite={false} blending={THREE.NormalBlending} />
             </mesh>
 
             {/* Outer Glow */}
             <mesh scale={[3.5, 3.5, 3.5]}>
                 <sphereGeometry args={[1, 32, 32]} />
                 <meshBasicMaterial
+                    ref={glow1Ref}
                     color={color}
                     transparent
                     opacity={0.06}
@@ -156,6 +192,7 @@ const DetailedStar = ({ star }) => {
             <mesh scale={[5, 5, 5]}>
                 <sphereGeometry args={[1, 32, 32]} />
                 <meshBasicMaterial
+                    ref={glow2Ref}
                     color={color}
                     transparent
                     opacity={0.03}

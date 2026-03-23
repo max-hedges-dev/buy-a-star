@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useLayoutEffect, useState, useEffect } from 're
 import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
+import DetailedStar from './DetailedStar';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
@@ -17,85 +18,32 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
     const activeHoverStar = forceTooltipStar || hoveredStar;
     const { camera, gl } = useThree();
 
+    // High-poly Local Rendering State
+    const nearbyRef = useRef([]);
+    const [nearbyStars, setNearbyStars] = useState([]);
+
     // Generate unified galaxy data - regenerates when GALAXY_VERSION changes
     const galaxyData = useMemo(() => {
         console.log('Regenerating galaxy with version:', GALAXY_VERSION);
         return GalaxyGenerator.generateGalaxy();
     }, [GALAXY_VERSION]);
 
-    // Setup interactive stars
+    // Setup interactive stars (Zero-cost white spheres)
     useLayoutEffect(() => {
         if (!meshRef.current) return;
-
         stars.forEach((star, i) => {
             tempObject.position.set(star.x, star.y, star.z);
-            const scale = Math.random() * 0.8 + 0.5;
-            tempObject.scale.set(scale, scale, scale);
+            // Detailed geometry radius = 2, scaled by 0.75 * scaleMulti = 1.5 * scaleMulti.
+            // Generic instanced mesh is sphere r=1.5. So scale = scaleMulti.
+            const scaleMulti = 0.5 + Math.abs(Math.sin((star.id || i) * 43.21)) * 1.5;
+            tempObject.scale.set(scaleMulti, scaleMulti, scaleMulti);
             tempObject.updateMatrix();
             meshRef.current.setMatrixAt(i, tempObject.matrix);
-
-            if (star.category.includes('Blue')) tempColor.set('#aaccff');
-            else if (star.category.includes('Red Giant')) tempColor.set('#ff8866');
-            else if (star.category.includes('Red')) tempColor.set('#ffaa88');
-            else if (star.category.includes('White')) tempColor.set('#ffffff');
-            else if (star.category.includes('Yellow')) tempColor.set('#ffeebb');
-            else tempColor.set('#ffffff');
-
-            meshRef.current.setColorAt(i, tempColor);
         });
-
         meshRef.current.instanceMatrix.needsUpdate = true;
-        if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
-    }, [stars, tempObject, tempColor]);
+    }, [stars, tempObject]);
 
-    // Star shader
-    const starMaterial = useMemo(() => {
-        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        mat.onBeforeCompile = (shader) => {
-            shader.uniforms.time = { value: 0 };
-            shader.uniforms.hoveredInstance = { value: -1 };
-
-            shader.vertexShader = `
-                varying float vInstanceID;
-                varying vec3 vWorldPosition;
-                ${shader.vertexShader}
-             `.replace(
-                '#include <begin_vertex>',
-                `#include <begin_vertex>
-                 vInstanceID = float(gl_InstanceID);
-                 vec4 worldPosition = instanceMatrix * vec4(position, 1.0);
-                 vWorldPosition = worldPosition.xyz;
-                `
-            );
-
-            shader.fragmentShader = `
-                uniform float time;
-                uniform float hoveredInstance;
-                varying float vInstanceID;
-                varying vec3 vWorldPosition;
-                ${shader.fragmentShader}
-             `.replace(
-                '#include <dithering_fragment>',
-                `
-                #include <dithering_fragment>
-                float dist = distance(cameraPosition, vWorldPosition);
-                float fade = 1.0 - smoothstep(100.0, 2500.0, dist);
-                gl_FragColor.a = fade;
-                float randomVal = fract(sin(vInstanceID * 12.9898) * 43758.5453);
-                float twinkle = 0.8 + 0.4 * sin(time * 3.0 + randomVal * 10.0);
-                gl_FragColor.rgb *= twinkle;
-                float isHover = 1.0 - step(0.1, abs(vInstanceID - hoveredInstance));
-                if(isHover > 0.5) {
-                    gl_FragColor.rgb = vec3(1.0, 1.0, 1.0); 
-                    gl_FragColor.rgb *= 3.0;
-                }
-                `
-            );
-
-            mat.userData.shader = shader;
-        };
-        return mat;
-    }, []);
+    const starMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffffff }), []);
 
     // Soft particle texture
     const cloudTexture = useMemo(() => {
@@ -174,6 +122,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
     // Dummy camera for calculating target rotations without allocating every frame
     const dummyCam = useMemo(() => new THREE.PerspectiveCamera(), []);
     const animRef = useRef(null);
+    const lastCheckRef = useRef(0);
 
     useEffect(() => {
         if (targetStar) {
@@ -222,11 +171,6 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
     }, [targetStar, camera, macroFlyInMode, dummyCam]);
 
     useFrame((state, delta) => {
-        if (starMaterial.userData.shader) {
-            starMaterial.userData.shader.uniforms.time.value += delta;
-            starMaterial.userData.shader.uniforms.hoveredInstance.value = hoveredInstanceRef.current;
-        }
-
         if (animRef.current && viewMode === 'MAP') {
             const anim = animRef.current;
             // Guard against massive frame drops destroying the cinematic sequence
@@ -237,17 +181,43 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             // Ease in-out cubic for soft gliding starts and perfectly paced stops
             const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
             
-            state.camera.position.copy(anim.startPos).lerp(anim.endPos, ease);
             state.camera.quaternion.copy(anim.startQuat).slerp(anim.endQuat, ease);
+        }
+
+        // --- Proximity LOD Spawner ---
+        if (viewMode === 'MAP' && state.clock.elapsedTime - lastCheckRef.current > 0.25) {
+            lastCheckRef.current = state.clock.elapsedTime;
+            const localCamPos = new THREE.Vector3().copy(state.camera.position);
+            if (groupRef.current) groupRef.current.worldToLocal(localCamPos);
+            
+            const threshold = 400 * 400; // Popping threshold mathematically identical to white-starlight radius
+            
+            const closeStars = [];
+            for (let i = 0; i < stars.length; i++) {
+                const s = stars[i];
+                const dx = s.x - localCamPos.x;
+                if (dx > 400 || dx < -400) continue;
+                const dy = s.y - localCamPos.y;
+                if (dy > 400 || dy < -400) continue;
+                const dz = s.z - localCamPos.z;
+                if (dz > 400 || dz < -400) continue;
+                
+                const distSq = dx * dx + dy * dy + dz * dz;
+                if (distSq < threshold) closeStars.push({ star: s, distSq });
+            }
+            closeStars.sort((a, b) => a.distSq - b.distSq);
+            const nearestStars = closeStars.slice(0, 200).map(wrapper => wrapper.star);
+            
+            let changed = nearestStars.length !== nearbyRef.current.length;
+            if (!changed) nearestStars.some((s, i) => { if (s.id !== nearbyRef.current[i].id) changed=true; });
+            if (changed) { nearbyRef.current = nearestStars; setNearbyStars(nearestStars); }
         }
     });
 
     const handleClick = (e) => {
         if (viewMode !== 'MAP') return;
         e.stopPropagation();
-        if (e.instanceId !== undefined) {
-            onSelectStar(stars[e.instanceId]);
-        }
+        if (e.instanceId !== undefined) onSelectStar(stars[e.instanceId]);
     };
     const handlePointerMove = (e) => {
         if (viewMode !== 'MAP') return;
@@ -256,18 +226,11 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             gl.domElement.style.cursor = 'pointer';
             hoveredInstanceRef.current = e.instanceId;
             const star = stars[e.instanceId];
-            if (!hoveredStar || hoveredStar.id !== star.id) {
-                setHoveredStar(star);
-            }
+            if (!hoveredStar || hoveredStar.id !== star.id) setHoveredStar(star);
             if (onHoverChange) onHoverChange(true);
         }
     };
-    const handlePointerOut = () => {
-        gl.domElement.style.cursor = 'grab';
-        hoveredInstanceRef.current = -1;
-        setHoveredStar(null);
-        if (onHoverChange) onHoverChange(false);
-    };
+    const handlePointerOut = () => { gl.domElement.style.cursor = 'grab'; hoveredInstanceRef.current = -1; setHoveredStar(null); if (onHoverChange) onHoverChange(false); };
 
     return (
         <group ref={groupRef}>
@@ -353,6 +316,40 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             >
                 <sphereGeometry args={[1.5, 8, 8]} />
             </instancedMesh>
+
+            {/* High-Poly Proximity Overlays (Replaces white meshes completely seamlessly) */}
+            {viewMode === 'MAP' && nearbyStars.map((star, i) => {
+                const seed = (star.id && typeof star.id === 'number') ? star.id : i;
+                const scaleMulti = 0.5 + Math.abs(Math.sin(seed * 43.21)) * 1.5;
+                // Detailed Star is 5% larger than generic shell to perfectly swallow any Z-Fighting overlap.
+                const finalScale = 0.75 * scaleMulti * 1.05; 
+                return (
+                    <group 
+                        key={star.id} 
+                        position={[star.x, star.y, star.z]} 
+                        scale={[finalScale, finalScale, finalScale]}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectStar(star);
+                        }}
+                        onPointerMove={(e) => {
+                            e.stopPropagation();
+                            gl.domElement.style.cursor = 'pointer';
+                            if (!hoveredStar || hoveredStar.id !== star.id) {
+                                setHoveredStar(star);
+                            }
+                            if (onHoverChange) onHoverChange(true);
+                        }}
+                        onPointerOut={() => {
+                            gl.domElement.style.cursor = 'grab';
+                            setHoveredStar(null);
+                            if (onHoverChange) onHoverChange(false);
+                        }}
+                    >
+                        <DetailedStar star={star} />
+                    </group>
+                );
+            })}
 
             {/* HOVER TOOLTIP */}
             {activeHoverStar && viewMode === 'MAP' && (

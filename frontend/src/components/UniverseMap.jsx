@@ -35,7 +35,8 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             tempObject.position.set(star.x, star.y, star.z);
             // Detailed geometry radius = 2, scaled by 0.75 * scaleMulti = 1.5 * scaleMulti.
             // Generic instanced mesh is sphere r=1.5. So scale = scaleMulti.
-            const scaleMulti = 0.5 + Math.abs(Math.sin((star.id || i) * 43.21)) * 1.5;
+            // Divided by 5 to drastically increase the perceived scale of the galaxy void.
+            const scaleMulti = (0.5 + Math.abs(Math.sin((star.id || i) * 43.21)) * 1.5) / 5.0;
             tempObject.scale.set(scaleMulti, scaleMulti, scaleMulti);
             tempObject.updateMatrix();
             meshRef.current.setMatrixAt(i, tempObject.matrix);
@@ -148,7 +149,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             }
             toCamera.normalize();
             
-            const endDist = 8; // Fly much closer to the star
+            const endDist = 1.6; // Fly exactly 5x closer to perfectly match the 5x shrunk geometry
             const endOffset = toCamera.multiplyScalar(endDist);
             const endPos = worldPos.clone().add(endOffset);
 
@@ -171,7 +172,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
     }, [targetStar, camera, macroFlyInMode, dummyCam]);
 
     useFrame((state, delta) => {
-        if (animRef.current && viewMode === 'MAP') {
+        if (animRef.current && (viewMode === 'MAP' || viewMode === 'TRANSITION')) {
             const anim = animRef.current;
             // Guard against massive frame drops destroying the cinematic sequence
             const safeDelta = Math.min(delta, 0.1);
@@ -181,11 +182,12 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             // Ease in-out cubic for soft gliding starts and perfectly paced stops
             const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
             
+            state.camera.position.copy(anim.startPos).lerp(anim.endPos, ease);
             state.camera.quaternion.copy(anim.startQuat).slerp(anim.endQuat, ease);
         }
 
         // --- Proximity LOD Spawner ---
-        if (viewMode === 'MAP' && state.clock.elapsedTime - lastCheckRef.current > 0.25) {
+        if ((viewMode === 'MAP' || viewMode === 'TRANSITION') && state.clock.elapsedTime - lastCheckRef.current > 0.25) {
             lastCheckRef.current = state.clock.elapsedTime;
             const localCamPos = new THREE.Vector3().copy(state.camera.position);
             if (groupRef.current) groupRef.current.worldToLocal(localCamPos);
@@ -318,9 +320,10 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             </instancedMesh>
 
             {/* High-Poly Proximity Overlays (Replaces white meshes completely seamlessly) */}
-            {viewMode === 'MAP' && nearbyStars.map((star, i) => {
+            {(viewMode === 'MAP' || viewMode === 'TRANSITION') && nearbyStars.map((star, i) => {
                 const seed = (star.id && typeof star.id === 'number') ? star.id : i;
-                const scaleMulti = 0.5 + Math.abs(Math.sin(seed * 43.21)) * 1.5;
+                // Divided by 5 functionally syncing with the instanced proxy.
+                const scaleMulti = (0.5 + Math.abs(Math.sin(seed * 43.21)) * 1.5) / 5.0;
                 // Detailed Star is 5% larger than generic shell to perfectly swallow any Z-Fighting overlap.
                 const finalScale = 0.75 * scaleMulti * 1.05; 
                 return (

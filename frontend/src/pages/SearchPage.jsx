@@ -130,11 +130,14 @@ const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
 };
 
 // --- ZOOM TO POINTER ---
-// Zoom-in: dolly camera toward cursor's 3D point (no forced lookAt — view shifts naturally)
-// Zoom-out: lerp camera back to default pos/angle AND galaxy group back to origin
+// Re-architected for ultra-smooth damped interpolation and linear velocity scaling
 const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
     const { camera, gl, raycaster, pointer } = useThree();
-    const galaxyPlane = React.useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+    
+    // Persistent smoothing targets
+    const targetPos = useRef(null);
+    const targetQuat = useRef(null);
+    const lastWheelTime = useRef(0);
 
     // Store default quaternion
     const defaultQuat = React.useMemo(() => {
@@ -144,6 +147,28 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
         return cam.quaternion.clone();
     }, []);
 
+    useFrame((state, delta) => {
+        if (viewMode !== VIEW_MODE.MAP) return;
+        
+        // Initialize targets on first frame
+        if (!targetPos.current) {
+            targetPos.current = state.camera.position.clone();
+            targetQuat.current = state.camera.quaternion.clone();
+        }
+
+        // Only hijack the camera physics if the user physically spun the scroll wheel recently
+        if (Date.now() - lastWheelTime.current < 400) {
+            // Smoothly damp the true camera towards the scroll targets (10 units/s)
+            state.camera.position.lerp(targetPos.current, 10 * delta);
+            state.camera.quaternion.slerp(targetQuat.current, 10 * delta);
+        } else {
+            // Keep the scroll targets synchronized to the camera's true position 
+            // so that cinematic programmatic fly-ins from UniverseMap are respected!
+            targetPos.current.copy(state.camera.position);
+            targetQuat.current.copy(state.camera.quaternion);
+        }
+    });
+
     useEffect(() => {
         if (viewMode !== VIEW_MODE.MAP) return;
 
@@ -151,49 +176,39 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
         const handleWheel = (e) => {
             e.preventDefault();
             lastInteractionRef.current = Date.now();
+            lastWheelTime.current = Date.now();
+            
+            // Guarantee target vectors are bound before mathematical manipulation
+            if (!targetPos.current) return;
 
             const zoomingIn = e.deltaY < 0;
-            const zoomFraction = 0.12;
+            const height = Math.max(targetPos.current.y, 1);
+            
+            // Linear velocity curve prevents Zeno's paradox stalling near the floor
+            // but scales nicely when very high up. Added flat baseline 15 units min speed.
+            const moveSpeed = Math.max(height * 0.18, 15); 
 
             if (zoomingIn) {
-                // Zoom IN: dolly camera toward the 3D point under cursor
-                // Do NOT call lookAt — the camera keeps its orientation, view shifts naturally
+                // Zoom IN: Project vector exactly through the mouse pointer and ride it linearly
                 raycaster.setFromCamera(pointer, camera);
-                const hitPoint = new THREE.Vector3();
-                const hit = raycaster.ray.intersectPlane(galaxyPlane, hitPoint);
+                const rayDir = raycaster.ray.direction.clone().normalize();
+                targetPos.current.addScaledVector(rayDir, moveSpeed);
 
-                if (hit) {
-                    const toHit = new THREE.Vector3().subVectors(hitPoint, camera.position);
-                    if (toHit.length() > MIN_DIST) {
-                        camera.position.addScaledVector(toHit, zoomFraction);
-                    }
-                } else {
-                    // Fallback: move camera forward along its direction
-                    const fwd = new THREE.Vector3();
-                    camera.getWorldDirection(fwd);
-                    camera.position.addScaledVector(fwd, camera.position.y * zoomFraction);
-                }
-
-                // Don't go below the galaxy plane
-                camera.position.y = Math.max(camera.position.y, 5);
-
+                // Floor constraint updated to 1.5 mirroring new 1/5th universe scale
+                targetPos.current.y = Math.max(targetPos.current.y, 1.5);
             } else {
-                // Zoom OUT: pull back locally first, then lerp to default macro view once high up
-                const height = Math.max(camera.position.y, 5);
-                const moveAmount = Math.max(height * 0.15, 2); // 15% of current height
-
-                // Move backwards along look direction
+                // Zoom OUT: Pull straight backwards out of the camera's local focal rotation
                 const fwd = new THREE.Vector3();
                 camera.getWorldDirection(fwd);
-                camera.position.addScaledVector(fwd, -moveAmount);
+                targetPos.current.addScaledVector(fwd, -moveSpeed);
 
-                // As we zoom out further, start pulling toward DEFAULT_CAM_POS and default angle
+                // Auto-Leveling constraint slowly pulls camera back to standard cinematic wide-view
                 if (height > 50) {
-                    const blendFactor = Math.min((height - 50) / 1000, 0.1); // Max 10% per tick
-                    camera.position.lerp(DEFAULT_CAM_POS, blendFactor);
-                    camera.quaternion.slerp(defaultQuat, blendFactor);
+                    const blendFactor = Math.min((height - 50) / 1000, 0.15); // Faster 15% angular recovery
+                    targetPos.current.lerp(DEFAULT_CAM_POS, blendFactor);
+                    targetQuat.current.slerp(defaultQuat, blendFactor);
 
-                    // Also slowly undo drags and tilt
+                    // Revert global rotation drags concurrently
                     if (galaxyRef.current) {
                         galaxyRef.current.rotation.x *= (1 - blendFactor);
                         galaxyRef.current.position.lerp(DEFAULT_TARGET, blendFactor);
@@ -201,16 +216,16 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
                 }
             }
 
-            // Safety: don't fly beyond max distance
-            if (camera.position.length() > MAX_DIST) {
-                camera.position.copy(DEFAULT_CAM_POS);
-                camera.quaternion.copy(defaultQuat);
+            // Outer Bounds Limit Enforcement
+            if (targetPos.current.length() > MAX_DIST) {
+                targetPos.current.copy(DEFAULT_CAM_POS);
+                targetQuat.current.copy(defaultQuat);
             }
         };
 
         canvas.addEventListener('wheel', handleWheel, { passive: false });
         return () => canvas.removeEventListener('wheel', handleWheel);
-    }, [camera, gl, viewMode, raycaster, pointer, galaxyPlane, galaxyRef, lastInteractionRef, defaultQuat]);
+    }, [camera, gl, viewMode, raycaster, pointer, galaxyRef, lastInteractionRef, defaultQuat]);
 
     return null;
 };

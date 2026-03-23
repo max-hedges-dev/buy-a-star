@@ -74,7 +74,7 @@ const IdleController = ({ galaxyRef, lastInteractionRef, isHoveringStar, viewMod
 // --- GALAXY DRAGGER ---
 // Left-click drag: horizontal = spin (Y rotation), vertical = tilt (X rotation)
 const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
-    const { gl } = useThree();
+    const { gl, camera } = useThree();
 
     useEffect(() => {
         if (viewMode !== VIEW_MODE.MAP) return;
@@ -97,11 +97,19 @@ const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
             const dx = e.clientX - lastX;
             const dy = e.clientY - lastY;
 
+            // Camera sits at (0, 800, 2400) — its natural elevation above the plane is ~18°
+            const cameraElevation = Math.atan2(camera.position.y, camera.position.z); // ~0.32 rad
+            // Effective viewing angle = camera elevation + galaxy tilt. When ≈0, we're edge-on.
+            const effectiveAngle = Math.abs(cameraElevation + (galaxyRef.current ? galaxyRef.current.rotation.x : 0));
+            // Scale from 0 (edge-on) to ~0.32 (top-down). Squared for 3x more dramatic falloff
+            const ratio = THREE.MathUtils.clamp(effectiveAngle / 0.35, 0, 1);
+            const sensitivityScale = Math.max(ratio * ratio, 0.02);
+
             // Horizontal drag = spin around Y
-            galaxyRef.current.rotation.y += dx * 0.004;
+            galaxyRef.current.rotation.y += dx * 0.004 * sensitivityScale;
 
             // Vertical drag = tilt around X (clamped to ±60°)
-            const newTilt = galaxyRef.current.rotation.x + dy * 0.003;
+            const newTilt = galaxyRef.current.rotation.x + dy * 0.003 * sensitivityScale;
             galaxyRef.current.rotation.x = THREE.MathUtils.clamp(newTilt, -Math.PI / 3, Math.PI / 3);
 
             lastX = e.clientX;
@@ -124,7 +132,7 @@ const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
             window.removeEventListener('pointerup', onUp);
             canvas.style.cursor = '';
         };
-    }, [gl, galaxyRef, viewMode, lastInteractionRef]);
+    }, [gl, galaxyRef, viewMode, lastInteractionRef, camera]);
 
     return null;
 };
@@ -184,18 +192,23 @@ const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
             const zoomingIn = e.deltaY < 0;
             const height = Math.max(targetPos.current.y, 1);
             
-            // Linear velocity curve prevents Zeno's paradox stalling near the floor
-            // but scales nicely when very high up. Added flat baseline 15 units min speed.
-            const moveSpeed = Math.max(height * 0.18, 15); 
+            // Linear velocity curve — scales with height but has a reasonable minimum.
+            // Near the floor, use a much gentler speed to allow fine downward approach.
+            const moveSpeed = Math.max(height * 0.15, 5); 
 
             if (zoomingIn) {
-                // Zoom IN: Project vector exactly through the mouse pointer and ride it linearly
-                raycaster.setFromCamera(pointer, camera);
+                // Zoom IN: Compute NDC from the wheel event position for accurate ray direction
+                const rect = canvas.getBoundingClientRect();
+                const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                const mouseNDC = new THREE.Vector2(ndcX, ndcY);
+                
+                raycaster.setFromCamera(mouseNDC, camera);
                 const rayDir = raycaster.ray.direction.clone().normalize();
                 targetPos.current.addScaledVector(rayDir, moveSpeed);
 
-                // Floor constraint updated to 1.5 mirroring new 1/5th universe scale
-                targetPos.current.y = Math.max(targetPos.current.y, 1.5);
+                // Soft floor — allow getting very close to the plane but not through it
+                targetPos.current.y = Math.max(targetPos.current.y, 0.5);
             } else {
                 // Zoom OUT: Pull straight backwards out of the camera's local focal rotation
                 const fwd = new THREE.Vector3();

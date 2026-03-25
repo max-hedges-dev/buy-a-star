@@ -1,145 +1,544 @@
-import React, { useState, useEffect } from 'react';
-import { fetchStars } from '../services/api';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import StarTile from './StarTile';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react';
 
-const BuyAStarGrid = ({ onSelectStar }) => {
-    const [stars, setStars] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    
-    // Filters & Pagination
-    const [isBoughtFilter, setIsBoughtFilter] = useState(false); // Default: Unclaimed
+const LIMIT = 24;
+const CONTENT_TOP_OFFSET = 100;
+
+const getColorFamily = (category = '') => {
+    if (category.includes('Blue')) return 'Blue';
+    if (category.includes('White')) return 'White';
+    if (category.includes('Yellow')) return 'Yellow';
+    if (category.includes('Orange')) return 'Orange';
+    if (category.includes('Red')) return 'Red';
+    return 'Other';
+};
+
+const filterSectionTitle = {
+    color: '#ff9150',
+    letterSpacing: '0.14em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    fontSize: '0.74rem',
+    marginBottom: '12px',
+};
+
+const radioLabelStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    color: '#d8d8de',
+    fontSize: '0.96rem',
+    cursor: 'pointer',
+};
+
+const selectStyle = {
+    width: '100%',
+    background: 'linear-gradient(180deg, rgba(19,19,24,0.98) 0%, rgba(11,11,15,1) 100%)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: '12px',
+    color: '#dedee6',
+    padding: '12px 14px',
+    fontSize: '0.95rem',
+    outline: 'none',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    MozAppearance: 'none',
+    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23b6b6be' d='M6 8 0 0h12z'/%3E%3C/svg%3E\")",
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 14px center',
+    paddingRight: '38px',
+};
+
+const inputStyle = {
+    width: '100%',
+    background: 'linear-gradient(180deg, rgba(19,19,24,0.98) 0%, rgba(11,11,15,1) 100%)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: '12px',
+    color: '#dedee6',
+    padding: '12px 14px',
+    fontSize: '0.95rem',
+    outline: 'none',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+};
+
+const optionStyle = {
+    background: '#0d0d11',
+    color: '#d7d7de',
+};
+
+const sliderStyle = {
+    width: '100%',
+    accentColor: '#ff6a00',
+    cursor: 'pointer',
+};
+
+const LoadingTile = () => (
+    <div
+        style={{
+            background: 'linear-gradient(180deg, rgba(20,20,30,0.86) 0%, rgba(15,15,24,0.94) 100%)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '18px',
+            padding: '18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            overflow: 'hidden',
+            minHeight: '320px',
+        }}
+    >
+        <div style={{ height: '100px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)' }} />
+        <div style={{ width: '68%', height: '24px', borderRadius: '8px', background: 'rgba(255,255,255,0.08)' }} />
+        <div style={{ width: '55%', height: '16px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)' }} />
+        <div style={{ width: '80%', height: '14px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)' }} />
+        <div style={{ marginTop: 'auto', width: '100%', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.07)' }} />
+    </div>
+);
+
+const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
     const [page, setPage] = useState(0);
-    const LIMIT = 24;
+    const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('unclaimed');
+    const [colorFilter, setColorFilter] = useState('all');
+    const [constellationFilter, setConstellationFilter] = useState('all');
+    const [typeFilter, setTypeFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('alphabetical');
+    const [filterTopOffset, setFilterTopOffset] = useState(CONTENT_TOP_OFFSET);
+    const gridStartRef = useRef(null);
+    const maxDistanceCap = useMemo(() => Math.ceil(Math.max(...stars.map((star) => star.distance_ly || 0), 0)), [stars]);
+    const [maxDistance, setMaxDistance] = useState(0);
+
+    const measureFilterTop = useCallback(() => {
+        if (!gridStartRef.current) return;
+        const nextTop = Math.round(gridStartRef.current.getBoundingClientRect().top);
+        if (nextTop > 0) {
+            setFilterTopOffset(nextTop);
+        }
+    }, []);
 
     useEffect(() => {
-        loadPage(page, isBoughtFilter);
-    }, [page, isBoughtFilter]);
-
-    const loadPage = async (pageNum, isBought) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await fetchStars({ 
-                skip: pageNum * LIMIT, 
-                limit: LIMIT, 
-                isBought: isBought 
+        if (maxDistanceCap > 0) {
+            setMaxDistance((current) => {
+                if (current === 0 || current > maxDistanceCap) return maxDistanceCap;
+                return current;
             });
-            setStars(data);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
         }
-    };
+    }, [maxDistanceCap]);
 
-    const handleFilterChange = (status) => {
-        setIsBoughtFilter(status);
-        setPage(0); // reset to page 0 on filter change
+    const constellations = useMemo(
+        () => [...new Set(stars.map((star) => star.constellation).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+        [stars]
+    );
+
+    const starTypes = useMemo(
+        () => [...new Set(stars.map((star) => star.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+        [stars]
+    );
+
+    const filteredStars = useMemo(() => {
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+
+        const filtered = stars.filter((star) => {
+            const starName = (star.common_name || star.display_name || star.scientific_name || '').toLowerCase();
+            const secondaryName = (star.scientific_name || '').toLowerCase();
+            const searchableConstellation = (star.constellation || '').toLowerCase();
+            const matchesSearch =
+                !normalizedSearch ||
+                starName.includes(normalizedSearch) ||
+                secondaryName.includes(normalizedSearch) ||
+                searchableConstellation.includes(normalizedSearch);
+
+            const matchesStatus =
+                statusFilter === 'all' ||
+                (statusFilter === 'claimed' && star.is_bought) ||
+                (statusFilter === 'unclaimed' && !star.is_bought);
+
+            const matchesColor = colorFilter === 'all' || getColorFamily(star.category) === colorFilter;
+            const matchesConstellation = constellationFilter === 'all' || star.constellation === constellationFilter;
+            const matchesType = typeFilter === 'all' || star.category === typeFilter;
+            const matchesDistance = maxDistanceCap === 0 || star.distance_ly <= maxDistance;
+
+            return matchesSearch && matchesStatus && matchesColor && matchesConstellation && matchesType && matchesDistance;
+        });
+
+        filtered.sort((a, b) => {
+            const aName = (a.common_name || a.display_name || a.scientific_name || '').toLowerCase();
+            const bName = (b.common_name || b.display_name || b.scientific_name || '').toLowerCase();
+
+            if (sortBy === 'alphabetical') return aName.localeCompare(bName);
+            if (sortBy === 'distance-near') return a.distance_ly - b.distance_ly;
+            if (sortBy === 'distance-far') return b.distance_ly - a.distance_ly;
+            if (sortBy === 'brightness') return (a.apparent_magnitude ?? 999) - (b.apparent_magnitude ?? 999);
+            if (sortBy === 'claimed-first') return Number(b.is_bought) - Number(a.is_bought) || aName.localeCompare(bName);
+            return 0;
+        });
+
+        return filtered;
+    }, [stars, searchTerm, statusFilter, colorFilter, constellationFilter, typeFilter, sortBy, maxDistance, maxDistanceCap]);
+
+    const pagedStars = useMemo(() => {
+        const start = page * LIMIT;
+        return filteredStars.slice(start, start + LIMIT);
+    }, [filteredStars, page]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredStars.length / LIMIT));
+
+    useEffect(() => {
+        setPage(0);
+    }, [searchTerm, statusFilter, colorFilter, constellationFilter, typeFilter, sortBy, maxDistance]);
+
+    useEffect(() => {
+        if (page > totalPages - 1) {
+            setPage(Math.max(totalPages - 1, 0));
+        }
+    }, [page, totalPages]);
+
+    useLayoutEffect(() => {
+        measureFilterTop();
+
+        const handleResize = () => measureFilterTop();
+        window.addEventListener('resize', handleResize);
+
+        let observer;
+        if (typeof ResizeObserver !== 'undefined' && gridStartRef.current) {
+            observer = new ResizeObserver(() => measureFilterTop());
+            observer.observe(gridStartRef.current);
+        }
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            if (observer) observer.disconnect();
+        };
+    }, [measureFilterTop, loading, page, filteredStars.length]);
+
+    const resetFilters = () => {
+        setSearchTerm('');
+        setStatusFilter('unclaimed');
+        setColorFilter('all');
+        setConstellationFilter('all');
+        setTypeFilter('all');
+        setSortBy('alphabetical');
+        setMaxDistance(maxDistanceCap);
     };
 
     return (
-        <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            overflowY: 'auto',
-            background: 'black',
-            color: 'white',
-            zIndex: 10,
-            padding: '100px 40px 40px 40px'
-        }}>
-            <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-                    <h1 style={{ fontSize: '2.5rem', fontFamily: 'serif', margin: 0 }}>
-                        Buy A Star
-                    </h1>
-                    
-                    {/* Filters */}
-                    <div style={{ display: 'flex', gap: '10px', background: 'rgba(255,255,255,0.05)', padding: '5px', borderRadius: '12px' }}>
-                        <button
-                            onClick={() => handleFilterChange(false)}
+        <div
+            style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                overflowY: 'auto',
+                background: 'black',
+                color: 'white',
+                zIndex: 10,
+                padding: `${CONTENT_TOP_OFFSET}px 32px 48px`,
+            }}
+        >
+            <div style={{ maxWidth: '1520px', margin: '0 auto' }}>
+                <div
+                    style={{
+                        position: 'relative',
+                        minHeight: '100%',
+                    }}
+                >
+                    <aside
+                        style={{
+                            position: 'fixed',
+                            top: `${filterTopOffset}px`,
+                            left: 'max(32px, calc((100vw - 1520px) / 2))',
+                            width: '310px',
+                            background: 'linear-gradient(180deg, rgba(16,16,20,0.94) 0%, rgba(8,8,10,0.98) 100%)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '24px',
+                            padding: '24px',
+                            boxShadow: '0 24px 70px rgba(0,0,0,0.35)',
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <SlidersHorizontal size={18} color="#ff7a1f" />
+                                <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Filters</div>
+                            </div>
+                            <button
+                                onClick={resetFilters}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: '#a7a7af',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem',
+                                }}
+                            >
+                                Reset
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'grid', gap: '22px' }}>
+                            <div>
+                                <div style={filterSectionTitle}>Search</div>
+                                <div style={{ position: 'relative' }}>
+                                    <Search
+                                        size={16}
+                                        color="#868690"
+                                        style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        value={searchTerm}
+                                        onChange={(event) => setSearchTerm(event.target.value)}
+                                        placeholder="Search stars or constellations"
+                                        style={{
+                                            ...inputStyle,
+                                            paddingLeft: '40px',
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <div style={filterSectionTitle}>Status</div>
+                                <div style={{ display: 'grid', gap: '12px' }}>
+                                    {[
+                                        { value: 'unclaimed', label: 'Unclaimed' },
+                                        { value: 'claimed', label: 'Claimed' },
+                                        { value: 'all', label: 'All stars' },
+                                    ].map((option) => (
+                                        <label key={option.value} style={radioLabelStyle}>
+                                            <input
+                                                type="radio"
+                                                name="status-filter"
+                                                checked={statusFilter === option.value}
+                                                onChange={() => setStatusFilter(option.value)}
+                                                style={{ accentColor: '#ff6a00' }}
+                                            />
+                                            {option.label}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div style={filterSectionTitle}>Sort by</div>
+                                <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} style={selectStyle}>
+                                    <option style={optionStyle} value="alphabetical">Alphabetical</option>
+                                    <option style={optionStyle} value="distance-near">Distance: nearest first</option>
+                                    <option style={optionStyle} value="distance-far">Distance: farthest first</option>
+                                    <option style={optionStyle} value="brightness">Brightness</option>
+                                    <option style={optionStyle} value="claimed-first">Claimed first</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <div style={filterSectionTitle}>Colour</div>
+                                <select value={colorFilter} onChange={(event) => setColorFilter(event.target.value)} style={selectStyle}>
+                                    <option style={optionStyle} value="all">All colours</option>
+                                    <option style={optionStyle} value="Blue">Blue</option>
+                                    <option style={optionStyle} value="White">White</option>
+                                    <option style={optionStyle} value="Yellow">Yellow</option>
+                                    <option style={optionStyle} value="Orange">Orange</option>
+                                    <option style={optionStyle} value="Red">Red</option>
+                                    <option style={optionStyle} value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <div style={filterSectionTitle}>Star type</div>
+                                <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} style={selectStyle}>
+                                    <option style={optionStyle} value="all">All types</option>
+                                    {starTypes.map((type) => (
+                                        <option key={type} value={type} style={optionStyle}>
+                                            {type}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <div style={filterSectionTitle}>Constellation</div>
+                                <select
+                                    value={constellationFilter}
+                                    onChange={(event) => setConstellationFilter(event.target.value)}
+                                    style={selectStyle}
+                                >
+                                    <option style={optionStyle} value="all">All constellations</option>
+                                    {constellations.map((constellation) => (
+                                        <option key={constellation} value={constellation} style={optionStyle}>
+                                            {constellation}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <div style={filterSectionTitle}>Distance from Sun</div>
+                                <div
+                                    style={{
+                                        background: 'rgba(255,255,255,0.03)',
+                                        border: '1px solid rgba(255,255,255,0.06)',
+                                        borderRadius: '14px',
+                                        padding: '14px 14px 16px',
+                                    }}
+                                >
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={maxDistanceCap || 1}
+                                        step={100}
+                                        value={Math.min(maxDistance, maxDistanceCap || 1)}
+                                        onChange={(event) => setMaxDistance(Number(event.target.value))}
+                                        style={sliderStyle}
+                                    />
+                                    <div
+                                        style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            marginTop: '10px',
+                                            gap: '16px',
+                                            color: '#a4a4ad',
+                                            fontSize: '0.86rem',
+                                        }}
+                                    >
+                                        <span>0 ly</span>
+                                        <span style={{ color: '#ffffff', fontWeight: 600 }}>
+                                            {maxDistance >= maxDistanceCap ? 'Any distance' : `${maxDistance.toLocaleString()} ly max`}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <div style={{ minWidth: 0, marginLeft: '344px' }}>
+                        <div
                             style={{
-                                padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                                background: isBoughtFilter === false ? 'var(--primary)' : 'transparent',
-                                color: isBoughtFilter === false ? 'white' : '#aaa',
-                                fontWeight: 'bold', transition: 'all 0.2s'
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-end',
+                                gap: '20px',
+                                marginBottom: '28px',
+                                flexWrap: 'wrap',
                             }}
                         >
-                            Unclaimed
-                        </button>
-                        <button
-                            onClick={() => handleFilterChange(true)}
-                            style={{
-                                padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                                background: isBoughtFilter === true ? '#333' : 'transparent',
-                                color: isBoughtFilter === true ? 'white' : '#aaa',
-                                fontWeight: 'bold', transition: 'all 0.2s'
-                            }}
-                        >
-                            Claimed
-                        </button>
+                            <div>
+                                <div style={{ color: '#ffffff', fontSize: '1.15rem', fontWeight: 700, marginBottom: '6px' }}>
+                                    {loading ? 'Loading stars...' : `${filteredStars.length.toLocaleString()} stars`}
+                                </div>
+                                <div style={{ color: '#8f8f98', fontSize: '0.95rem' }}>
+                                    Filtered by status, color, constellation, distance, and type.
+                                </div>
+                            </div>
+                            <div style={{ color: '#7f7f88', fontSize: '0.92rem' }}>
+                                {loading ? 'Preparing results' : `Page ${Math.min(page + 1, totalPages)} of ${totalPages}`}
+                            </div>
+                        </div>
+
+                        <div ref={gridStartRef}>
+                        {loading ? (
+                            <div
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                                    gap: '25px',
+                                    marginBottom: '38px',
+                                }}
+                            >
+                                {Array.from({ length: 8 }).map((_, index) => (
+                                    <LoadingTile key={index} />
+                                ))}
+                            </div>
+                        ) : error ? (
+                            <div style={{ color: '#ff6b6b', textAlign: 'center', padding: '40px' }}>{error}</div>
+                        ) : filteredStars.length === 0 ? (
+                            <div
+                                style={{
+                                    color: '#888',
+                                    textAlign: 'center',
+                                    padding: '120px 40px',
+                                    fontSize: '1.05rem',
+                                    border: '1px solid rgba(255,255,255,0.06)',
+                                    borderRadius: '24px',
+                                    background: 'rgba(255,255,255,0.02)',
+                                }}
+                            >
+                                No stars found matching these filters.
+                            </div>
+                        ) : (
+                            <>
+                                <div
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                                        gap: '25px',
+                                        marginBottom: '38px',
+                                    }}
+                                >
+                                    {pagedStars.map((star) => (
+                                        <StarTile key={star.id} star={star} onClick={onSelectStar} />
+                                    ))}
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', paddingBottom: '30px' }}>
+                                    <button
+                                        disabled={page === 0}
+                                        onClick={() => setPage((currentPage) => currentPage - 1)}
+                                        style={{
+                                            padding: '12px 24px',
+                                            borderRadius: '10px',
+                                            border: '1px solid #444',
+                                            background: page === 0 ? 'transparent' : 'rgba(255,255,255,0.08)',
+                                            color: page === 0 ? '#666' : 'white',
+                                            cursor: page === 0 ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                        }}
+                                    >
+                                        <ChevronLeft size={20} /> Previous
+                                    </button>
+                                    <span style={{ fontSize: '1rem', color: '#aaa' }}>
+                                        {Math.min(page + 1, totalPages)} / {totalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setPage((currentPage) => currentPage + 1)}
+                                        disabled={page >= totalPages - 1}
+                                        style={{
+                                            padding: '12px 24px',
+                                            borderRadius: '10px',
+                                            border: '1px solid #444',
+                                            background: page >= totalPages - 1 ? 'transparent' : 'rgba(255,255,255,0.08)',
+                                            color: page >= totalPages - 1 ? '#666' : 'white',
+                                            cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                        }}
+                                    >
+                                        Next <ChevronRight size={20} />
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                        </div>
                     </div>
                 </div>
-
-                {/* Grid */}
-                {loading && stars.length === 0 ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
-                        <Loader2 className="spinner" size={40} color="var(--primary)" />
-                    </div>
-                ) : error ? (
-                    <div style={{ color: 'red', textAlign: 'center', padding: '40px' }}>{error}</div>
-                ) : stars.length === 0 ? (
-                    <div style={{ color: '#888', textAlign: 'center', padding: '100px', fontSize: '1.2rem' }}>
-                        No stars found matching this criteria.
-                    </div>
-                ) : (
-                    <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
-                        gap: '25px',
-                        marginBottom: '50px'
-                    }}>
-                        {stars.map((star) => (
-                            <StarTile key={star.id} star={star} onClick={onSelectStar} />
-                        ))}
-                    </div>
-                )}
-
-                {/* Pagination */}
-                {stars.length > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', paddingBottom: '40px' }}>
-                        <button
-                            disabled={page === 0}
-                            onClick={() => setPage(p => p - 1)}
-                            style={{
-                                padding: '12px 24px', borderRadius: '8px', border: '1px solid #444',
-                                background: page === 0 ? 'transparent' : 'rgba(255,255,255,0.1)',
-                                color: page === 0 ? '#666' : 'white', cursor: page === 0 ? 'not-allowed' : 'pointer',
-                                display: 'flex', alignItems: 'center', gap: '8px'
-                            }}
-                        >
-                            <ChevronLeft size={20} /> Previous
-                        </button>
-                        <span style={{ fontSize: '1.1rem', color: '#aaa' }}>Page {page + 1}</span>
-                        <button
-                            onClick={() => setPage(p => p + 1)}
-                            disabled={stars.length < LIMIT} // Disable if we fetched fewer than LIMIT (last page)
-                            style={{
-                                padding: '12px 24px', borderRadius: '8px', border: '1px solid #444',
-                                background: stars.length < LIMIT ? 'transparent' : 'rgba(255,255,255,0.1)',
-                                color: stars.length < LIMIT ? '#666' : 'white', cursor: stars.length < LIMIT ? 'not-allowed' : 'pointer',
-                                display: 'flex', alignItems: 'center', gap: '8px'
-                            }}
-                        >
-                            Next <ChevronRight size={20} />
-                        </button>
-                    </div>
-                )}
             </div>
-            
-            {/* Dark gradient overlay at the bottom for aesthetic */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: '100px', background: 'linear-gradient(to top, black, transparent)', pointerEvents: 'none', zIndex: 11 }} />
+
+            <div
+                style={{
+                    position: 'fixed',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: '100px',
+                    background: 'linear-gradient(to top, black, transparent)',
+                    pointerEvents: 'none',
+                    zIndex: 11,
+                }}
+            />
         </div>
     );
 };

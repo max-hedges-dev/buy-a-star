@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useMotionValue, useSpring } from 'framer-motion';
 import DetailedStar from './DetailedStar';
 
 const Hero = () => {
@@ -10,6 +10,25 @@ const Hero = () => {
         id: 'hero-orange-star',
         category: 'Orange Giant',
     }), []);
+
+    const pointerX = useMotionValue(0);
+    const pointerY = useMotionValue(0);
+    const parallaxX = useSpring(pointerX, { stiffness: 70, damping: 18, mass: 0.6 });
+    const parallaxY = useSpring(pointerY, { stiffness: 70, damping: 18, mass: 0.6 });
+
+    const handlePointerMove = (event) => {
+        const { innerWidth, innerHeight } = window;
+        const normalizedX = event.clientX / innerWidth - 0.5;
+        const normalizedY = event.clientY / innerHeight - 0.5;
+
+        pointerX.set(normalizedX * -56.16);
+        pointerY.set(normalizedY * -42.12);
+    };
+
+    const handlePointerLeave = () => {
+        pointerX.set(0);
+        pointerY.set(0);
+    };
 
     const primaryButtonStyle = {
         padding: '16px 34px',
@@ -26,24 +45,46 @@ const Hero = () => {
 
     const secondaryButtonStyle = {
         padding: '16px 34px',
-        background: 'rgba(255,255,255,0.04)',
+        background: `
+            radial-gradient(circle at 20% 30%, rgba(255,255,255,0.12) 0%, transparent 18%),
+            radial-gradient(circle at 78% 70%, rgba(255,140,60,0.08) 0%, transparent 22%),
+            linear-gradient(135deg, rgba(22,16,20,0.96) 0%, rgba(10,10,14,0.98) 55%, rgba(28,16,10,0.96) 100%)
+        `,
         color: 'white',
         fontWeight: '700',
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
         borderRadius: '999px',
-        border: '1px solid rgba(255,255,255,0.14)',
+        border: '1px solid rgba(255,255,255,0.12)',
         fontSize: '0.95rem',
         backdropFilter: 'blur(14px)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -14px 30px rgba(0,0,0,0.28), 0 14px 28px rgba(0,0,0,0.24)',
+        position: 'relative',
+        overflow: 'hidden',
     };
 
     return (
-        <section style={{ position: 'relative', height: '100vh', width: '100%', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
+        <section
+            onMouseMove={handlePointerMove}
+            onMouseLeave={handlePointerLeave}
+            style={{ position: 'relative', height: '100vh', width: '100%', overflow: 'hidden' }}
+        >
+            <motion.div
+                style={{
+                    position: 'absolute',
+                    top: '-3%',
+                    left: '-3%',
+                    width: '106%',
+                    height: '106%',
+                    zIndex: 0,
+                    x: parallaxX,
+                    y: parallaxY,
+                }}
+            >
                 <Canvas>
                     <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
                 </Canvas>
-            </div>
+            </motion.div>
 
             <div
                 style={{

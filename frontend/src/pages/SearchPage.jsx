@@ -320,10 +320,19 @@ const SearchPage = () => {
     const controlsRef = useRef();
     const galaxyGroupRef = useRef();
     const lastInteractionRef = useRef(Date.now());
+    const forceIdleNow = useCallback(() => {
+        lastInteractionRef.current = Date.now() - IDLE_TIMEOUT - 1;
+    }, []);
 
     useEffect(() => {
         loadStars();
     }, []);
+
+    useEffect(() => {
+        if (location.pathname === '/search' && !location.state?.preserveTarget) {
+            forceIdleNow();
+        }
+    }, [location.pathname, location.state, forceIdleNow]);
 
     // Sync view mode with navbar navigation
     const prevLocationRef = useRef(location.pathname);
@@ -342,9 +351,10 @@ const SearchPage = () => {
                 setViewMode(VIEW_MODE.MAP);
                 setSelectedStar(null);
                 setTargetStar(null);
+                forceIdleNow();
             }
         }
-    }, [location.pathname, location.state]);
+    }, [location.pathname, location.state, forceIdleNow]);
 
     const loadStars = async (term = "") => {
         setLoading(true);
@@ -635,7 +645,12 @@ const SearchPage = () => {
                 display: viewMode === VIEW_MODE.GRID ? 'block' : 'none',
                 position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5
             }}>
-                <BuyAStarGrid onSelectStar={triggerTransitionToStar} />
+                <BuyAStarGrid
+                    stars={stars}
+                    loading={loading}
+                    error={error}
+                    onSelectStar={triggerTransitionToStar}
+                />
             </div>
 
             {/* --- TRANSITION BLUR OVERLAY --- */}

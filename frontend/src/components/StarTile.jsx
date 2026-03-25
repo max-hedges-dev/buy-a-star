@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ShoppingCart, Eye } from 'lucide-react';
+import { Eye } from 'lucide-react';
 
 const getPreviewPalette = (category) => {
     if (!category) {
@@ -118,38 +118,53 @@ const StarTilePreview = ({ star }) => {
     );
 };
 
+const statusPill = (isClaimed) => ({
+    padding: '7px 12px',
+    borderRadius: '999px',
+    fontSize: '0.75rem',
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    border: `1px solid ${isClaimed ? 'rgba(255,255,255,0.12)' : 'rgba(255,126,43,0.28)'}`,
+    background: isClaimed ? 'rgba(255,255,255,0.05)' : 'rgba(255,106,0,0.12)',
+    color: isClaimed ? '#c3c3cb' : '#ff9c63',
+});
+
+const formatDistance = (distance) =>
+    Number(distance).toLocaleString(undefined, {
+        maximumFractionDigits: 1,
+    });
+
 const StarTile = ({ star, onClick }) => {
     const [isHovered, setIsHovered] = useState(false);
     const isClaimed = star.is_bought;
-    const displayName = star.common_name || star.scientific_name;
+    const displayName = star.common_name || star.display_name || star.scientific_name;
     const secondaryName = star.common_name && star.scientific_name ? star.scientific_name : null;
 
     return (
         <div
-            className={`star-tile ${isClaimed ? 'claimed' : ''} ${isHovered ? 'hovered' : ''}`}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             style={{
-                background: isClaimed ? 'rgba(30,30,40,0.8)' : 'rgba(20,20,30,0.8)',
-                border: `1px solid ${isHovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)'}`,
-                borderRadius: '16px',
-                padding: '20px',
+                background: 'linear-gradient(180deg, rgba(20,20,30,0.86) 0%, rgba(15,15,24,0.94) 100%)',
+                border: `1px solid ${isHovered ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: '18px',
+                padding: '18px',
                 cursor: 'default',
-                transition: 'all 0.3s ease',
+                transition: 'all 0.28s ease',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '15px',
+                gap: '16px',
                 position: 'relative',
                 overflow: 'hidden',
-                opacity: isClaimed ? 0.6 : 1,
-                transform: isHovered ? 'translateY(-5px)' : 'none',
-                boxShadow: isHovered ? '0 10px 20px rgba(0,0,0,0.5), 0 0 18px rgba(255,255,255,0.08)' : '0 4px 6px rgba(0,0,0,0.3)',
+                transform: isHovered ? 'translateY(-4px)' : 'none',
+                boxShadow: isHovered ? '0 20px 40px rgba(0,0,0,0.38), 0 0 18px rgba(255,255,255,0.05)' : '0 8px 20px rgba(0,0,0,0.25)',
             }}
         >
             <div
                 style={{
                     height: '100px',
-                    background: 'rgba(0,0,0,0.5)',
+                    background: 'rgba(0,0,0,0.45)',
                     borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
@@ -168,60 +183,88 @@ const StarTile = ({ star, onClick }) => {
                 <StarTilePreview star={star} />
             </div>
 
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <h3
-                    style={{
-                        margin: 0,
-                        fontSize: '1.2rem',
-                        color: 'white',
-                        fontFamily: 'serif',
-                    }}
-                >
-                    {displayName}
-                </h3>
-                {secondaryName && (
-                    <span style={{ color: '#8e8e9c', fontSize: '0.8rem' }}>
-                        {secondaryName}
-                    </span>
-                )}
-                <span style={{ color: '#aaa', fontSize: '0.9rem' }}>
-                    {star.category} - {star.distance_ly} ly
-                </span>
-                {star.catalog_id && (
-                    <span style={{ color: '#777', fontSize: '0.78rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                        Catalog ID: {star.catalog_id}
-                    </span>
-                )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                    <h3
+                        style={{
+                            margin: 0,
+                            fontSize: '1.18rem',
+                            color: 'white',
+                            fontFamily: 'serif',
+                            lineHeight: 1.1,
+                            wordBreak: 'break-word',
+                        }}
+                    >
+                        {displayName}
+                    </h3>
+                    {secondaryName && (
+                        <div
+                            style={{
+                                color: '#8e8e9c',
+                                fontSize: '0.78rem',
+                                marginTop: '6px',
+                                lineHeight: 1.45,
+                                wordBreak: 'break-word',
+                            }}
+                        >
+                            {secondaryName}
+                        </div>
+                    )}
+                </div>
+
+                <div style={statusPill(isClaimed)}>{isClaimed ? 'Claimed' : 'Unclaimed'}</div>
             </div>
+
+                <div style={{ display: 'grid', gap: '7px', color: '#b6b6be' }}>
+                    <div style={{ fontSize: '0.95rem' }}>
+                        {star.category}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', color: '#9595a0', fontSize: '0.88rem' }}>
+                        <span>{formatDistance(star.distance_ly)} ly</span>
+                        <span>{star.constellation || 'Unknown constellation'}</span>
+                    </div>
+                </div>
 
             {isClaimed ? (
                 <div
                     style={{
-                        background: 'rgba(0,0,0,0.5)',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        borderLeft: '2px solid #666',
-                        fontSize: '0.85rem',
-                        color: '#888',
+                        background: 'rgba(255,255,255,0.035)',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        fontSize: '0.84rem',
+                        color: '#b0b0b8',
+                        lineHeight: 1.5,
                     }}
                 >
-                    <strong>Owned by:</strong>
-                    <br />
-                    {star.owner_name}
+                    <strong style={{ color: '#d9d9df', fontWeight: 600 }}>Owner</strong>
+                    <div>{star.owner_name || 'Recorded owner'}</div>
                 </div>
             ) : (
-                <div style={{ height: '37px' }} />
+                <div
+                    style={{
+                        background: 'rgba(255,106,0,0.05)',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,126,43,0.08)',
+                        fontSize: '0.84rem',
+                        color: '#ffb287',
+                        lineHeight: 1.5,
+                    }}
+                >
+                    Available to register.
+                </div>
             )}
 
             <button
                 onClick={() => onClick(star)}
                 style={{
                     width: '100%',
-                    padding: '10px',
-                    background: isClaimed ? 'transparent' : 'var(--primary)',
-                    color: isClaimed ? '#aaa' : 'white',
-                    border: isClaimed ? '1px solid #555' : 'none',
-                    borderRadius: '8px',
+                    padding: '11px 14px',
+                    background: 'var(--primary)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -232,15 +275,7 @@ const StarTile = ({ star, onClick }) => {
                     marginTop: 'auto',
                 }}
             >
-                {isClaimed ? (
-                    <>
-                        <Eye size={18} /> View Star
-                    </>
-                ) : (
-                    <>
-                        <ShoppingCart size={18} /> View / Buy (GBP {star.price})
-                    </>
-                )}
+                <Eye size={18} /> View
             </button>
         </div>
     );

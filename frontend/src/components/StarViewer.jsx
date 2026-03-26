@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
+import { useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
 import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2 } from 'lucide-react';
 import { buyStar } from '../services/api';
+import { useAuth } from '../hooks/useAuth';
 
 const formatMaybeNumber = (value, digits = 2) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -13,6 +15,9 @@ const formatMaybeNumber = (value, digits = 2) => {
 };
 
 const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { isAuthenticated, isLoadingUser } = useAuth();
     const [ownerName, setOwnerName] = useState('');
     const [includeCertificate, setIncludeCertificate] = useState(true);
     const [processing, setProcessing] = useState(false);
@@ -23,6 +28,11 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const total = includeCertificate ? basePrice + certPrice : basePrice;
 
     const handlePurchase = async () => {
+        if (!isAuthenticated) {
+            navigate(`/auth?next=${encodeURIComponent(location.pathname)}`);
+            return;
+        }
+
         if (!ownerName.trim()) {
             setError('Please enter the name for the certificate.');
             return;
@@ -47,7 +57,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 <pointLight position={[10, 5, 10]} intensity={1.5} />
                 <pointLight position={[-10, -5, -10]} intensity={0.5} />
                 <Stars radius={100} depth={50} count={2000} factor={4} saturation={0} fade speed={0.5} />
-                <group position={[2.5, 0, 0]}>
+                <group position={[2.3, 0, 0]}>
                     <DetailedStar star={star} detailLevel="hero" />
                 </group>
             </Canvas>
@@ -100,39 +110,50 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 style={{
                     position: 'absolute',
                     top: 0,
-                    left: '24px',
+                    left: '88px',
                     bottom: 0,
-                    width: '50%',
+                    width: '65%',
                     minWidth: '520px',
-                    maxWidth: '720px',
+                    maxWidth: '936px',
                     background: 'linear-gradient(90deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.8) 60%, rgba(0,0,0,0) 100%)',
-                    padding: '40px 44px 40px 28px',
+                    padding: '40px 44px 40px 20px',
                     display: 'flex',
                     flexDirection: 'column',
                     pointerEvents: 'none',
                 }}
             >
-                <div style={{ flex: 1, pointerEvents: 'auto', overflowY: 'auto', paddingRight: '20px' }}>
-                    <div style={{ display: 'flex', gap: '18px', marginBottom: '40px', alignItems: 'center' }}>
-                        <button
-                            onClick={onBack}
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                background: 'rgba(255,255,255,0.1)',
-                                border: '1px solid rgba(255,255,255,0.2)',
-                                color: 'white',
-                                padding: '10px 20px',
-                                borderRadius: '30px',
-                                cursor: 'pointer',
-                                backdropFilter: 'blur(10px)',
-                            }}
-                        >
-                            <ArrowLeft size={18} /> Back
-                        </button>
-                    </div>
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: '40px',
+                        left: '-42px',
+                        zIndex: 2,
+                        pointerEvents: 'auto',
+                    }}
+                >
+                    <button
+                        onClick={onBack}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: 'rgba(255,255,255,0.1)',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            color: 'white',
+                            padding: '10px 20px',
+                            borderRadius: '30px',
+                            cursor: 'pointer',
+                            backdropFilter: 'blur(10px)',
+                        }}
+                    >
+                        <ArrowLeft size={18} /> Back
+                    </button>
+                </div>
 
+                <div style={{ flex: 1, pointerEvents: 'auto', overflowY: 'auto', paddingRight: '20px' }}>
+                    <div style={{ height: '66px' }} />
+
+                    <div style={{ paddingLeft: '54px' }}>
                     <h1 style={{ fontSize: '3.5rem', marginBottom: '5px', fontFamily: 'serif', color: 'white' }}>
                         {star.common_name || star.scientific_name}
                     </h1>
@@ -346,7 +367,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
                             <button
                                 onClick={handlePurchase}
-                                disabled={processing}
+                                disabled={processing || isLoadingUser}
                                 style={{
                                     width: '100%',
                                     padding: '18px',
@@ -357,24 +378,30 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                     textTransform: 'uppercase',
                                     borderRadius: '12px',
                                     border: 'none',
-                                    cursor: processing ? 'not-allowed' : 'pointer',
+                                    cursor: (processing || isLoadingUser) ? 'not-allowed' : 'pointer',
                                     display: 'flex',
                                     justifyContent: 'center',
                                     alignItems: 'center',
                                     gap: '10px',
-                                    opacity: processing ? 0.7 : 1,
+                                    opacity: (processing || isLoadingUser) ? 0.7 : 1,
                                     transition: 'all 0.2s',
                                     boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
                                 }}
                             >
                                 {processing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
-                                {processing ? 'Processing Securely...' : 'Complete Purchase'}
+                                {processing ? 'Processing Securely...' : isAuthenticated ? 'Complete Purchase' : 'Sign In To Purchase'}
                             </button>
+                            {!isAuthenticated ? (
+                                <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>
+                                    You&apos;ll be redirected to sign in before completing this purchase.
+                                </p>
+                            ) : null}
                             <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
                                 Secure payment via Fake PayPal Mock
                             </p>
                         </div>
                     )}
+                    </div>
                 </div>
             </div>
         </div>

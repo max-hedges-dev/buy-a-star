@@ -1,5 +1,6 @@
-const API_URL = "http://127.0.0.1:8000/api/v1";
-const STARS_URL = `${API_URL}/stars/`;
+import { apiRequest } from './http';
+
+const STARS_URL = '/stars/';
 const STARS_CACHE_PREFIX = 'aster-atlas-stars-cache:';
 const STARS_CACHE_TTL_MS = 60 * 1000;
 
@@ -67,40 +68,24 @@ export async function fetchStars({ skip = 0, limit = 100, search = "", isBought 
         return cachedData;
     }
 
-    const response = await fetch(`${STARS_URL}?${params}`);
-    if (!response.ok) {
-        throw new Error("Failed to fetch stars");
-    }
-    const data = await response.json();
+    const data = await apiRequest(`${STARS_URL}?${params}`);
     writeStarsCache(cacheKey, data);
     return data;
 }
 
 export async function fetchStarById(id) {
-    const response = await fetch(`${STARS_URL}${id}`);
-    if (!response.ok) {
-        throw new Error("Failed to fetch star");
-    }
-    return response.json();
+    return apiRequest(`${STARS_URL}${id}`);
 }
 
 export async function buyStar(id, ownerName, includeCertificate) {
-    const response = await fetch(`${STARS_URL}${id}/buy`, {
+    const data = await apiRequest(`${STARS_URL}${id}/buy`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
             owner_name: ownerName,
             include_certificate: includeCertificate,
             payment_method: 'paypal_mock'
-        }),
+        },
     });
-
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || "Failed to buy star");
-    }
     clearStarsCache();
-    return response.json();
+    return data;
 }

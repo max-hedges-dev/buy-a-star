@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import fullLogoLeftWhite from '../assets/AA Full Logo Left White.png';
 
 const Footer = () => {
     return (
@@ -25,13 +26,34 @@ const Footer = () => {
                     }}
                 >
                     <div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '16px' }}>
-                            Aster Atlas
+                        <div style={{ width: '420px', maxWidth: '100%', height: '84px', overflow: 'hidden', marginBottom: '16px' }}>
+                            <img
+                                alt="Aster Atlas"
+                                src={fullLogoLeftWhite}
+                                style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    objectPosition: 'left',
+                                    transform: 'scale(0.7)',
+                                    transformOrigin: 'left',
+                                }}
+                            />
                         </div>
                     </div>
 
                     <div>
-                        <div style={{ color: '#ff9150', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, fontSize: '0.78rem', marginBottom: '14px' }}>
+                        <div
+                            style={{
+                                color: '#ff9150',
+                                letterSpacing: '0.14em',
+                                textTransform: 'uppercase',
+                                fontWeight: 700,
+                                fontSize: '0.78rem',
+                                marginBottom: '14px',
+                            }}
+                        >
                             Explore
                         </div>
                         <div style={{ display: 'grid', gap: '12px', color: '#d8d8dd' }}>

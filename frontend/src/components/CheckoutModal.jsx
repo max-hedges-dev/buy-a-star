@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check } from 'lucide-react';
+import { X } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { buyStar } from '../services/api';
+import { useAuth } from '../hooks/useAuth';
+
+const MotionDiv = motion.div;
 
 const CheckoutModal = ({ star, onClose, onSuccess }) => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { isAuthenticated } = useAuth();
     const [includeCertificate, setIncludeCertificate] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [ownerName, setOwnerName] = useState("");
@@ -13,6 +20,11 @@ const CheckoutModal = ({ star, onClose, onSuccess }) => {
     const total = includeCertificate ? basePrice + certPrice : basePrice;
 
     const handlePurchase = async () => {
+        if (!isAuthenticated) {
+            navigate(`/auth?next=${encodeURIComponent(location.pathname)}`);
+            return;
+        }
+
         if (!ownerName.trim()) {
             alert("Please enter the owner name");
             return;
@@ -34,7 +46,7 @@ const CheckoutModal = ({ star, onClose, onSuccess }) => {
 
     return (
         <AnimatePresence>
-            <motion.div
+            <MotionDiv
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -50,7 +62,7 @@ const CheckoutModal = ({ star, onClose, onSuccess }) => {
                 }}
                 onClick={onClose}
             >
-                <motion.div
+                <MotionDiv
                     initial={{ scale: 0.9, y: 20 }}
                     animate={{ scale: 1, y: 0 }}
                     exit={{ scale: 0.9, y: 20 }}
@@ -154,11 +166,11 @@ const CheckoutModal = ({ star, onClose, onSuccess }) => {
                             opacity: processing ? 0.7 : 1
                         }}
                     >
-                        {processing ? 'Processing...' : 'Pay with PayPal'}
+                        {processing ? 'Processing...' : isAuthenticated ? 'Pay with PayPal' : 'Sign In To Purchase'}
                     </button>
 
-                </motion.div>
-            </motion.div>
+                </MotionDiv>
+            </MotionDiv>
         </AnimatePresence>
     );
 };

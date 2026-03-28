@@ -26,10 +26,8 @@ const Navbar = () => {
         <nav
             style={{
                 height: 'var(--nav-height)',
-                display: 'grid',
-                gridTemplateColumns: 'auto 1fr auto',
+                display: 'flex',
                 alignItems: 'center',
-                columnGap: '28px',
                 padding: '0 40px',
                 background: isScrolled ? 'rgba(6,6,6,0.78)' : 'rgba(6,6,6,0.18)',
                 backdropFilter: 'blur(18px)',
@@ -38,6 +36,7 @@ const Navbar = () => {
                 top: 0,
                 left: 0,
                 right: 0,
+                width: '100%',
                 zIndex: 50,
                 transition: 'background 0.25s ease, border-color 0.25s ease',
             }}
@@ -72,14 +71,17 @@ const Navbar = () => {
 
             <div
                 style={{
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
                     display: 'flex',
                     gap: '30px',
                     alignItems: 'center',
-                    justifyContent: 'center',
                     fontSize: '0.9rem',
                     fontWeight: '600',
                     textTransform: 'uppercase',
                     letterSpacing: '1px',
+                    zIndex: 1,
                 }}
             >
                 <Link to="/">Home</Link>
@@ -89,42 +91,48 @@ const Navbar = () => {
                 <Link to="/faq">FAQ</Link>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', zIndex: 1, alignItems: 'center', justifySelf: 'end' }}>
-                <Link
-                    to="/buy"
-                    aria-label="Basket"
-                    style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 42,
-                        height: 42,
-                        borderRadius: 999,
-                        background: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                >
-                    <ShoppingBag color="white" size={20} />
-                </Link>
+            <div style={{ display: 'flex', gap: '12px', zIndex: 1, alignItems: 'center', marginLeft: 'auto' }}>
+                <div className="nav-action-tooltip">
+                    <Link
+                        to="/buy"
+                        aria-label="Basket"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 42,
+                            height: 42,
+                            borderRadius: 999,
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                        }}
+                    >
+                        <ShoppingBag color="white" size={20} />
+                    </Link>
+                    <span className="nav-action-tooltip__label">Basket</span>
+                </div>
 
                 {!isLoadingUser && isAuthenticated ? (
                     <>
-                        <Link
-                            to="/account"
-                            aria-label="My account"
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: 42,
-                                height: 42,
-                                borderRadius: 999,
-                                background: 'rgba(255,255,255,0.06)',
-                                border: '1px solid rgba(255,255,255,0.08)',
-                            }}
-                        >
-                            <UserCircle2 size={22} />
-                        </Link>
+                        <div className="nav-action-tooltip">
+                            <Link
+                                to="/account"
+                                aria-label="My account"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: 42,
+                                    height: 42,
+                                    borderRadius: 999,
+                                    background: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                }}
+                            >
+                                <UserCircle2 size={22} />
+                            </Link>
+                            <span className="nav-action-tooltip__label">Account</span>
+                        </div>
                         <button
                             onClick={handleLogout}
                             style={{

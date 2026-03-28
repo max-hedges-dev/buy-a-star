@@ -441,18 +441,16 @@ const SearchPage = () => {
         if (previousViewMode === VIEW_MODE.GRID) {
             setViewMode(VIEW_MODE.GRID);
             setSelectedStar(null);
+            setTargetStar(null);
             navigate('/buy');
             return;
         }
 
-        setViewMode(VIEW_MODE.TRANSITION);
-
-        setTimeout(() => {
-            setViewMode(VIEW_MODE.MAP);
-            setSelectedStar(null);
-            navigate('/search');
-            lastInteractionRef.current = Infinity; // Disable idle spin until user interacts
-        }, 1000);
+        setViewMode(VIEW_MODE.MAP);
+        setSelectedStar(null);
+        setTargetStar(null);
+        navigate('/search');
+        lastInteractionRef.current = Infinity; // Disable idle spin until user interacts
     };
 
     const handleViewInGalaxy = () => {

@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, Star, Waypoints } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import certificateExample from '../assets/Certificate Example.png';
 
 const sectionWidth = {
     maxWidth: '1240px',
@@ -84,14 +85,16 @@ const SectionHeader = ({ eyebrow, headline, body, centered = false }) => (
 const SmallCard = ({ title, body }) => (
     <div
         style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.06)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.025) 100%)',
+            border: '1px solid rgba(255,255,255,0.07)',
             borderRadius: '22px',
-            padding: '24px 22px',
+            padding: '26px 24px',
+            minHeight: '100%',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
         }}
     >
-        <div style={{ fontSize: '1.12rem', fontWeight: 700, marginBottom: '8px' }}>{title}</div>
-        <div style={{ color: '#a8a8b0', lineHeight: 1.7 }}>{body}</div>
+        <div style={{ fontSize: '1.12rem', fontWeight: 700, marginBottom: '10px' }}>{title}</div>
+        <div style={{ color: '#a8a8b0', lineHeight: 1.8 }}>{body}</div>
     </div>
 );
 
@@ -134,7 +137,7 @@ const CertificatePreview = () => (
         style={{
             position: 'relative',
             width: '100%',
-            maxWidth: '920px',
+            maxWidth: '1120px',
             padding: '18px',
             borderRadius: '34px',
             background: 'linear-gradient(135deg, rgba(255,182,120,0.08) 0%, rgba(255,255,255,0.02) 34%, rgba(255,99,32,0.08) 100%)',
@@ -149,7 +152,7 @@ const CertificatePreview = () => (
                 borderRadius: '26px',
                 border: '1px solid rgba(88,52,21,0.18)',
                 overflow: 'hidden',
-                minHeight: '560px',
+                aspectRatio: '1.58 / 1',
             }}
         >
             <div
@@ -171,23 +174,23 @@ const CertificatePreview = () => (
                 }}
             />
 
-            <div style={{ padding: '72px 84px 68px', color: '#3a2615', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '54px', gap: '30px' }}>
+            <div style={{ padding: '54px 60px 48px', color: '#3a2615', position: 'relative', height: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '42px', gap: '30px' }}>
                     <div>
                         <div style={{ fontSize: '0.76rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: '#8a5d2d', marginBottom: '18px', fontWeight: 700 }}>
                             Aster Atlas Celestial Registry
                         </div>
-                        <h3 style={{ fontFamily: 'Georgia, Times New Roman, serif', fontSize: '3.4rem', lineHeight: 1.04, marginBottom: '16px', color: '#2e1d10' }}>
+                        <h3 style={{ fontFamily: 'Georgia, Times New Roman, serif', fontSize: '3.2rem', lineHeight: 1.04, marginBottom: '14px', color: '#2e1d10' }}>
                             Certificate
                         </h3>
-                        <p style={{ maxWidth: '460px', lineHeight: 1.7, color: '#6f543a', fontSize: '1.05rem' }}>
+                        <p style={{ maxWidth: '460px', lineHeight: 1.7, color: '#6f543a', fontSize: '1.02rem' }}>
                             Issued as part of the registry record
                         </p>
                     </div>
                     <div
                         style={{
-                            width: '126px',
-                            height: '126px',
+                            width: '116px',
+                            height: '116px',
                             borderRadius: '50%',
                             background: 'radial-gradient(circle at 35% 35%, #fff2c7 0%, #dca14a 36%, #91551d 100%)',
                             boxShadow: 'inset 0 2px 10px rgba(255,255,255,0.42), 0 18px 30px rgba(89,48,16,0.16)',
@@ -202,14 +205,14 @@ const CertificatePreview = () => (
                     </div>
                 </div>
 
-                <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-                    <div style={{ color: '#8a5d2d', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, fontSize: '0.82rem', marginBottom: '14px' }}>
+                <div style={{ paddingTop: '8px' }}>
+                    <div style={{ color: '#8a5d2d', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, fontSize: '0.82rem', marginBottom: '18px' }}>
                         Certificate
                     </div>
-                    <div style={{ fontFamily: 'Georgia, Times New Roman, serif', fontSize: '4rem', lineHeight: 1.02, color: '#c95614', marginBottom: '18px' }}>
+                    <div style={{ fontFamily: 'Georgia, Times New Roman, serif', fontSize: '4.2rem', lineHeight: 0.98, color: '#c95614', marginBottom: '22px' }}>
                         Certificate
                     </div>
-                    <div style={{ color: '#6f543a', fontSize: '1.1rem', maxWidth: '560px', margin: '0 auto', lineHeight: 1.7 }}>
+                    <div style={{ color: '#6f543a', fontSize: '1.1rem', maxWidth: '560px', lineHeight: 1.8 }}>
                         The certificate is the formal document attached to the registration. It includes the registered name, the catalog reference, and the key star details.
                     </div>
                 </div>
@@ -217,9 +220,10 @@ const CertificatePreview = () => (
                 <div
                     style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                        gap: '18px',
-                        marginBottom: '54px',
+                        gridTemplateColumns: '1.08fr 0.92fr',
+                        gap: '34px',
+                        alignItems: 'start',
+                        marginBottom: '44px',
                     }}
                 >
                     {[
@@ -264,7 +268,7 @@ const Features = () => {
         },
         {
             title: 'Real Ownership',
-            body: 'Each star can only be owned once. By a single person. Owners will be forever immortalised withi the registry.',
+            body: 'Each star can only be owned once. By a single person. Owners will be forever immortalised within the registry.',
         },
         {
             title: 'Searchable',
@@ -272,7 +276,7 @@ const Features = () => {
         },
         {
             title: 'Delivered Quickly',
-            body: 'Ownership details and igital certificates are issued immediately after purchase. Physical certificates coming soon...',
+            body: 'Ownership details and igital certificates are issued immediately after purchase. Physical certificates are coming soon.',
         },
     ];
 
@@ -312,22 +316,33 @@ const Features = () => {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.75 }}
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1.08fr 0.92fr',
-                        gap: '52px',
-                        alignItems: 'start',
-                        marginBottom: '72px',
-                    }}
+                    style={{ marginBottom: '72px' }}
                 >
                     <SectionHeader
                         eyebrow="WHY ASTER ATLAS?"
                         headline="A REGISTRY, NOT A NOVELTY"
                         body="Aster Atlas is built around clear registry records and ownership, real catalogued stars from the latest Gaia Data Release, and a one-of-a-kind visual representation. Each order includes a registered entry, a digital certificate, and a star record that can be searched and revisited forever in our Milky Way galaxy simulation."
+                        centered
                     />
 
-                    <div style={{ ...panelStyle, padding: '28px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
+                    <div
+                        style={{
+                            ...panelStyle,
+                            marginTop: '38px',
+                            padding: '24px',
+                            background: `
+                                radial-gradient(circle at top, rgba(255,118,44,0.08), transparent 34%),
+                                linear-gradient(180deg, rgba(18,18,18,0.92) 0%, rgba(10,10,10,0.98) 100%)
+                            `,
+                        }}
+                    >
+                        <div
+                            style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                                gap: '16px',
+                            }}
+                        >
                             {whyCards.map((card) => (
                                 <SmallCard key={card.title} title={card.title} body={card.body} />
                             ))}
@@ -342,14 +357,27 @@ const Features = () => {
                     transition={{ duration: 0.75 }}
                     style={{ marginBottom: '110px' }}
                 >
-                    <SectionHeader eyebrow="HOW IT WORKS" headline="Three straightforward steps" centered />
+                    <div
+                        style={{
+                            width: '72px',
+                            height: '1px',
+                            margin: '10px auto 68px',
+                            background: 'rgba(255,255,255,0.78)',
+                            boxShadow: '0 0 14px rgba(255,255,255,0.12)',
+                        }}
+                        
+                    />
+
+                    <div style={{ transform: 'translateY(-22px)' }}>
+                        <SectionHeader eyebrow="HOW IT WORKS" centered />
+                    </div>
 
                     <div
                         style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                             gap: '24px',
-                            marginTop: '40px',
+                            marginTop: '20px',
                         }}
                     >
                         {steps.map((step, index) => (
@@ -380,15 +408,15 @@ const Features = () => {
                     <div>
                         <SectionHeader
                             eyebrow="CERTIFICATE"
-                            headline="Issued as part of the registry record"
-                            body="The certificate is the formal document attached to the registration. It includes the registered name, the catalog reference, and the key star details."
+                            headline="IMMEDIATE PROOF OF OWNERSHIP"
+                            body="After purchasing a star, you'll immediately receive a formal certificate of registration of celestial ownership."
                         />
 
                         <div style={{ display: 'grid', gap: '14px', marginTop: '24px' }}>
                             {[
                                 'Delivered digitally immediately after purchase.',
-                                'Shows the registered name and catalog reference.',
-                                'Linked to the star’s record in Aster Atlas.',
+                                'Displays the owner name the owned star.',
+                                'Physical certificates coming soon.',
                             ].map((line) => (
                                 <div
                                     key={line}
@@ -407,7 +435,30 @@ const Features = () => {
                         </div>
                     </div>
 
-                    <CertificatePreview />
+                    <div
+                        style={{
+                            position: 'relative',
+                            width: '100%',
+                            maxWidth: '1120px',
+                            padding: '18px',
+                            borderRadius: '34px',
+                            background: 'linear-gradient(135deg, rgba(255,182,120,0.08) 0%, rgba(255,255,255,0.02) 34%, rgba(255,99,32,0.08) 100%)',
+                            border: '1px solid rgba(255,190,120,0.16)',
+                            boxShadow: '0 30px 120px rgba(0,0,0,0.45)',
+                        }}
+                    >
+                        <img
+                            src={certificateExample}
+                            alt="Example Aster Atlas certificate"
+                            style={{
+                                display: 'block',
+                                width: '100%',
+                                height: 'auto',
+                                borderRadius: '26px',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                            }}
+                        />
+                    </div>
                 </motion.div>
 
                 <motion.div

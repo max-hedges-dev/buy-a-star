@@ -2,6 +2,15 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import fullLogoLeftWhite from '../assets/AA Full Logo Left White.png';
 
+const headingStyle = {
+    color: '#ff9150',
+    letterSpacing: '0.14em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    fontSize: '0.78rem',
+    marginBottom: '14px',
+};
+
 const Footer = () => {
     return (
         <footer
@@ -20,7 +29,7 @@ const Footer = () => {
                 <div
                     style={{
                         display: 'grid',
-                        gridTemplateColumns: '1.2fr 0.8fr',
+                        gridTemplateColumns: '1.2fr 0.8fr 0.8fr',
                         gap: '40px',
                         marginBottom: '36px',
                     }}
@@ -44,24 +53,21 @@ const Footer = () => {
                     </div>
 
                     <div>
-                        <div
-                            style={{
-                                color: '#ff9150',
-                                letterSpacing: '0.14em',
-                                textTransform: 'uppercase',
-                                fontWeight: 700,
-                                fontSize: '0.78rem',
-                                marginBottom: '14px',
-                            }}
-                        >
-                            Explore
-                        </div>
+                        <div style={headingStyle}>Explore</div>
                         <div style={{ display: 'grid', gap: '12px', color: '#d8d8dd' }}>
                             <Link to="/">Home</Link>
                             <Link to="/buy">Buy a Star</Link>
                             <Link to="/search">Search Galaxy</Link>
                             <Link to="/about">About</Link>
                             <Link to="/faq">FAQ</Link>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style={headingStyle}>Legal</div>
+                        <div style={{ display: 'grid', gap: '12px', color: '#d8d8dd' }}>
+                            <Link to="/privacy">Privacy Notice</Link>
+                            <Link to="/terms">Terms &amp; Conditions</Link>
                         </div>
                     </div>
                 </div>

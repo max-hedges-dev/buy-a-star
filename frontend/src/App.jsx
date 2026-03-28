@@ -6,6 +6,8 @@ import AboutPage from './pages/AboutPage';
 import FaqPage from './pages/FaqPage';
 import AuthPage from './pages/AuthPage';
 import AccountPage from './pages/AccountPage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const ScrollToTop = () => {
@@ -35,6 +37,8 @@ function App() {
                     )}
                 />
                 <Route path="/faq" element={<FaqPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/buy" element={<SearchPage />} />
             </Routes>

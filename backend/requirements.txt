@@ -10,3 +10,4 @@ astropy
 email-validator
 google-auth
 requests
+stripe

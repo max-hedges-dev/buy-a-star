@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     BACKEND_ORIGIN: str = "http://127.0.0.1:8000"
     SESSION_COOKIE_NAME: str = "aster_atlas_session"
     SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_CURRENCY: str = "gbp"
+    STRIPE_CERTIFICATE_PRICE_GBP: int = 500
 
     @field_validator("FRONTEND_ORIGIN", "BACKEND_ORIGIN", mode="before")
     @classmethod

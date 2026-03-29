@@ -1,4 +1,4 @@
-# Aster Atlas Auth Setup
+# Aster Atlas Auth + Payments Setup
 
 This project now uses Google-only authentication for v1.
 
@@ -24,6 +24,10 @@ This project now uses Google-only authentication for v1.
    - `FRONTEND_ORIGIN`
    - `BACKEND_ORIGIN`
    - `DATABASE_URL`
+   - `STRIPE_SECRET_KEY`
+   - `STRIPE_WEBHOOK_SECRET` (optional for local fallback flow, required when testing Stripe webhooks)
+   - `STRIPE_CURRENCY`
+   - `STRIPE_CERTIFICATE_PRICE_GBP`
 3. Install backend dependencies:
 
 ```powershell
@@ -51,6 +55,7 @@ cd backend
 2. Fill in:
    - `VITE_GOOGLE_CLIENT_ID`
    - `VITE_API_URL`
+   - `VITE_STRIPE_PUBLISHABLE_KEY`
 3. Start the frontend:
 
 ```powershell
@@ -100,6 +105,37 @@ That avoids cookie issues caused by mixing `localhost` and `127.0.0.1`.
 - `GET /api/v1/auth/me`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/protected`
+
+## Stripe checkout
+
+- The app now uses Stripe Embedded Checkout in sandbox mode.
+- The frontend requires the user to accept the Privacy Notice and Terms & Conditions before creating a checkout session.
+- The backend creates the Checkout Session and returns the Stripe `client_secret` for embedded mounting.
+- Payment fulfillment is server-side.
+  - Primary path: Stripe webhook events
+  - Local development fallback: `GET /api/v1/checkout/session-status` verifies and fulfills a paid session when the success page loads
+
+### Stripe endpoints
+
+- `POST /api/v1/checkout/session`
+- `GET /api/v1/checkout/session-status`
+- `POST /api/v1/checkout/webhook`
+
+### Local Stripe testing
+
+1. Keep Stripe in sandbox/test mode.
+2. Add your test publishable key to `frontend/.env` as `VITE_STRIPE_PUBLISHABLE_KEY`.
+3. Add your test secret key to `backend/.env` as `STRIPE_SECRET_KEY`.
+4. Run the migration:
+
+```powershell
+cd backend
+.\venv\Scripts\python -m alembic upgrade head
+```
+
+5. Restart both dev servers after changing env vars.
+6. For webhook testing later, add a Stripe webhook endpoint secret to `STRIPE_WEBHOOK_SECRET`.
+   During local development, you can still complete the flow through the post-checkout status verification page even if the webhook secret is blank.
 
 ## Notes for production
 

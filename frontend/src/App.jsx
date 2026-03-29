@@ -8,6 +8,7 @@ import AuthPage from './pages/AuthPage';
 import AccountPage from './pages/AccountPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
+import CheckoutCompletePage from './pages/CheckoutCompletePage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const ScrollToTop = () => {
@@ -39,6 +40,14 @@ function App() {
                 <Route path="/faq" element={<FaqPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
+                <Route
+                    path="/checkout/complete"
+                    element={(
+                        <ProtectedRoute>
+                            <CheckoutCompletePage />
+                        </ProtectedRoute>
+                    )}
+                />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/buy" element={<SearchPage />} />
             </Routes>

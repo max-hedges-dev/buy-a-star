@@ -1,7 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
 
 export async function apiRequest(path, options = {}) {
-    const { body, headers, credentials = 'same-origin', ...rest } = options;
+    const { body, headers, credentials = 'include', ...rest } = options;
     const isJsonBody = body !== undefined && body !== null && !(body instanceof FormData) && typeof body !== 'string';
 
     const response = await fetch(`${API_BASE_URL}${path}`, {

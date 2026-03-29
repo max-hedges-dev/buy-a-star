@@ -77,15 +77,29 @@ export async function fetchStarById(id) {
     return apiRequest(`${STARS_URL}${id}`);
 }
 
-export async function buyStar(id, ownerName, includeCertificate) {
-    const data = await apiRequest(`${STARS_URL}${id}/buy`, {
+export async function createCheckoutSession({
+    starId,
+    ownerName,
+    includeCertificate,
+    acceptedTerms,
+    acceptedPrivacy,
+}) {
+    return apiRequest('/checkout/session', {
         method: 'POST',
         body: {
+            star_id: starId,
             owner_name: ownerName,
             include_certificate: includeCertificate,
-            payment_method: 'paypal_mock'
+            accepted_terms: acceptedTerms,
+            accepted_privacy: acceptedPrivacy,
         },
     });
-    clearStarsCache();
+}
+
+export async function fetchCheckoutSessionStatus(sessionId) {
+    const data = await apiRequest(`/checkout/session-status?session_id=${encodeURIComponent(sessionId)}`);
+    if (data.fulfilled) {
+        clearStarsCache();
+    }
     return data;
 }

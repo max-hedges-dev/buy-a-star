@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
 import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2 } from 'lucide-react';
-import { buyStar } from '../services/api';
+import { createCheckoutSession } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 
 const formatMaybeNumber = (value, digits = 2) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -22,6 +23,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const [includeCertificate, setIncludeCertificate] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
     const basePrice = parseFloat(star.price);
     const certPrice = 5.0;
@@ -37,18 +41,47 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             setError('Please enter the name for the certificate.');
             return;
         }
-        setProcessing(true);
+        if (!acceptedTerms) {
+            setError('Please accept the Terms & Conditions before purchasing.');
+            return;
+        }
+        if (!acceptedPrivacy) {
+            setError('Please accept the Privacy Notice before purchasing.');
+            return;
+        }
+
         setError(null);
+        setIsCheckoutOpen(true);
+    };
+
+    const createStripeSession = useCallback(async () => {
+        setProcessing(true);
         try {
-            await buyStar(star.id, ownerName, includeCertificate);
-            onSuccess();
-        } catch (err) {
-            console.error(err);
-            setError(err.message);
+            return await createCheckoutSession({
+                starId: star.id,
+                ownerName,
+                includeCertificate,
+                acceptedTerms,
+                acceptedPrivacy,
+            });
         } finally {
             setProcessing(false);
         }
-    };
+    }, [acceptedPrivacy, acceptedTerms, includeCertificate, ownerName, star.id]);
+
+    const handleCheckoutComplete = useCallback((sessionId) => {
+        if (!sessionId) {
+            setError('Stripe returned without a checkout session identifier.');
+            return;
+        }
+
+        navigate(`/checkout/complete?session_id=${encodeURIComponent(sessionId)}`);
+    }, [navigate]);
+
+    const handleCheckoutError = useCallback((message) => {
+        setError(message);
+        setIsCheckoutOpen(false);
+    }, []);
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', background: '#000' }}>
@@ -365,40 +398,100 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 <span style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>GBP {total.toFixed(2)}</span>
                             </div>
 
-                            <button
-                                onClick={handlePurchase}
-                                disabled={processing || isLoadingUser}
-                                style={{
-                                    width: '100%',
-                                    padding: '18px',
-                                    background: 'var(--primary)',
-                                    color: 'white',
-                                    fontSize: '1.1rem',
-                                    fontWeight: 'bold',
-                                    textTransform: 'uppercase',
-                                    borderRadius: '12px',
-                                    border: 'none',
-                                    cursor: (processing || isLoadingUser) ? 'not-allowed' : 'pointer',
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    opacity: (processing || isLoadingUser) ? 0.7 : 1,
-                                    transition: 'all 0.2s',
-                                    boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
-                                }}
-                            >
-                                {processing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
-                                {processing ? 'Processing Securely...' : isAuthenticated ? 'Complete Purchase' : 'Sign In To Purchase'}
-                            </button>
-                            {!isAuthenticated ? (
-                                <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>
-                                    You&apos;ll be redirected to sign in before completing this purchase.
-                                </p>
-                            ) : null}
-                            <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
-                                Secure payment via Fake PayPal Mock
-                            </p>
+                            {!isCheckoutOpen ? (
+                                <>
+                                    <div style={{ display: 'grid', gap: '12px', marginBottom: '24px' }}>
+                                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: '#d7d7de', lineHeight: 1.6, cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={acceptedTerms}
+                                                onChange={(event) => setAcceptedTerms(event.target.checked)}
+                                                style={{ marginTop: '3px' }}
+                                            />
+                                            <span>
+                                                I accept the <Link to="/terms" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>Terms &amp; Conditions</Link>.
+                                            </span>
+                                        </label>
+
+                                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: '#d7d7de', lineHeight: 1.6, cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={acceptedPrivacy}
+                                                onChange={(event) => setAcceptedPrivacy(event.target.checked)}
+                                                style={{ marginTop: '3px' }}
+                                            />
+                                            <span>
+                                                I accept the <Link to="/privacy" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>Privacy Notice</Link>.
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <button
+                                        onClick={handlePurchase}
+                                        disabled={processing || isLoadingUser}
+                                        style={{
+                                            width: '100%',
+                                            padding: '18px',
+                                            background: 'var(--primary)',
+                                            color: 'white',
+                                            fontSize: '1.1rem',
+                                            fontWeight: 'bold',
+                                            textTransform: 'uppercase',
+                                            borderRadius: '12px',
+                                            border: 'none',
+                                            cursor: (processing || isLoadingUser) ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            opacity: (processing || isLoadingUser) ? 0.7 : 1,
+                                            transition: 'all 0.2s',
+                                            boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
+                                        }}
+                                    >
+                                        {processing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
+                                        {processing ? 'Starting Stripe Checkout...' : isAuthenticated ? 'Continue to Secure Payment' : 'Sign In To Purchase'}
+                                    </button>
+                                    {!isAuthenticated ? (
+                                        <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>
+                                            You&apos;ll be redirected to sign in before completing this purchase.
+                                        </p>
+                                    ) : null}
+                                    <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
+                                        Secure payment via Stripe sandbox checkout.
+                                    </p>
+                                </>
+                            ) : (
+                                <div style={{ display: 'grid', gap: '18px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Secure payment</div>
+                                            <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete your purchase below using Stripe’s sandbox checkout.</div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCheckoutOpen(false)}
+                                            style={{
+                                                padding: '10px 16px',
+                                                borderRadius: '999px',
+                                                background: 'rgba(255,255,255,0.06)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                color: 'white',
+                                            }}
+                                        >
+                                            Edit order
+                                        </button>
+                                    </div>
+
+                                    <div style={{ background: '#ffffff', borderRadius: '18px', overflow: 'hidden', padding: '8px' }}>
+                                        <EmbeddedStripeCheckout
+                                            createSession={createStripeSession}
+                                            onComplete={handleCheckoutComplete}
+                                            onError={handleCheckoutError}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                     </div>

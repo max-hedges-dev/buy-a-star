@@ -10,11 +10,15 @@ from app.db.session import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.checkout import (
+    CheckoutOptionRead,
+    CheckoutOptionsResponse,
     CheckoutSessionCreateRequest,
     CheckoutSessionCreateResponse,
     CheckoutSessionStatusResponse,
     CheckoutWebhookResponse,
 )
+from app.services.certificate_options import DEFAULT_CERTIFICATE_TYPE, list_certificate_options
+from app.services.pricing import pricing_quote_for_country, SUPPORTED_COUNTRIES
 from app.services.stripe_checkout import (
     _stripe_value,
     create_embedded_checkout_session,
@@ -25,6 +29,34 @@ from app.services.stripe_checkout import (
 )
 
 router = APIRouter()
+
+
+@router.get("/options", response_model=CheckoutOptionsResponse)
+async def checkout_options(country_code: str = Query("GB")) -> CheckoutOptionsResponse:
+    quote = pricing_quote_for_country(country_code)
+    return CheckoutOptionsResponse(
+        country_code=quote.country_code,
+        default_certificate_type=DEFAULT_CERTIFICATE_TYPE,
+        currency=quote.currency,
+        supported_countries=SUPPORTED_COUNTRIES,
+        named_star_price_minor_units=quote.named_star_price.amount_minor_units,
+        named_star_price=float(quote.named_star_price.amount_major),
+        unnamed_star_price_minor_units=quote.unnamed_star_price.amount_minor_units,
+        unnamed_star_price=float(quote.unnamed_star_price.amount_major),
+        options=[
+            CheckoutOptionRead(
+                code=option.code,
+                label=option.label,
+                description=option.description,
+                price_minor_units=quote.certificate_prices[option.code].amount_minor_units,
+                price=float(quote.certificate_prices[option.code].amount_major),
+                shipping_required=option.shipping_required,
+                shipping_amount_minor_units=quote.shipping_price.amount_minor_units if option.shipping_required else 0,
+                shipping_amount=float(quote.shipping_price.amount_major) if option.shipping_required else 0,
+            )
+            for option in list_certificate_options()
+        ],
+    )
 
 
 @router.post("/session", response_model=CheckoutSessionCreateResponse)
@@ -45,7 +77,8 @@ async def create_session(
         star_id=payload.star_id,
         user=current_user,
         owner_name=payload.owner_name,
-        includes_certificate=payload.include_certificate,
+        certificate_type=payload.certificate_type,
+        country_code=payload.country_code,
     )
     return CheckoutSessionCreateResponse(client_secret=client_secret, session_id=session_id)
 
@@ -82,6 +115,10 @@ async def session_status(
         star_name=fulfillment.star_name,
         owner_name=fulfillment.owner_name,
         includes_certificate=fulfillment.includes_certificate,
+        certificate_type=fulfillment.certificate_type,
+        certificate_label=fulfillment.certificate_label,
+        shipping_required=fulfillment.shipping_required,
+        shipping_amount_total=_stripe_value(_stripe_value(session, "shipping_cost"), "amount_total"),
         amount_total=_stripe_value(session, "amount_total"),
         currency=_stripe_value(session, "currency"),
     )

@@ -24,6 +24,10 @@ class AccountOrderSummary(BaseModel):
     amount: float
     currency: str
     includes_certificate: bool
+    certificate_type: str
+    certificate_label: str
+    shipping_required: bool
+    shipping_amount: float
     created_at: datetime | None = None
     fulfilled_at: datetime | None = None
     star: AccountStarSummary
@@ -36,4 +40,3 @@ class AccountOrderDetail(AccountOrderSummary):
 class AccountOverviewResponse(BaseModel):
     orders: list[AccountOrderSummary]
     stars: list[AccountStarSummary]
-

@@ -13,6 +13,7 @@ from app.schemas.account import (
     AccountOverviewResponse,
     AccountStarSummary,
 )
+from app.services.certificate_options import certificate_label
 
 router = APIRouter()
 
@@ -45,6 +46,10 @@ def _order_summary(transaction: Transaction, star: Star) -> AccountOrderSummary:
         amount=float(transaction.amount),
         currency=transaction.currency,
         includes_certificate=transaction.includes_certificate,
+        certificate_type=transaction.certificate_type,
+        certificate_label=certificate_label(transaction.certificate_type),
+        shipping_required=transaction.shipping_required,
+        shipping_amount=float(transaction.shipping_amount or 0),
         created_at=transaction.created_at,
         fulfilled_at=transaction.fulfilled_at,
         star=_star_summary(star, transaction),
@@ -97,4 +102,3 @@ async def read_account_order(
         **summary.model_dump(),
         certificate_available=transaction.includes_certificate and transaction.status == "fulfilled",
     )
-

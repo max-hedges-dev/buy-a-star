@@ -1,10 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
-import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2 } from 'lucide-react';
-import { createCheckoutSession } from '../services/api';
+import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2, Truck } from 'lucide-react';
+import { createCheckoutSession, fetchCheckoutOptions } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 
@@ -15,21 +15,168 @@ const formatMaybeNumber = (value, digits = 2) => {
     return value.toFixed(digits);
 };
 
+const TIMEZONE_TO_COUNTRY = {
+    'Europe/London': 'GB',
+    'Europe/Dublin': 'IE',
+    'Europe/Paris': 'FR',
+    'Europe/Berlin': 'DE',
+    'Europe/Madrid': 'ES',
+    'Europe/Rome': 'IT',
+    'Europe/Amsterdam': 'NL',
+    'Europe/Brussels': 'BE',
+    'Europe/Vienna': 'AT',
+    'Europe/Lisbon': 'PT',
+    'Europe/Helsinki': 'FI',
+    'Europe/Athens': 'GR',
+    'Europe/Warsaw': 'PL',
+    'Europe/Prague': 'CZ',
+    'Europe/Copenhagen': 'DK',
+    'Europe/Stockholm': 'SE',
+    'Europe/Oslo': 'NO',
+    'Europe/Bucharest': 'RO',
+    'Europe/Budapest': 'HU',
+    'Europe/Zurich': 'CH',
+    'Europe/Sofia': 'BG',
+    'Europe/Bratislava': 'SK',
+    'Europe/Ljubljana': 'SI',
+    'Europe/Zagreb': 'HR',
+    'Europe/Riga': 'LV',
+    'Europe/Vilnius': 'LT',
+    'Europe/Tallinn': 'EE',
+    'Europe/Luxembourg': 'LU',
+    'Europe/Malta': 'MT',
+    'Europe/Nicosia': 'CY',
+    'America/New_York': 'US',
+    'America/Chicago': 'US',
+    'America/Denver': 'US',
+    'America/Los_Angeles': 'US',
+    'America/Phoenix': 'US',
+    'America/Anchorage': 'US',
+    'Pacific/Honolulu': 'US',
+    'America/Toronto': 'CA',
+    'America/Vancouver': 'CA',
+    'America/Edmonton': 'CA',
+    'America/Winnipeg': 'CA',
+    'America/Halifax': 'CA',
+    'Australia/Sydney': 'AU',
+    'Australia/Melbourne': 'AU',
+    'Australia/Brisbane': 'AU',
+    'Australia/Perth': 'AU',
+    'Pacific/Auckland': 'NZ',
+    'Asia/Tokyo': 'JP',
+    'Asia/Singapore': 'SG',
+    'Asia/Hong_Kong': 'HK',
+    'Asia/Dubai': 'AE',
+    'Asia/Jerusalem': 'IL',
+    'Asia/Kolkata': 'IN',
+    'Asia/Shanghai': 'CN',
+    'Asia/Riyadh': 'SA',
+    'Africa/Johannesburg': 'ZA',
+    'America/Mexico_City': 'MX',
+    'America/Sao_Paulo': 'BR',
+    'Europe/Istanbul': 'TR',
+};
+
+const detectCountryCode = () => {
+    try {
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (timeZone && TIMEZONE_TO_COUNTRY[timeZone]) {
+            return TIMEZONE_TO_COUNTRY[timeZone];
+        }
+    } catch {
+        // Ignore timezone detection failures and fall back to locale parsing.
+    }
+
+    const locales = navigator.languages?.length ? navigator.languages : [navigator.language];
+    for (const locale of locales) {
+        try {
+            const parsed = new Intl.Locale(locale);
+            if (parsed.region) {
+                return parsed.region.toUpperCase();
+            }
+        } catch {
+            const match = locale?.match(/[-_]([A-Za-z]{2})$/);
+            if (match?.[1]) {
+                return match[1].toUpperCase();
+            }
+        }
+    }
+    return 'GB';
+};
+
+const formatMoney = (amount, currency) =>
+    new Intl.NumberFormat('en-GB', {
+        style: 'currency',
+        currency: (currency || 'gbp').toUpperCase(),
+    }).format(amount);
+
 const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const { isAuthenticated, isLoadingUser } = useAuth();
+    const detectedCountryCode = useMemo(() => detectCountryCode(), []);
     const [ownerName, setOwnerName] = useState('');
-    const [includeCertificate, setIncludeCertificate] = useState(true);
+    const [certificateType, setCertificateType] = useState('digital');
+    const [checkoutOptions, setCheckoutOptions] = useState([]);
+    const [selectedCountryCode, setSelectedCountryCode] = useState(detectedCountryCode || 'GB');
+    const [showCountrySelector, setShowCountrySelector] = useState(!detectedCountryCode);
+    const [checkoutOptionsStatus, setCheckoutOptionsStatus] = useState('loading');
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-    const basePrice = parseFloat(star.price);
-    const certPrice = 5.0;
-    const total = includeCertificate ? basePrice + certPrice : basePrice;
+    const regionNames = useMemo(
+        () => (typeof Intl.DisplayNames !== 'undefined' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null),
+        []
+    );
+
+    useEffect(() => {
+        const loadCheckoutOptions = async () => {
+            setCheckoutOptionsStatus('loading');
+            try {
+                const response = await fetchCheckoutOptions(selectedCountryCode);
+                const nextOptions = response.options || [];
+                const nextCountryCode = response.country_code || selectedCountryCode;
+                const nextSupportedCountries = Array.from(new Set([nextCountryCode, ...(response.supported_countries || [])]));
+
+                setCheckoutOptions(nextOptions);
+                setCertificateType((currentCertificateType) => (
+                    nextOptions.some((option) => option.code === currentCertificateType)
+                        ? currentCertificateType
+                        : (response.default_certificate_type || nextOptions[0]?.code || 'digital')
+                ));
+                setSelectedCountryCode(nextCountryCode);
+                setShowCountrySelector(!detectedCountryCode || !nextSupportedCountries.includes(detectedCountryCode));
+                setPricingCurrency(response.currency || 'gbp');
+                setNamedStarPrice(response.named_star_price || 0);
+                setUnnamedStarPrice(response.unnamed_star_price || 0);
+                setSupportedCountries(nextSupportedCountries);
+                setError(null);
+                setCheckoutOptionsStatus('ready');
+            } catch (requestError) {
+                setError(requestError.message);
+                setCheckoutOptionsStatus('error');
+            }
+        };
+
+        loadCheckoutOptions();
+    }, [selectedCountryCode]);
+
+    const [pricingCurrency, setPricingCurrency] = useState('gbp');
+    const [namedStarPrice, setNamedStarPrice] = useState(parseFloat(star.price));
+    const [unnamedStarPrice, setUnnamedStarPrice] = useState(parseFloat(star.price));
+    const [supportedCountries, setSupportedCountries] = useState([]);
+
+    const selectedCertificateOption = useMemo(
+        () => checkoutOptions.find((option) => option.code === certificateType) || checkoutOptions[0] || null,
+        [certificateType, checkoutOptions]
+    );
+    const basePrice = star.common_name ? namedStarPrice : unnamedStarPrice;
+    const certificatePrice = selectedCertificateOption?.price || 0;
+    const shippingPrice = selectedCertificateOption?.shipping_amount || 0;
+    const total = basePrice + certificatePrice + shippingPrice;
 
     const handlePurchase = async () => {
         if (!isAuthenticated) {
@@ -49,6 +196,10 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             setError('Please accept the Privacy Notice before purchasing.');
             return;
         }
+        if (!selectedCertificateOption) {
+            setError('Certificate options are still loading. Please try again in a moment.');
+            return;
+        }
 
         setError(null);
         setIsCheckoutOpen(true);
@@ -60,14 +211,15 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             return await createCheckoutSession({
                 starId: star.id,
                 ownerName,
-                includeCertificate,
+                certificateType,
+                countryCode: selectedCountryCode,
                 acceptedTerms,
                 acceptedPrivacy,
             });
         } finally {
             setProcessing(false);
         }
-    }, [acceptedPrivacy, acceptedTerms, includeCertificate, ownerName, star.id]);
+    }, [acceptedPrivacy, acceptedTerms, certificateType, ownerName, selectedCountryCode, star.id]);
 
     const handleCheckoutComplete = useCallback((sessionId) => {
         if (!sessionId) {
@@ -344,6 +496,35 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             )}
 
                             <div style={{ marginBottom: '25px' }}>
+                                {showCountrySelector ? (
+                                    <>
+                                        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                            Country
+                                        </label>
+                                        <select
+                                            value={selectedCountryCode}
+                                            onChange={(event) => setSelectedCountryCode(event.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                maxWidth: '100%',
+                                                boxSizing: 'border-box',
+                                                padding: '15px',
+                                                borderRadius: '8px',
+                                                border: '1px solid rgba(255,255,255,0.2)',
+                                                background: 'rgba(0,0,0,0.5)',
+                                                color: 'white',
+                                                fontSize: '1rem',
+                                                marginBottom: '16px',
+                                            }}
+                                        >
+                                            {supportedCountries.map((countryCode) => (
+                                                <option key={countryCode} value={countryCode}>
+                                                    {regionNames?.of(countryCode) || countryCode}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </>
+                                ) : null}
                                 <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
                                     Name to appear on Registry
                                 </label>
@@ -366,36 +547,73 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 />
                             </div>
 
-                            <div
-                                onClick={() => setIncludeCertificate(!includeCertificate)}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    padding: '15px',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    marginBottom: '30px',
-                                    border: `1px solid ${includeCertificate ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}`,
-                                    background: includeCertificate ? 'rgba(255, 77, 0, 0.1)' : 'rgba(0,0,0,0.3)',
-                                    transition: 'all 0.2s',
-                                }}
-                            >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                    <FileText color={includeCertificate ? 'var(--primary)' : '#666'} />
-                                    <div>
-                                        <div style={{ fontWeight: 'bold' }}>Digital Certificate</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#888' }}>High-res PDF with coordinates</div>
+                            <div style={{ marginBottom: '30px' }}>
+                                <div style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '12px' }}>Certificate option</div>
+                                {checkoutOptionsStatus === 'loading' ? (
+                                    <div style={{ color: '#888' }}>Loading certificate options...</div>
+                                ) : (
+                                    <div style={{ display: 'grid', gap: '12px' }}>
+                                        {checkoutOptions.map((option) => {
+                                            const isSelected = option.code === certificateType;
+                                            return (
+                                                <button
+                                                    key={option.code}
+                                                    type="button"
+                                                    onClick={() => setCertificateType(option.code)}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'flex-start',
+                                                        justifyContent: 'space-between',
+                                                        gap: '18px',
+                                                        width: '100%',
+                                                        padding: '16px',
+                                                        borderRadius: '14px',
+                                                        border: `1px solid ${isSelected ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}`,
+                                                        background: isSelected ? 'rgba(255, 77, 0, 0.1)' : 'rgba(0,0,0,0.3)',
+                                                        color: 'white',
+                                                        textAlign: 'left',
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                                                        {option.shipping_required ? (
+                                                            <Truck color={isSelected ? 'var(--primary)' : '#888'} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                                        ) : (
+                                                            <FileText color={isSelected ? 'var(--primary)' : '#888'} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                                        )}
+                                                        <div>
+                                                            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{option.label}</div>
+                                                            <div style={{ fontSize: '0.86rem', color: '#9a9aa6', lineHeight: 1.6 }}>{option.description}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', color: isSelected ? 'white' : '#c9c9d2' }}>
+                                                        {formatMoney(option.price, pricingCurrency)}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
-                                </div>
-                                <div style={{ fontWeight: 'bold', color: includeCertificate ? 'white' : '#888' }}>
-                                    +GBP {certPrice.toFixed(2)}
-                                </div>
+                                )}
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                <span style={{ color: '#aaa' }}>Total Registration Fee</span>
-                                <span style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>GBP {total.toFixed(2)}</span>
+                            <div style={{ display: 'grid', gap: '10px', marginBottom: '20px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: '#aaa' }}>Star registration</span>
+                                    <span style={{ color: 'white' }}>{formatMoney(basePrice, pricingCurrency)}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: '#aaa' }}>{selectedCertificateOption?.label || 'Certificate'}</span>
+                                    <span style={{ color: 'white' }}>{formatMoney(certificatePrice, pricingCurrency)}</span>
+                                </div>
+                                {selectedCertificateOption?.shipping_required ? (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ color: '#aaa' }}>Shipping</span>
+                                        <span style={{ color: 'white' }}>{formatMoney(shippingPrice, pricingCurrency)}</span>
+                                    </div>
+                                ) : null}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <span style={{ color: '#aaa' }}>Total Registration Fee</span>
+                                    <span style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{formatMoney(total, pricingCurrency)}</span>
+                                </div>
                             </div>
 
                             {!isCheckoutOpen ? (
@@ -428,7 +646,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
                                     <button
                                         onClick={handlePurchase}
-                                        disabled={processing || isLoadingUser}
+                                        disabled={processing || isLoadingUser || checkoutOptionsStatus !== 'ready'}
                                         style={{
                                             width: '100%',
                                             padding: '18px',
@@ -439,12 +657,12 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                             textTransform: 'uppercase',
                                             borderRadius: '12px',
                                             border: 'none',
-                                            cursor: (processing || isLoadingUser) ? 'not-allowed' : 'pointer',
+                                            cursor: (processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 'not-allowed' : 'pointer',
                                             display: 'flex',
                                             justifyContent: 'center',
                                             alignItems: 'center',
                                             gap: '10px',
-                                            opacity: (processing || isLoadingUser) ? 0.7 : 1,
+                                            opacity: (processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 0.7 : 1,
                                             transition: 'all 0.2s',
                                             boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
                                         }}
@@ -458,7 +676,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         </p>
                                     ) : null}
                                     <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
-                                        Secure payment via Stripe sandbox checkout.
+                                        Secure payment via Stripe sandbox checkout. Physical certificate options collect the delivery address inside Stripe.
                                     </p>
                                 </>
                             ) : (
@@ -466,7 +684,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <div>
                                             <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Secure payment</div>
-                                            <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete your purchase below using Stripe’s sandbox checkout.</div>
+                                            <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete your purchase below using Stripe's sandbox checkout.</div>
                                         </div>
                                         <button
                                             type="button"

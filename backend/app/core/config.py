@@ -20,7 +20,17 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_CURRENCY: str = "gbp"
-    STRIPE_CERTIFICATE_PRICE_GBP: int = 500
+    STRIPE_DIGITAL_CERTIFICATE_PRICE_GBP: int = 0
+    STRIPE_A4_PAPER_CERTIFICATE_PRICE_GBP: int = 599
+    STRIPE_A4_LAMINATED_PAPER_CERTIFICATE_PRICE_GBP: int = 899
+    STRIPE_A4_CARD_CERTIFICATE_PRICE_GBP: int = 799
+    STRIPE_NAMED_STAR_PRICE_GBP: int = 1899
+    STRIPE_UNNAMED_STAR_PRICE_GBP: int = 1599
+    STRIPE_UK_SHIPPING_RATE_GBP: int = 199
+    STRIPE_US_SHIPPING_RATE_GBP: int = 299
+    STRIPE_EUROPE_SHIPPING_RATE_GBP: int = 299
+    STRIPE_REST_OF_WORLD_SHIPPING_RATE_GBP: int = 399
+    STRIPE_DEFAULT_COUNTRY_CODE: str = "GB"
 
     @field_validator("FRONTEND_ORIGIN", "BACKEND_ORIGIN", mode="before")
     @classmethod
@@ -34,6 +44,5 @@ class Settings(BaseSettings):
     @property
     def session_cookie_secure(self) -> bool:
         return self.BACKEND_ORIGIN.startswith("https://")
-
 
 settings = Settings()

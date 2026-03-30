@@ -77,7 +77,13 @@ const CheckoutCompletePage = () => {
                                     <div className="status-tile">
                                         <div>
                                             <strong>Certificate</strong>
-                                            <p>{checkoutData.includes_certificate ? 'Included in this order' : 'Not included in this order'}</p>
+                                            <p>{checkoutData.certificate_label}</p>
+                                        </div>
+                                    </div>
+                                    <div className="status-tile">
+                                        <div>
+                                            <strong>Delivery</strong>
+                                            <p>{checkoutData.shipping_required ? 'Physical fulfilment required' : 'Digital delivery only'}</p>
                                         </div>
                                     </div>
                                     <div className="status-tile">
@@ -92,7 +98,7 @@ const CheckoutCompletePage = () => {
                                         Explore the Galaxy
                                     </Link>
                                     <Link to={`/account/orders/${checkoutData.transaction_id}`} className="secondary-button" style={{ width: 'auto', minWidth: '220px' }}>
-                                        View Certificate
+                                        View Order
                                     </Link>
                                     <Link to="/account" className="secondary-button" style={{ width: 'auto', minWidth: '220px' }}>
                                         Go to My Account

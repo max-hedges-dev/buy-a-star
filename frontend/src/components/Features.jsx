@@ -44,18 +44,20 @@ const secondaryButtonStyle = {
 
 const SectionHeader = ({ eyebrow, headline, body, centered = false }) => (
     <div style={{ textAlign: centered ? 'center' : 'left' }}>
-        <div
-            style={{
-                color: '#ff9150',
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
-                fontWeight: 700,
-                fontSize: '0.82rem',
-                marginBottom: '18px',
-            }}
-        >
-            {eyebrow}
-        </div>
+        {eyebrow && (
+            <div
+                style={{
+                    color: '#ff9150',
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    marginBottom: '18px',
+                }}
+            >
+                {eyebrow}
+            </div>
+        )}
         <h2
             style={{
                 fontSize: 'clamp(2.4rem, 4.6vw, 4rem)',
@@ -397,17 +399,28 @@ const Features = () => {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.75 }}
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: '0.9fr 1.1fr',
-                        gap: '48px',
-                        alignItems: 'center',
-                        marginBottom: '110px',
-                    }}
+                    style={{ marginBottom: '110px' }}
                 >
+                    <div
+                        style={{
+                            width: '72px',
+                            height: '1px',
+                            margin: '0 auto 88px',
+                            background: 'rgba(255,255,255,0.78)',
+                            boxShadow: '0 0 14px rgba(255,255,255,0.12)',
+                        }}
+                    />
+
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: '0.9fr 1.1fr',
+                            gap: '48px',
+                            alignItems: 'center',
+                        }}
+                    >
                     <div>
                         <SectionHeader
-                            eyebrow="CERTIFICATE"
                             headline="IMMEDIATE PROOF OF OWNERSHIP"
                             body="After purchasing a star, you'll immediately receive a formal certificate of registration of celestial ownership."
                         />
@@ -458,6 +471,7 @@ const Features = () => {
                                 border: '1px solid rgba(255,255,255,0.08)',
                             }}
                         />
+                    </div>
                     </div>
                 </motion.div>
 

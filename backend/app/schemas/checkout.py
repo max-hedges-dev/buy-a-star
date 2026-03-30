@@ -6,9 +6,33 @@ from pydantic import BaseModel, ConfigDict
 class CheckoutSessionCreateRequest(BaseModel):
     star_id: int
     owner_name: str
-    include_certificate: bool = True
+    certificate_type: str = "digital"
+    country_code: str = "GB"
     accepted_terms: bool
     accepted_privacy: bool
+
+
+class CheckoutOptionRead(BaseModel):
+    code: str
+    label: str
+    description: str
+    price_minor_units: int
+    price: float
+    shipping_required: bool
+    shipping_amount_minor_units: int
+    shipping_amount: float
+
+
+class CheckoutOptionsResponse(BaseModel):
+    country_code: str
+    default_certificate_type: str
+    currency: str
+    supported_countries: list[str]
+    named_star_price_minor_units: int
+    named_star_price: float
+    unnamed_star_price_minor_units: int
+    unnamed_star_price: float
+    options: list[CheckoutOptionRead]
 
 
 class CheckoutSessionCreateResponse(BaseModel):
@@ -28,6 +52,10 @@ class CheckoutSessionStatusResponse(BaseModel):
     star_name: str
     owner_name: str | None = None
     includes_certificate: bool
+    certificate_type: str
+    certificate_label: str
+    shipping_required: bool
+    shipping_amount_total: int | None = None
     amount_total: int | None = None
     currency: str | None = None
 
@@ -47,4 +75,7 @@ class CheckoutFulfillmentResult(BaseModel):
     star_name: str
     owner_name: str | None = None
     includes_certificate: bool
+    certificate_type: str
+    certificate_label: str
+    shipping_required: bool
     fulfilled_at: datetime | None = None

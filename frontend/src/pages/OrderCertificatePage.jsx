@@ -89,6 +89,18 @@ const OrderCertificatePage = () => {
                                     </div>
                                     <div className="status-tile">
                                         <div>
+                                            <strong>Certificate</strong>
+                                            <p>{order.certificate_label}</p>
+                                        </div>
+                                    </div>
+                                    <div className="status-tile">
+                                        <div>
+                                            <strong>Delivery</strong>
+                                            <p>{order.shipping_required ? 'Physical fulfilment required' : 'Digital only'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="status-tile">
+                                        <div>
                                             <strong>Constellation</strong>
                                             <p>{order.star.constellation || 'Not listed'}</p>
                                         </div>

@@ -14,6 +14,15 @@ from app.models.star import Star
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.checkout import CheckoutFulfillmentResult
+from app.services.certificate_options import certificate_label, get_certificate_option
+from app.services.pricing import (
+    certificate_price_for_country,
+    major_amount_from_minor_units,
+    normalize_country_code,
+    pricing_quote_for_country,
+    shipping_display_name,
+    star_price_for_country,
+)
 
 CHECKOUT_STATUS_CREATED = "checkout_created"
 CHECKOUT_STATUS_FULFILLED = "fulfilled"
@@ -26,6 +35,10 @@ stripe.api_key = settings.STRIPE_SECRET_KEY or None
 
 def _frontend_origin() -> str:
     return settings.cors_origins[0] if settings.cors_origins else settings.BACKEND_ORIGIN.rstrip("/")
+
+
+def _star_display_name(star: Star) -> str:
+    return star.common_name or star.display_name or star.scientific_name
 
 
 def _build_registration_number(transaction: Transaction, issued_at: datetime) -> str:
@@ -68,45 +81,67 @@ def _money_to_minor_units(value: Decimal | float | int) -> int:
     return int((decimal_value * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def _decimal_amount(amount_minor_units: int, currency: str) -> Decimal:
+    return major_amount_from_minor_units(amount_minor_units, currency).quantize(Decimal("0.01"))
+
+
 async def _run_stripe_call(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
 
 
-def _transaction_amount_minor_units(star: Star, includes_certificate: bool) -> int:
-    base_amount = _money_to_minor_units(star.price)
-    certificate_amount = settings.STRIPE_CERTIFICATE_PRICE_GBP if includes_certificate else 0
-    return base_amount + certificate_amount
+def _transaction_amount_minor_units(star: Star, certificate_type: str, country_code: str) -> int:
+    option = get_certificate_option(certificate_type)
+    base_amount = star_price_for_country(star, country_code).amount_minor_units
+    certificate_amount = certificate_price_for_country(certificate_type, country_code).amount_minor_units
+    shipping_amount = pricing_quote_for_country(country_code).shipping_price.amount_minor_units if option.shipping_required else 0
+    return base_amount + certificate_amount + shipping_amount
 
 
-def _line_items_for_star(star: Star, includes_certificate: bool) -> list[dict]:
+def _serialize_shipping_address(address) -> dict | None:
+    if not address:
+        return None
+    return {
+        "line1": _stripe_value(address, "line1"),
+        "line2": _stripe_value(address, "line2"),
+        "city": _stripe_value(address, "city"),
+        "state": _stripe_value(address, "state"),
+        "postal_code": _stripe_value(address, "postal_code"),
+        "country": _stripe_value(address, "country"),
+    }
+
+
+def _line_items_for_star(star: Star, certificate_type: str, country_code: str) -> list[dict]:
+    option = get_certificate_option(certificate_type)
+    star_price = star_price_for_country(star, country_code)
+    certificate_price = certificate_price_for_country(certificate_type, country_code)
+    star_name = _star_display_name(star)
     line_items = [
         {
             "quantity": 1,
             "price_data": {
-                "currency": settings.STRIPE_CURRENCY,
-                "unit_amount": _money_to_minor_units(star.price),
+                "currency": star_price.currency,
+                "unit_amount": star_price.amount_minor_units,
                 "product_data": {
-                    "name": f"{star.common_name or star.scientific_name} Registry Entry",
-                    "description": "Aster Atlas private star registry entry",
+                    "name": f"Star Registration: {star_name}",
+                    "description": f"Private Aster Atlas registry entry for {star_name}",
                 },
             },
         }
     ]
 
-    if includes_certificate:
-        line_items.append(
-            {
-                "quantity": 1,
-                "price_data": {
-                    "currency": settings.STRIPE_CURRENCY,
-                    "unit_amount": settings.STRIPE_CERTIFICATE_PRICE_GBP,
-                    "product_data": {
-                        "name": "Digital Certificate",
-                        "description": "High-resolution Aster Atlas certificate",
-                    },
+    line_items.append(
+        {
+            "quantity": 1,
+            "price_data": {
+                "currency": certificate_price.currency,
+                "unit_amount": certificate_price.amount_minor_units,
+                "product_data": {
+                    "name": option.label,
+                    "description": option.description,
                 },
-            }
-        )
+            },
+        }
+    )
 
     return line_items
 
@@ -116,7 +151,8 @@ async def create_embedded_checkout_session(
     star_id: int,
     user: User,
     owner_name: str,
-    includes_certificate: bool,
+    certificate_type: str,
+    country_code: str,
 ) -> tuple[str, str]:
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(
@@ -133,14 +169,25 @@ async def create_embedded_checkout_session(
     if star.is_bought:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This star has already been claimed.")
 
+    option = get_certificate_option(certificate_type)
+    normalized_country = normalize_country_code(country_code)
+    quote = pricing_quote_for_country(normalized_country)
+    star_name = _star_display_name(star)
+    clean_owner_name = owner_name.strip()
     now = datetime.now(timezone.utc)
     transaction = Transaction(
         star_id=star.id,
         user_id=user.id,
-        owner_name=owner_name.strip(),
-        amount=Decimal(_transaction_amount_minor_units(star, includes_certificate)) / Decimal("100"),
-        currency=settings.STRIPE_CURRENCY,
-        includes_certificate=includes_certificate,
+        owner_name=clean_owner_name,
+        amount=_decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency),
+        currency=quote.currency,
+        includes_certificate=True,
+        certificate_type=option.code,
+        shipping_required=option.shipping_required,
+        shipping_amount=_decimal_amount(
+            quote.shipping_price.amount_minor_units if option.shipping_required else 0,
+            quote.currency,
+        ),
         status=CHECKOUT_STATUS_CREATED,
         accepted_terms_at=now,
         accepted_privacy_at=now,
@@ -149,27 +196,56 @@ async def create_embedded_checkout_session(
     await db.flush()
 
     frontend_origin = _frontend_origin().rstrip("/")
+    metadata = {
+        "certificate_type": option.label,
+        "shipping_required": "true" if option.shipping_required else "false",
+        "internal_order_id": str(transaction.id),
+        "star_name": star_name,
+        "certificate_name": clean_owner_name,
+        "certificate_type_code": option.code,
+        "star_id": str(star.id),
+        "user_id": str(user.id),
+        "country_code": normalized_country,
+        "presentment_currency": quote.currency,
+    }
+    payment_description = f"Aster Atlas: {star_name} for {clean_owner_name} ({option.label})"
+    session_payload = {
+        "mode": "payment",
+        "ui_mode": "embedded_page",
+        "return_url": f"{frontend_origin}/checkout/complete?session_id={{CHECKOUT_SESSION_ID}}",
+        "customer_email": user.email,
+        "line_items": _line_items_for_star(star, option.code, normalized_country),
+        "metadata": metadata,
+        "payment_intent_data": {
+            "description": payment_description,
+            "metadata": metadata,
+        },
+    }
+    if option.shipping_required:
+        session_payload["shipping_address_collection"] = {
+            "allowed_countries": [normalized_country],
+        }
+        session_payload["shipping_options"] = [
+            {
+                "shipping_rate_data": {
+                    "display_name": shipping_display_name(normalized_country),
+                    "type": "fixed_amount",
+                    "fixed_amount": {
+                        "amount": quote.shipping_price.amount_minor_units,
+                        "currency": quote.currency,
+                    },
+                    "delivery_estimate": {
+                        "minimum": {"unit": "business_day", "value": 2},
+                        "maximum": {"unit": "business_day", "value": 7},
+                    },
+                }
+            },
+        ]
+        session_payload["phone_number_collection"] = {"enabled": True}
+
     session = await _run_stripe_call(
         stripe.checkout.Session.create,
-        mode="payment",
-        ui_mode="embedded_page",
-        return_url=f"{frontend_origin}/checkout/complete?session_id={{CHECKOUT_SESSION_ID}}",
-        customer_email=user.email,
-        line_items=_line_items_for_star(star, includes_certificate),
-        metadata={
-            "transaction_id": str(transaction.id),
-            "star_id": str(star.id),
-            "user_id": str(user.id),
-            "owner_name": owner_name.strip(),
-            "includes_certificate": "true" if includes_certificate else "false",
-        },
-        payment_intent_data={
-            "metadata": {
-                "transaction_id": str(transaction.id),
-                "star_id": str(star.id),
-                "user_id": str(user.id),
-            }
-        },
+        **session_payload,
     )
     session_expires_at = _stripe_value(session, "expires_at")
     transaction.stripe_checkout_session_id = _stripe_value(session, "id")
@@ -202,7 +278,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
 
     if transaction is None:
         metadata = _stripe_value(session, "metadata")
-        transaction_id = _stripe_value(metadata, "transaction_id")
+        transaction_id = _stripe_value(metadata, "internal_order_id")
         if not transaction_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found.")
 
@@ -227,9 +303,12 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             fulfilled=True,
             transaction_status=transaction.status,
             star_id=transaction.star_id,
-            star_name=star.common_name or star.scientific_name,
+            star_name=_star_display_name(star),
             owner_name=transaction.owner_name,
             includes_certificate=transaction.includes_certificate,
+            certificate_type=transaction.certificate_type,
+            certificate_label=certificate_label(transaction.certificate_type),
+            shipping_required=transaction.shipping_required,
             fulfilled_at=transaction.fulfilled_at,
             transaction_id=transaction.id,
             registration_number=registration_number,
@@ -249,9 +328,12 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             fulfilled=False,
             transaction_status=transaction.status,
             star_id=transaction.star_id,
-            star_name=star.common_name or star.scientific_name,
+            star_name=_star_display_name(star),
             owner_name=transaction.owner_name,
             includes_certificate=transaction.includes_certificate,
+            certificate_type=transaction.certificate_type,
+            certificate_label=certificate_label(transaction.certificate_type),
+            shipping_required=transaction.shipping_required,
             fulfilled_at=transaction.fulfilled_at,
             transaction_id=transaction.id,
             registration_number=transaction.registration_number,
@@ -271,9 +353,12 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             fulfilled=False,
             transaction_status=transaction.status,
             star_id=star.id,
-            star_name=star.common_name or star.scientific_name,
+            star_name=_star_display_name(star),
             owner_name=transaction.owner_name,
             includes_certificate=transaction.includes_certificate,
+            certificate_type=transaction.certificate_type,
+            certificate_label=certificate_label(transaction.certificate_type),
+            shipping_required=transaction.shipping_required,
             fulfilled_at=transaction.fulfilled_at,
             transaction_id=transaction.id,
             registration_number=transaction.registration_number,
@@ -288,6 +373,18 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
     transaction.registration_number = _ensure_registration_number(transaction, now)
     transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
     transaction.fulfilled_at = now
+    transaction.shipping_rate_id = _stripe_id(_stripe_value(_stripe_value(session, "shipping_cost"), "shipping_rate"))
+    transaction.shipping_amount = _decimal_amount(
+        _stripe_value(_stripe_value(session, "shipping_cost"), "amount_total", 0) or 0,
+        transaction.currency,
+    )
+    shipping_details = _stripe_value(session, "shipping_details")
+    transaction.shipping_name = _stripe_value(shipping_details, "name")
+    transaction.shipping_phone = _stripe_value(shipping_details, "phone") or _stripe_value(
+        _stripe_value(session, "customer_details"),
+        "phone",
+    )
+    transaction.shipping_address = _serialize_shipping_address(_stripe_value(shipping_details, "address"))
 
     await db.commit()
 
@@ -295,9 +392,12 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
         fulfilled=True,
         transaction_status=transaction.status,
         star_id=star.id,
-        star_name=star.common_name or star.scientific_name,
+        star_name=_star_display_name(star),
         owner_name=transaction.owner_name,
         includes_certificate=transaction.includes_certificate,
+        certificate_type=transaction.certificate_type,
+        certificate_label=certificate_label(transaction.certificate_type),
+        shipping_required=transaction.shipping_required,
         fulfilled_at=transaction.fulfilled_at,
         transaction_id=transaction.id,
         registration_number=transaction.registration_number,

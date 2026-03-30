@@ -80,7 +80,8 @@ export async function fetchStarById(id) {
 export async function createCheckoutSession({
     starId,
     ownerName,
-    includeCertificate,
+    certificateType,
+    countryCode,
     acceptedTerms,
     acceptedPrivacy,
 }) {
@@ -89,11 +90,19 @@ export async function createCheckoutSession({
         body: {
             star_id: starId,
             owner_name: ownerName,
-            include_certificate: includeCertificate,
+            certificate_type: certificateType,
+            country_code: countryCode,
             accepted_terms: acceptedTerms,
             accepted_privacy: acceptedPrivacy,
         },
     });
+}
+
+export async function fetchCheckoutOptions(countryCode) {
+    const params = new URLSearchParams({
+        country_code: countryCode,
+    });
+    return apiRequest(`/checkout/options?${params.toString()}`);
 }
 
 export async function fetchCheckoutSessionStatus(sessionId) {

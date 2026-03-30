@@ -59,7 +59,7 @@ const AccountPage = () => {
     const summary = useMemo(() => ({
         orders: overview.orders.length,
         stars: overview.stars.length,
-        certificates: overview.orders.filter((order) => order.includes_certificate && order.status === 'fulfilled').length,
+        certificates: overview.orders.filter((order) => order.status === 'fulfilled').length,
     }), [overview]);
 
     return (
@@ -184,7 +184,13 @@ const AccountPage = () => {
                                                     <div className="status-tile">
                                                         <div>
                                                             <strong>Certificate</strong>
-                                                            <p>{order.includes_certificate ? 'Included' : 'Not included'}</p>
+                                                            <p>{order.certificate_label}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="status-tile">
+                                                        <div>
+                                                            <strong>Delivery</strong>
+                                                            <p>{order.shipping_required ? 'Physical fulfilment' : 'Digital only'}</p>
                                                         </div>
                                                     </div>
                                                     <div className="status-tile">
@@ -207,7 +213,7 @@ const AccountPage = () => {
                                                         className="secondary-button"
                                                         style={{ width: 'fit-content', minWidth: 220 }}
                                                     >
-                                                        {order.includes_certificate ? 'View certificate' : 'View order'}
+                                                        View order
                                                     </Link>
                                                 </div>
                                             </article>

@@ -22,6 +22,8 @@ class CheckoutSessionStatusResponse(BaseModel):
     payment_status: str | None = None
     transaction_status: str
     fulfilled: bool
+    transaction_id: int
+    registration_number: str | None = None
     star_id: int
     star_name: str
     owner_name: str | None = None
@@ -39,6 +41,8 @@ class CheckoutFulfillmentResult(BaseModel):
 
     fulfilled: bool
     transaction_status: str
+    transaction_id: int
+    registration_number: str | None = None
     star_id: int
     star_name: str
     owner_name: str | None = None

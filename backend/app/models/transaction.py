@@ -13,6 +13,7 @@ class Transaction(Base):
     currency = Column(String(3), nullable=False, default="gbp")
     includes_certificate = Column(Boolean, default=False)
     status = Column(String, nullable=False, default="pending")
+    registration_number = Column(String, unique=True, index=True, nullable=True)
     stripe_checkout_session_id = Column(String, unique=True, index=True, nullable=True)
     stripe_payment_intent_id = Column(String, nullable=True)
     accepted_terms_at = Column(DateTime(timezone=True), nullable=True)

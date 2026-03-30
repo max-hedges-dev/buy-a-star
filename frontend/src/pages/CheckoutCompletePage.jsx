@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import Navbar from '../components/Navbar';
+
 import Footer from '../components/Footer';
+import Navbar from '../components/Navbar';
 import { fetchCheckoutSessionStatus } from '../services/api';
 
 const CheckoutCompletePage = () => {
@@ -53,7 +54,7 @@ const CheckoutCompletePage = () => {
                             <div style={{ textAlign: 'center' }}>
                                 <div className="eyebrow" style={{ marginBottom: '18px' }}>Stripe Checkout</div>
                                 <h1 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.8rem)', marginBottom: '16px' }}>Confirming your purchase</h1>
-                                <p className="muted-copy">We’re checking Stripe and finalising your star registration now.</p>
+                                <p className="muted-copy">We&apos;re checking Stripe and finalising your star registration now.</p>
                             </div>
                         ) : null}
 
@@ -79,10 +80,19 @@ const CheckoutCompletePage = () => {
                                             <p>{checkoutData.includes_certificate ? 'Included in this order' : 'Not included in this order'}</p>
                                         </div>
                                     </div>
+                                    <div className="status-tile">
+                                        <div>
+                                            <strong>Registration number</strong>
+                                            <p>{checkoutData.registration_number || 'Pending'}</p>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
                                     <Link to="/search" className="secondary-button" style={{ width: 'auto', minWidth: '220px' }}>
                                         Explore the Galaxy
+                                    </Link>
+                                    <Link to={`/account/orders/${checkoutData.transaction_id}`} className="secondary-button" style={{ width: 'auto', minWidth: '220px' }}>
+                                        View Certificate
                                     </Link>
                                     <Link to="/account" className="secondary-button" style={{ width: 'auto', minWidth: '220px' }}>
                                         Go to My Account
@@ -107,7 +117,7 @@ const CheckoutCompletePage = () => {
                         {status === 'error' ? (
                             <div style={{ textAlign: 'center' }}>
                                 <div className="eyebrow" style={{ marginBottom: '18px' }}>Checkout Error</div>
-                                <h1 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.8rem)', marginBottom: '16px' }}>We couldn’t confirm that purchase</h1>
+                                <h1 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.8rem)', marginBottom: '16px' }}>We couldn&apos;t confirm that purchase</h1>
                                 <p className="muted-copy" style={{ maxWidth: '680px', margin: '0 auto 26px' }}>{error}</p>
                                 <Link to="/buy" className="secondary-button" style={{ width: 'auto', minWidth: '220px', margin: '0 auto' }}>
                                     Back to the registry

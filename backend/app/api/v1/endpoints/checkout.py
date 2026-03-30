@@ -76,6 +76,8 @@ async def session_status(
         payment_status=_stripe_value(session, "payment_status"),
         transaction_status=fulfillment.transaction_status,
         fulfilled=fulfillment.fulfilled,
+        transaction_id=fulfillment.transaction_id,
+        registration_number=fulfillment.registration_number,
         star_id=fulfillment.star_id,
         star_name=fulfillment.star_name,
         owner_name=fulfillment.owner_name,

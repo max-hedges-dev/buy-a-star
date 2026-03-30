@@ -28,6 +28,18 @@ def _frontend_origin() -> str:
     return settings.cors_origins[0] if settings.cors_origins else settings.BACKEND_ORIGIN.rstrip("/")
 
 
+def _build_registration_number(transaction: Transaction, issued_at: datetime) -> str:
+    return f"AA-{issued_at:%Y%m%d}-{transaction.id:06d}"
+
+
+def _ensure_registration_number(transaction: Transaction, issued_at: datetime) -> str:
+    if transaction.registration_number:
+        return transaction.registration_number
+
+    transaction.registration_number = _build_registration_number(transaction, issued_at)
+    return transaction.registration_number
+
+
 def _stripe_value(value, key: str, default=None):
     if value is None:
         return default
@@ -208,6 +220,9 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
     if transaction.status == CHECKOUT_STATUS_FULFILLED:
         star_result = await db.execute(select(Star).where(Star.id == transaction.star_id))
         star = star_result.scalars().first()
+        issued_at = transaction.fulfilled_at or transaction.created_at or datetime.now(timezone.utc)
+        registration_number = _ensure_registration_number(transaction, issued_at)
+        await db.commit()
         return CheckoutFulfillmentResult(
             fulfilled=True,
             transaction_status=transaction.status,
@@ -216,6 +231,8 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             owner_name=transaction.owner_name,
             includes_certificate=transaction.includes_certificate,
             fulfilled_at=transaction.fulfilled_at,
+            transaction_id=transaction.id,
+            registration_number=registration_number,
         )
 
     session_status = _stripe_value(session, "status")
@@ -236,6 +253,8 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             owner_name=transaction.owner_name,
             includes_certificate=transaction.includes_certificate,
             fulfilled_at=transaction.fulfilled_at,
+            transaction_id=transaction.id,
+            registration_number=transaction.registration_number,
         )
 
     star_result = await db.execute(select(Star).where(Star.id == transaction.star_id).with_for_update())
@@ -256,6 +275,8 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             owner_name=transaction.owner_name,
             includes_certificate=transaction.includes_certificate,
             fulfilled_at=transaction.fulfilled_at,
+            transaction_id=transaction.id,
+            registration_number=transaction.registration_number,
         )
 
     now = datetime.now(timezone.utc)
@@ -264,6 +285,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
     star.purchase_date = now
 
     transaction.status = CHECKOUT_STATUS_FULFILLED
+    transaction.registration_number = _ensure_registration_number(transaction, now)
     transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
     transaction.fulfilled_at = now
 
@@ -277,6 +299,8 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
         owner_name=transaction.owner_name,
         includes_certificate=transaction.includes_certificate,
         fulfilled_at=transaction.fulfilled_at,
+        transaction_id=transaction.id,
+        registration_number=transaction.registration_number,
     )
 
 

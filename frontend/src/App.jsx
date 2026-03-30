@@ -6,6 +6,7 @@ import AboutPage from './pages/AboutPage';
 import FaqPage from './pages/FaqPage';
 import AuthPage from './pages/AuthPage';
 import AccountPage from './pages/AccountPage';
+import OrderCertificatePage from './pages/OrderCertificatePage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import CheckoutCompletePage from './pages/CheckoutCompletePage';
@@ -40,6 +41,14 @@ function App() {
                 <Route path="/faq" element={<FaqPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
+                <Route
+                    path="/account/orders/:transactionId"
+                    element={(
+                        <ProtectedRoute>
+                            <OrderCertificatePage />
+                        </ProtectedRoute>
+                    )}
+                />
                 <Route
                     path="/checkout/complete"
                     element={(

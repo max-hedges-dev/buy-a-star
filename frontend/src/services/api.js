@@ -103,3 +103,11 @@ export async function fetchCheckoutSessionStatus(sessionId) {
     }
     return data;
 }
+
+export async function fetchAccountOverview() {
+    return apiRequest('/account/overview');
+}
+
+export async function fetchAccountOrder(transactionId) {
+    return apiRequest(`/account/orders/${transactionId}`);
+}

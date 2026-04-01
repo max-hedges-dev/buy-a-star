@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Link } from 'react-router-dom';
@@ -10,6 +10,8 @@ const Hero = () => {
         id: 'hero-orange-star',
         category: 'Orange Giant',
     }), []);
+    const [showHeroScene] = useState(true);
+    const [heroSceneVisible, setHeroSceneVisible] = useState(false);
 
     const pointerX = useMotionValue(0);
     const pointerY = useMotionValue(0);
@@ -100,9 +102,9 @@ const Hero = () => {
                 }}
             >
                 <motion.div
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6 }}
                     style={{
                         color: '#ff9c63',
                         fontSize: '0.86rem',
@@ -116,9 +118,9 @@ const Hero = () => {
                 </motion.div>
 
                 <motion.h1
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.7, delay: 0.08 }}
                     style={{
                         fontSize: 'clamp(3rem, 6vw, 5.25rem)',
                         fontWeight: '800',
@@ -168,17 +170,49 @@ const Hero = () => {
                     mixBlendMode: 'screen',
                 }}
             >
-                <Canvas
-                    camera={{ position: [0, 0, 8], fov: 38 }}
-                    gl={{ alpha: true, antialias: true, premultipliedAlpha: false }}
-                    onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
-                    style={{ background: 'transparent' }}
-                >
-                    <ambientLight intensity={0.2} />
-                    <pointLight position={[8, 4, 8]} intensity={1.3} />
-                    <pointLight position={[-6, -3, -6]} intensity={0.35} />
-                    <DetailedStar star={heroStar} detailLevel="hero" />
-                </Canvas>
+                <div
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '50%',
+                        background: `
+                            radial-gradient(circle at 50% 50%, rgba(255,248,214,0.98) 0%, rgba(255,202,112,0.92) 12%, rgba(255,140,48,0.42) 28%, rgba(255,120,30,0.16) 44%, rgba(255,120,30,0) 68%)
+                        `,
+                        filter: 'blur(16px)',
+                        opacity: heroSceneVisible ? 0 : 1,
+                        transform: heroSceneVisible ? 'scale(1.08)' : 'scale(1)',
+                        transition: 'opacity 0.45s ease, transform 0.6s ease',
+                    }}
+                />
+
+                {showHeroScene ? (
+                    <div
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            opacity: heroSceneVisible ? 1 : 0,
+                            transition: 'opacity 0.55s ease',
+                        }}
+                    >
+                        <Canvas
+                            camera={{ position: [0, 0, 8], fov: 38 }}
+                            dpr={[1, 1.5]}
+                            gl={{ alpha: true, antialias: false, premultipliedAlpha: false, powerPreference: 'high-performance' }}
+                            onCreated={({ gl }) => {
+                                gl.setClearColor(0x000000, 0);
+                                window.requestAnimationFrame(() => {
+                                    setHeroSceneVisible(true);
+                                });
+                            }}
+                            style={{ background: 'transparent' }}
+                        >
+                            <ambientLight intensity={0.2} />
+                            <pointLight position={[8, 4, 8]} intensity={1.3} />
+                            <pointLight position={[-6, -3, -6]} intensity={0.35} />
+                            <DetailedStar star={heroStar} detailLevel="hero" />
+                        </Canvas>
+                    </div>
+                ) : null}
             </div>
 
             <div

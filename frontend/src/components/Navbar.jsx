@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, ShoppingBag, UserCircle2 } from 'lucide-react';
+import { LogOut, UserCircle2 } from 'lucide-react';
 import fullLogoLeftWhite from '../assets/AA Full Logo Left White.png';
 
 import { useAuth } from '../hooks/useAuth';
@@ -92,26 +92,6 @@ const Navbar = () => {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', zIndex: 1, alignItems: 'center', marginLeft: 'auto' }}>
-                <div className="nav-action-tooltip">
-                    <Link
-                        to="/buy"
-                        aria-label="Basket"
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 42,
-                            height: 42,
-                            borderRadius: 999,
-                            background: 'rgba(255,255,255,0.06)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                        }}
-                    >
-                        <ShoppingBag color="white" size={20} />
-                    </Link>
-                    <span className="nav-action-tooltip__label">Basket</span>
-                </div>
-
                 {!isLoadingUser && isAuthenticated ? (
                     <>
                         <div className="nav-action-tooltip">

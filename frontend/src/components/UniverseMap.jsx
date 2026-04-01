@@ -191,7 +191,7 @@ const GalaxyStarOverlay = ({ star, distSq }) => {
     );
 };
 
-const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange, forceTooltipStar, macroFlyInMode }) => {
+const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, viewMode, onHoverChange, forceTooltipStar, macroFlyInMode }) => {
     const meshRef = useRef();
     const groupRef = useRef();
     const tempObject = useMemo(() => new THREE.Object3D(), []);
@@ -332,7 +332,8 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
             }
             toCamera.normalize();
             
-            const endDist = 1.6; // Fly exactly 5x closer to perfectly match the 5x shrunk geometry
+            const effectiveZoomScale = THREE.MathUtils.clamp(targetZoomScale, 0.1, 2);
+            const endDist = 1.6 / effectiveZoomScale; // Lower zoom scale stops slightly farther away.
             const endOffset = toCamera.multiplyScalar(endDist);
             const endPos = worldPos.clone().add(endOffset);
 
@@ -352,7 +353,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, viewMode, onHoverChange,
         } else {
             animRef.current = null;
         }
-    }, [targetStar, camera, macroFlyInMode, dummyCam]);
+    }, [targetStar, camera, macroFlyInMode, dummyCam, targetZoomScale]);
 
     useFrame((state, delta) => {
         if (animRef.current && (viewMode === 'MAP' || viewMode === 'TRANSITION')) {

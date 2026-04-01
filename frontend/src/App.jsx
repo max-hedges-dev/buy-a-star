@@ -7,6 +7,7 @@ import FaqPage from './pages/FaqPage';
 import AuthPage from './pages/AuthPage';
 import AccountPage from './pages/AccountPage';
 import OrderCertificatePage from './pages/OrderCertificatePage';
+import OwnedStarPage from './pages/OwnedStarPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import CheckoutCompletePage from './pages/CheckoutCompletePage';
@@ -57,8 +58,16 @@ function App() {
                         </ProtectedRoute>
                     )}
                 />
-                <Route path="/search" element={<SearchPage />} />
-                <Route path="/buy" element={<SearchPage />} />
+                <Route
+                    path="/account/stars/:transactionId/:starSlug"
+                    element={(
+                        <ProtectedRoute>
+                            <OwnedStarPage />
+                        </ProtectedRoute>
+                    )}
+                />
+                <Route path="/search/*" element={<SearchPage />} />
+                <Route path="/buy/*" element={<SearchPage />} />
             </Routes>
         </Router>
   );

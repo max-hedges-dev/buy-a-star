@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchStars } from '../services/api';
-import { Search, ShoppingCart, Loader2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars } from '@react-three/drei';
 import UniverseMap from '../components/UniverseMap';
 import StarViewer from '../components/StarViewer';
+import GalaxyBackdropSphere from '../components/GalaxyBackdropSphere';
 import GalaxyBackground from '../components/GalaxyBackground';
 import BuyAStarGrid from '../components/BuyAStarGrid';
 import * as THREE from 'three';
@@ -24,6 +25,18 @@ const VIEW_MODE = {
     DISPLAY: 'DISPLAY',
     GRID: 'GRID' // New mode for the "Buy a Star" marketplace
 };
+
+const slugifyStarName = (value) => (
+    (value || '')
+        .toString()
+        .toLowerCase()
+        .trim()
+        .replace(/['’.]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+);
+
+const getStarSlug = (star) => slugifyStarName(star.common_name || star.display_name || star.scientific_name);
 
 // --- IDLE CONTROLLER ---
 // When idle: slowly spins galaxy, returns camera AND galaxy position to default
@@ -296,6 +309,11 @@ const CAMERA_SETTINGS = { position: [0, 800, 2400], fov: 60, far: 100000 };
 const SearchPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const isBuyRoute = location.pathname.startsWith('/buy');
+    const baseRoute = isBuyRoute ? '/buy' : '/search';
+    const starSlug = location.pathname.startsWith(`${baseRoute}/`)
+        ? location.pathname.slice(baseRoute.length + 1).split('/')[0]
+        : '';
 
     // Data State
     const [stars, setStars] = useState([]);
@@ -303,10 +321,11 @@ const SearchPage = () => {
     const [error, setError] = useState(null);
 
     // View State
-    const [viewMode, setViewMode] = useState(location.pathname === '/buy' ? VIEW_MODE.GRID : VIEW_MODE.MAP);
+    const [viewMode, setViewMode] = useState(isBuyRoute ? VIEW_MODE.GRID : VIEW_MODE.MAP);
     const [previousViewMode, setPreviousViewMode] = useState(null); // Tracks where we came from
     const [selectedStar, setSelectedStar] = useState(null); // The star currently in focus/display
     const [targetStar, setTargetStar] = useState(null);     // The star map is zooming towards
+    const [targetZoomScale, setTargetZoomScale] = useState(1);
 
     // UI State
     const [searchTerm, setSearchTerm] = useState("");
@@ -320,6 +339,8 @@ const SearchPage = () => {
     const controlsRef = useRef();
     const galaxyGroupRef = useRef();
     const lastInteractionRef = useRef(Date.now());
+    const pendingSlugNavigationRef = useRef(null);
+    const handledPreserveTargetKeyRef = useRef(null);
     const forceIdleNow = useCallback(() => {
         lastInteractionRef.current = Date.now() - IDLE_TIMEOUT - 1;
     }, []);
@@ -329,10 +350,10 @@ const SearchPage = () => {
     }, []);
 
     useEffect(() => {
-        if (location.pathname === '/search' && !location.state?.preserveTarget) {
+        if (baseRoute === '/search' && !starSlug && !location.state?.preserveTarget) {
             forceIdleNow();
         }
-    }, [location.pathname, location.state, forceIdleNow]);
+    }, [baseRoute, starSlug, location.state, forceIdleNow]);
 
     // Sync view mode with navbar navigation
     const prevLocationRef = useRef(location.pathname);
@@ -343,18 +364,91 @@ const SearchPage = () => {
             // Allow programmatic navigation (e.g. View in Galaxy) to safely manage its own state
             if (location.state?.preserveTarget) return;
 
-            if (location.pathname === '/buy') {
+            if (baseRoute === '/buy' && !starSlug) {
                 setViewMode(VIEW_MODE.GRID);
                 setSelectedStar(null);
                 setTargetStar(null);
-            } else if (location.pathname === '/search') {
+                setTargetZoomScale(1);
+            } else if (baseRoute === '/search' && !starSlug) {
                 setViewMode(VIEW_MODE.MAP);
                 setSelectedStar(null);
                 setTargetStar(null);
+                setTargetZoomScale(1);
                 forceIdleNow();
             }
         }
-    }, [location.pathname, location.state, forceIdleNow]);
+    }, [location.pathname, location.state, forceIdleNow, baseRoute, starSlug]);
+
+    useEffect(() => {
+        if (loading || !stars.length || !starSlug || location.state?.preserveTarget) {
+            return;
+        }
+
+        if (pendingSlugNavigationRef.current === starSlug) {
+            return;
+        }
+
+        const matchingStar = stars.find((star) => getStarSlug(star) === starSlug);
+        if (!matchingStar) {
+            navigate(baseRoute, { replace: true });
+            return;
+        }
+
+        if (selectedStar?.id === matchingStar.id) {
+            return;
+        }
+
+        setPreviousViewMode(baseRoute === '/buy' ? VIEW_MODE.GRID : VIEW_MODE.MAP);
+        setSelectedStar(matchingStar);
+        setTargetStar(null);
+        setTargetZoomScale(1);
+        setViewMode(VIEW_MODE.DISPLAY);
+    }, [loading, stars, starSlug, location.state, navigate, baseRoute, selectedStar]);
+
+    useEffect(() => {
+        if (
+            pendingSlugNavigationRef.current &&
+            starSlug === pendingSlugNavigationRef.current &&
+            selectedStar &&
+            getStarSlug(selectedStar) === pendingSlugNavigationRef.current &&
+            viewMode === VIEW_MODE.DISPLAY
+        ) {
+            pendingSlugNavigationRef.current = null;
+        }
+    }, [selectedStar, starSlug, viewMode]);
+
+    useEffect(() => {
+        if (!location.state?.preserveTarget || !location.state?.focusStarSlug || loading || !stars.length) {
+            return;
+        }
+
+        if (handledPreserveTargetKeyRef.current === location.key) {
+            return;
+        }
+
+        const matchingStar = stars.find((star) => getStarSlug(star) === location.state.focusStarSlug);
+        if (!matchingStar) {
+            return;
+        }
+
+        handledPreserveTargetKeyRef.current = location.key;
+        setViewMode(VIEW_MODE.MAP);
+        setSelectedStar(null);
+        setMacroFlyInMode(Boolean(location.state?.macroFlyInMode));
+        setTargetZoomScale(location.state?.targetZoomScale || 1);
+        setTargetStar(matchingStar);
+        lastInteractionRef.current = Infinity;
+        setForceTooltipStar(matchingStar);
+
+        const timeoutId = window.setTimeout(() => {
+            setTargetStar(null);
+            setTargetZoomScale(1);
+            setMacroFlyInMode(false);
+            setForceTooltipStar(null);
+        }, location.state?.macroFlyInMode ? 4000 : 2800);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [location.key, location.state, loading, stars]);
 
     const loadStars = async (term = "") => {
         setLoading(true);
@@ -403,20 +497,26 @@ const SearchPage = () => {
 
     // --- Transition Logic ---
     const triggerTransitionToStar = (star) => {
+        const nextStarSlug = getStarSlug(star);
+        const starPath = `${baseRoute}/${nextStarSlug}`;
         setPreviousViewMode(viewMode);
+        pendingSlugNavigationRef.current = nextStarSlug;
 
         if (viewMode === VIEW_MODE.GRID) {
             // From grid, we just instantly go to DISPLAY mode (no 3D zoom needed since we can't see the map)
             setSelectedStar(star);
             setViewMode(VIEW_MODE.DISPLAY);
+            navigate(starPath);
             return;
         }
 
         if (viewMode !== VIEW_MODE.MAP) return;
 
         setMacroFlyInMode(false); // Smooth local glide
+        setTargetZoomScale(1);
         setSelectedStar(star);
         setTargetStar(star); // Tells UniverseMap to zoom camera towards this point
+        navigate(starPath);
 
         // Reset idle timer on selection
         lastInteractionRef.current = Date.now();
@@ -432,16 +532,19 @@ const SearchPage = () => {
             setTimeout(() => {
                 setViewMode(VIEW_MODE.DISPLAY);
                 setTargetStar(null); // Stop map zoom
+                setTargetZoomScale(1);
             }, 1000); // 1s blur in
 
         }, 2800); // 2.8s zoom time before blur covers the remaining frames
     };
 
     const handleBackToMap = () => {
+        pendingSlugNavigationRef.current = null;
         if (previousViewMode === VIEW_MODE.GRID) {
             setViewMode(VIEW_MODE.GRID);
             setSelectedStar(null);
             setTargetStar(null);
+            setTargetZoomScale(1);
             navigate('/buy');
             return;
         }
@@ -449,53 +552,24 @@ const SearchPage = () => {
         setViewMode(VIEW_MODE.MAP);
         setSelectedStar(null);
         setTargetStar(null);
+        setTargetZoomScale(1);
         navigate('/search');
         lastInteractionRef.current = Infinity; // Disable idle spin until user interacts
     };
 
     const handleViewInGalaxy = () => {
         const star = selectedStar;
-        // Navigate securely without wiping state via the router sync hook
-        navigate('/search', { state: { preserveTarget: true } });
-        
-        // Hide the grid / overlay seamlessly
-        setViewMode(VIEW_MODE.MAP);
-        
-        // Critical: Unmount StarViewer immediately while canvas context transitions
-        setSelectedStar(null);
+        pendingSlugNavigationRef.current = null;
+        const shouldMacroFlyIn = previousViewMode !== VIEW_MODE.MAP;
 
-        // Map takes over execution
-        // If we arrived from the Grid, fly in from the macro edge. If we arrived from the Map, smoothly reveal where we already are.
-        if (previousViewMode !== VIEW_MODE.MAP) {
-            setMacroFlyInMode(true);
-            setTargetStar(star);
-            // Allow camera to zoom for full 4.0 seconds to comfortably finish the slow animated sweep
-            setTimeout(() => {
-                setTargetStar(null);
-                setMacroFlyInMode(false);
-            }, 4000);
-        }
-        
-        lastInteractionRef.current = Infinity; 
-        
-        // Display temporary tooltip using forceTooltipStar
-        setForceTooltipStar(star);
-
-        let timeoutId;
-        const cleanUpTooltip = () => {
-            setForceTooltipStar(null);
-            clearTimeout(timeoutId);
-            window.removeEventListener('wheel', cleanUpTooltip);
-            window.removeEventListener('click', cleanUpTooltip);
-        };
-        
-        timeoutId = setTimeout(cleanUpTooltip, 5000); // 5 sec default limit
-        
-        // Subtly delay listeners so the immediate click doesn't trigger destruction
-        setTimeout(() => {
-            window.addEventListener('wheel', cleanUpTooltip, { once: true });
-            window.addEventListener('click', cleanUpTooltip, { once: true });
-        }, 500);
+        navigate('/search', {
+            state: {
+                preserveTarget: true,
+                focusStarSlug: getStarSlug(star),
+                macroFlyInMode: shouldMacroFlyIn,
+                targetZoomScale: 0.2,
+            },
+        });
     };
 
     return (
@@ -539,6 +613,7 @@ const SearchPage = () => {
 
                     {/* Galaxy group — all scene content rotates together */}
                     <group ref={galaxyGroupRef}>
+                        <GalaxyBackdropSphere />
                         <GalaxyBackground count={400} />
 
                         {!loading && stars.length > 0 && (
@@ -547,6 +622,7 @@ const SearchPage = () => {
                                 viewMode={viewMode}
                                 onSelectStar={triggerTransitionToStar}
                                 targetStar={targetStar}
+                                targetZoomScale={targetZoomScale}
                                 onHoverChange={setIsHoveringStar}
                                 forceTooltipStar={forceTooltipStar}
                                 macroFlyInMode={macroFlyInMode}
@@ -626,8 +702,8 @@ const SearchPage = () => {
                     // Show Display if DISPLAY mode OR if Transitioning BACK (blurring display)
                     opacity: (viewMode === VIEW_MODE.DISPLAY || (viewMode === VIEW_MODE.TRANSITION && !targetStar)) ? 1 : 0,
                     pointerEvents: viewMode === VIEW_MODE.DISPLAY ? 'auto' : 'none',
-                    transition: location.pathname === '/buy' ? 'none' : 'opacity 0.2s ease-in',
-                    background: location.pathname === '/buy' ? 'black' : 'transparent' // Solid background for grid transition
+                    transition: isBuyRoute ? 'none' : 'opacity 0.2s ease-in',
+                    background: isBuyRoute ? 'black' : 'transparent' // Solid background for grid transition
                 }}>
                     <StarViewer
                         star={selectedStar}

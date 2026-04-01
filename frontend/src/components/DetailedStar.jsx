@@ -4,6 +4,61 @@ import { shaderMaterial } from '@react-three/drei';
 import { extend } from '@react-three/fiber';
 import * as THREE from 'three';
 
+const textureCache = new Map();
+
+const getRadialTexture = (key, size, stops) => {
+    if (textureCache.has(key)) {
+        return textureCache.get(key);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const center = size / 2;
+    const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
+
+    stops.forEach(([offset, color]) => {
+        gradient.addColorStop(offset, color);
+    });
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    textureCache.set(key, texture);
+    return texture;
+};
+
+const HERO_SURFACE_GEOMETRY = new THREE.SphereGeometry(2, 220, 220);
+const HERO_SHELL_GEOMETRY = new THREE.SphereGeometry(2, 160, 160);
+const HIGH_SURFACE_GEOMETRY = new THREE.SphereGeometry(2, 32, 32);
+const MEDIUM_SURFACE_GEOMETRY = new THREE.SphereGeometry(2, 16, 16);
+const MEDIUM_SHELL_GEOMETRY = new THREE.SphereGeometry(2, 14, 14);
+
+const HERO_BLOOM_TEXTURE = getRadialTexture('hero-bloom', 256, [
+    [0, 'rgba(255,255,255,1)'],
+    [0.14, 'rgba(255,255,255,0.92)'],
+    [0.36, 'rgba(255,255,255,0.28)'],
+    [0.7, 'rgba(255,255,255,0.05)'],
+    [1, 'rgba(255,255,255,0)'],
+]);
+
+const HIGH_BLOOM_TEXTURE = getRadialTexture('high-bloom', 128, [
+    [0, 'rgba(255,255,255,1)'],
+    [0.16, 'rgba(255,255,255,0.86)'],
+    [0.4, 'rgba(255,255,255,0.22)'],
+    [1, 'rgba(255,255,255,0)'],
+]);
+
+const MEDIUM_BLOOM_TEXTURE = getRadialTexture('medium-bloom', 96, [
+    [0, 'rgba(255,255,255,1)'],
+    [0.2, 'rgba(255,255,255,0.72)'],
+    [0.55, 'rgba(255,255,255,0.14)'],
+    [1, 'rgba(255,255,255,0)'],
+]);
+
 const simplexNoise = `
 float hash13(vec3 p) {
   p = fract(p * 0.1031);
@@ -226,30 +281,8 @@ const HeroStar = ({ palette, playAnimation = true }) => {
     const bloomRef = useRef();
     const vecPos = useMemo(() => new THREE.Vector3(), []);
 
-    const surfaceSegments = 220;
-    const shellSegments = 160;
     const bloomScale = 7.8;
     const bloomOpacity = 0.26;
-
-    const bloomTexture = useMemo(() => {
-        const size = 256;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const center = size / 2;
-        const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
-        gradient.addColorStop(0, 'rgba(255,255,255,1)');
-        gradient.addColorStop(0.14, 'rgba(255,255,255,0.92)');
-        gradient.addColorStop(0.36, 'rgba(255,255,255,0.28)');
-        gradient.addColorStop(0.7, 'rgba(255,255,255,0.05)');
-        gradient.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, size, size);
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        return texture;
-    }, []);
 
     useFrame((state, delta) => {
         const animateValue = playAnimation ? 1.0 : 0.0;
@@ -277,7 +310,7 @@ const HeroStar = ({ palette, playAnimation = true }) => {
     return (
         <group>
             <mesh>
-                <sphereGeometry args={[2, surfaceSegments, surfaceSegments]} />
+                <primitive object={HERO_SURFACE_GEOMETRY} attach="geometry" />
                 <starSurfaceMaterial
                     ref={surfaceRef}
                     baseColor={palette.surface}
@@ -291,7 +324,7 @@ const HeroStar = ({ palette, playAnimation = true }) => {
             </mesh>
 
             <mesh scale={[1.01, 1.01, 1.01]}>
-                <sphereGeometry args={[2, shellSegments, shellSegments]} />
+                <primitive object={HERO_SHELL_GEOMETRY} attach="geometry" />
                 <coronaShellMaterial
                     ref={coronaRef}
                     color={palette.corona}
@@ -307,7 +340,7 @@ const HeroStar = ({ palette, playAnimation = true }) => {
             </mesh>
 
             <mesh scale={[1.02, 1.02, 1.02]}>
-                <sphereGeometry args={[2, shellSegments, shellSegments]} />
+                <primitive object={HERO_SHELL_GEOMETRY} attach="geometry" />
                 <coronaShellMaterial
                     ref={flareRef}
                     color={palette.flare}
@@ -324,7 +357,7 @@ const HeroStar = ({ palette, playAnimation = true }) => {
 
             <sprite ref={bloomRef} scale={[bloomScale, bloomScale, 1]}>
                 <spriteMaterial
-                    map={bloomTexture}
+                    map={HERO_BLOOM_TEXTURE}
                     color={palette.bloom}
                     transparent
                     opacity={bloomOpacity}
@@ -340,25 +373,6 @@ const HighStar = ({ palette, playAnimation = true }) => {
     const surfaceRef = useRef();
     const bloomRef = useRef();
     const vecPos = useMemo(() => new THREE.Vector3(), []);
-
-    const bloomTexture = useMemo(() => {
-        const size = 128;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const center = size / 2;
-        const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
-        gradient.addColorStop(0, 'rgba(255,255,255,1)');
-        gradient.addColorStop(0.16, 'rgba(255,255,255,0.86)');
-        gradient.addColorStop(0.4, 'rgba(255,255,255,0.22)');
-        gradient.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, size, size);
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        return texture;
-    }, []);
 
     useFrame((state, delta) => {
         if (surfaceRef.current) {
@@ -377,7 +391,7 @@ const HighStar = ({ palette, playAnimation = true }) => {
     return (
         <group>
             <mesh>
-                <sphereGeometry args={[2, 32, 32]} />
+                <primitive object={HIGH_SURFACE_GEOMETRY} attach="geometry" />
                 <starSurfaceMaterial
                     ref={surfaceRef}
                     baseColor={palette.surface}
@@ -392,7 +406,7 @@ const HighStar = ({ palette, playAnimation = true }) => {
 
             <sprite ref={bloomRef} scale={[4.7, 4.7, 1]}>
                 <spriteMaterial
-                    map={bloomTexture}
+                    map={HIGH_BLOOM_TEXTURE}
                     color={palette.bloom}
                     transparent
                     opacity={0.09}
@@ -405,34 +419,15 @@ const HighStar = ({ palette, playAnimation = true }) => {
 };
 
 const MediumStar = ({ palette }) => {
-    const bloomTexture = useMemo(() => {
-        const size = 96;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const center = size / 2;
-        const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
-        gradient.addColorStop(0, 'rgba(255,255,255,1)');
-        gradient.addColorStop(0.2, 'rgba(255,255,255,0.72)');
-        gradient.addColorStop(0.55, 'rgba(255,255,255,0.14)');
-        gradient.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, size, size);
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        return texture;
-    }, []);
-
     return (
         <group>
             <mesh>
-                <sphereGeometry args={[2, 16, 16]} />
+                <primitive object={MEDIUM_SURFACE_GEOMETRY} attach="geometry" />
                 <meshBasicMaterial color={palette.surface} depthWrite={false} />
             </mesh>
 
             <mesh scale={[1.008, 1.008, 1.008]}>
-                <sphereGeometry args={[2.0, 14, 14]} />
+                <primitive object={MEDIUM_SHELL_GEOMETRY} attach="geometry" />
                 <coronaShellMaterial
                     color={palette.corona}
                     animate={0.0}
@@ -448,7 +443,7 @@ const MediumStar = ({ palette }) => {
 
             <sprite scale={[3.6, 3.6, 1]}>
                 <spriteMaterial
-                    map={bloomTexture}
+                    map={MEDIUM_BLOOM_TEXTURE}
                     color={palette.bloom}
                     transparent
                     opacity={0.06}

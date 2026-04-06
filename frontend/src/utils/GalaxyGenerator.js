@@ -19,8 +19,8 @@ class GalaxyGenerator {
             cloudCount: 100000,
             hiiCount: 600,
 
-            baseColor: '#5566AA',
-            armColor: '#AACCFF', // Balanced pale blue
+            baseColor: '#685aa8',
+            armColor: '#c1c0ff', // Slight red-violet warmth added to the arm glow
             bulgeColor: '#FFFFCC',  // Light yellow
             hiiColor: '#CC5577',
 
@@ -170,7 +170,7 @@ class GalaxyGenerator {
                 // Inter-arm "void" color handling
                 // If far from arm, blend towards a uniform deep blue to fill gaps
                 if (armDist > 0.4) {
-                    const voidColor = new THREE.Color('#446699'); // Brighter uniform blue
+                    const voidColor = new THREE.Color('#625b99'); // Slightly warmer violet fill for inter-arm glow
                     const voidMix = Math.min((armDist - 0.4) * 2.0, 1.0);
                     color.lerp(voidColor, voidMix * 0.9);
                 }
@@ -192,7 +192,7 @@ class GalaxyGenerator {
                 }
 
                 // Global dimming of arms
-                brightness *= 0.7;
+                brightness *= 0.56;
 
                 // Extra dimming for inner arms to reduce core saturation
                 if (radiusFraction < 0.4) {

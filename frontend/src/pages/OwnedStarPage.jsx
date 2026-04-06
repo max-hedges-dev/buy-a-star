@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import CertificatePreview from '../components/CertificatePreview';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
-import { fetchAccountOrder } from '../services/api';
+import { fetchAccountOrder, updateOwnedStarPrice } from '../services/api';
 import { downloadCertificate } from '../utils/certificateDownload';
 import {
     formatDate,
@@ -60,6 +60,11 @@ const detailItemStyle = {
     alignItems: 'flex-start',
 };
 
+const formatSterling = (amount) => new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+}).format(amount || 0);
+
 const OwnedStarPage = () => {
     const { transactionId } = useParams();
     const [order, setOrder] = useState(null);
@@ -67,12 +72,16 @@ const OwnedStarPage = () => {
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [ownerPriceInput, setOwnerPriceInput] = useState('');
+    const [isSavingPrice, setIsSavingPrice] = useState(false);
+    const [priceMessage, setPriceMessage] = useState('');
 
     useEffect(() => {
         const loadOrder = async () => {
             try {
                 const response = await fetchAccountOrder(transactionId);
                 setOrder(response);
+                setOwnerPriceInput(response.star.ask_price ? response.star.ask_price.toFixed(2) : '');
                 setStatus('ready');
             } catch (requestError) {
                 setError(requestError.message);
@@ -115,6 +124,42 @@ const OwnedStarPage = () => {
             await downloadCertificate(order);
         } finally {
             setIsDownloading(false);
+        }
+    };
+
+    const handleSaveOwnerPrice = async () => {
+        if (!order) {
+            return;
+        }
+
+        const normalizedValue = ownerPriceInput.trim();
+        const parsedValue = normalizedValue === '' ? null : Number(normalizedValue);
+        if (normalizedValue !== '' && (!Number.isFinite(parsedValue) || parsedValue <= 0)) {
+            setPriceMessage('Enter a valid owner price or clear the field to remove it.');
+            return;
+        }
+
+        try {
+            setIsSavingPrice(true);
+            const updated = await updateOwnedStarPrice(order.star.id, parsedValue);
+            setOrder((currentOrder) => (
+                currentOrder
+                    ? {
+                        ...currentOrder,
+                        star: {
+                            ...currentOrder.star,
+                            ask_price: updated.ask_price,
+                            model_value: updated.model_value ?? currentOrder.star.model_value,
+                        },
+                    }
+                    : currentOrder
+            ));
+            setOwnerPriceInput(updated.ask_price ? updated.ask_price.toFixed(2) : '');
+            setPriceMessage(updated.ask_price ? 'Owner price updated.' : 'Owner price removed.');
+        } catch (requestError) {
+            setPriceMessage(requestError.message || 'We could not update the owner price.');
+        } finally {
+            setIsSavingPrice(false);
         }
     };
 
@@ -259,12 +304,58 @@ const OwnedStarPage = () => {
                                     </section>
 
                                     <section className="glass-card" style={{ padding: '28px 30px' }}>
+                                        <p className="eyebrow" style={{ marginBottom: 16 }}>Marketplace Price</p>
+                                        <div style={{ display: 'grid', gap: 16 }}>
+                                            <div>
+                                                <div style={{ color: 'rgba(255,255,255,0.58)', marginBottom: 6 }}>Predicted price</div>
+                                                <strong style={{ fontSize: '1.35rem' }}>
+                                                    {typeof order.star.model_value === 'number' ? formatSterling(order.star.model_value) : 'Pending'}
+                                                </strong>
+                                            </div>
+                                            <div>
+                                                <div style={{ color: 'rgba(255,255,255,0.58)', marginBottom: 8 }}>Owner price</div>
+                                                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                                    <input
+                                                        type="number"
+                                                        min="0.01"
+                                                        step="0.01"
+                                                        value={ownerPriceInput}
+                                                        onChange={(event) => {
+                                                            setOwnerPriceInput(event.target.value);
+                                                            setPriceMessage('');
+                                                        }}
+                                                        placeholder="Set your price"
+                                                        style={{
+                                                            flex: '1 1 180px',
+                                                            minWidth: 0,
+                                                            padding: '13px 14px',
+                                                            borderRadius: 16,
+                                                            border: '1px solid rgba(255,255,255,0.12)',
+                                                            background: 'rgba(255,255,255,0.04)',
+                                                            color: 'white',
+                                                        }}
+                                                    />
+                                                    <button type="button" className="secondary-button" onClick={handleSaveOwnerPrice}>
+                                                        {isSavingPrice ? 'Saving...' : 'Save Owner Price'}
+                                                    </button>
+                                                </div>
+                                                <div style={{ color: 'rgba(255,255,255,0.62)', marginTop: 10 }}>
+                                                    {order.star.ask_price ? `Current owner price: ${formatSterling(order.star.ask_price)}` : 'No owner price set yet.'}
+                                                </div>
+                                                {priceMessage ? (
+                                                    <div style={{ color: 'rgba(255,255,255,0.72)', marginTop: 8 }}>{priceMessage}</div>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="glass-card" style={{ padding: '28px 30px' }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Actions</p>
                                         <div style={{ display: 'grid', gap: 12 }}>
                                             <Link to="/account?section=orders" className="secondary-button">
                                                 Review all orders
                                             </Link>
-                                            <Link to="/account?section=overview" className="secondary-button">
+                                            <Link to="/account?section=stars" className="secondary-button">
                                                 Return to account hub
                                             </Link>
                                         </div>

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Numeric, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, Numeric, DateTime, JSON
 from app.db.base_class import Base
 
 class Star(Base):
@@ -53,7 +53,27 @@ class Star(Base):
     variable_min = Column(Float, nullable=True)
     variable_max = Column(Float, nullable=True)
     
-    price = Column(Numeric(10, 2), default=12.99)
+    price = Column(Numeric(10, 2), default=14.99)
+    gaia_source_id = Column(String, index=True, nullable=True)
+    phot_g_mean_mag = Column(Float, nullable=True)
+    parallax = Column(Float, nullable=True)
+    lum_flame = Column(Float, nullable=True)
+    teff_gspphot = Column(Float, nullable=True)
+    mh_gspphot = Column(Float, nullable=True)
+    non_single_star = Column(Boolean, nullable=True)
+    phot_variable_flag = Column(String, nullable=True)
+    best_class_name = Column(String, nullable=True)
+    radius_flame = Column(Float, nullable=True)
+    age_flame = Column(Float, nullable=True)
+    issue_price = Column(Numeric(10, 2), nullable=False, default=14.99)
+    model_value = Column(Numeric(10, 2), nullable=True)
+    model_value_last_calculated_at = Column(DateTime(timezone=True), nullable=True)
+    valuation_eligible = Column(Boolean, nullable=False, default=False)
+    valuation_missing_metrics = Column(JSON, nullable=True)
+    ask_price = Column(Numeric(10, 2), nullable=True)
+    highest_bid = Column(Numeric(10, 2), nullable=True)
+    last_sale_price = Column(Numeric(10, 2), nullable=True)
+    last_sale_at = Column(DateTime(timezone=True), nullable=True)
     is_bought = Column(Boolean, default=False)
     owner_name = Column(String, nullable=True)
     purchase_date = Column(DateTime(timezone=True), nullable=True)

@@ -5,9 +5,10 @@ import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
 
 // Change this number to force galaxy regeneration during development
-const GALAXY_VERSION = 29;
+const GALAXY_VERSION = 31;
 const MEDIUM_DETAIL_DISTANCE = 320;
 const COLOR_RAMP_START = 55;
+const GALAXY_BRIGHTNESS_SCALE = 0.5;
 
 const overlayNoise = `
 float hash13(vec3 p) {
@@ -295,11 +296,11 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
 
         return {
             // Inner bright core - white-yellow center fading to warm orange
-            inner: createMaterial('#FFFFF5', '#FFC060', 0.84, 0.8),
+            inner: createMaterial('#FFFFF5', '#FFC060', 0.84 * GALAXY_BRIGHTNESS_SCALE, 0.8),
             // Duplicate layer for extra brightness at core center
-            innerBright: createMaterial('#FFFFF5', '#FFD080', 0.42, 0.6),
+            innerBright: createMaterial('#FFFFF5', '#FFD080', 0.42 * GALAXY_BRIGHTNESS_SCALE, 0.6),
             // Outer aura - warm amber glow, softer falloff
-            outerAura: createMaterial('#DDAA77', '#664422', 0.63, 1.2),
+            outerAura: createMaterial('#DDAA77', '#664422', 0.63 * GALAXY_BRIGHTNESS_SCALE, 1.2),
         };
     }, []);
 
@@ -464,7 +465,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
                     sizeAttenuation={true}
                     vertexColors={true}
                     transparent={true}
-                    opacity={0.04}
+                    opacity={0.04 * GALAXY_BRIGHTNESS_SCALE}
                     depthWrite={false}
                     blending={THREE.AdditiveBlending}
                 />
@@ -492,7 +493,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
                     sizeAttenuation={true}
                     vertexColors={true}
                     transparent={true}
-                    opacity={0.15}
+                    opacity={0.15 * GALAXY_BRIGHTNESS_SCALE}
                     depthWrite={false}
                     blending={THREE.AdditiveBlending}
                 />

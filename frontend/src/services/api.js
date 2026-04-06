@@ -120,3 +120,12 @@ export async function fetchAccountOverview() {
 export async function fetchAccountOrder(transactionId) {
     return apiRequest(`/account/orders/${transactionId}`);
 }
+
+export async function updateOwnedStarPrice(starId, askPrice) {
+    return apiRequest(`/account/stars/${starId}/price`, {
+        method: 'PATCH',
+        body: {
+            ask_price: askPrice,
+        },
+    });
+}

@@ -11,3 +11,4 @@ email-validator
 google-auth
 requests
 stripe
+tzdata

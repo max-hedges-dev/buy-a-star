@@ -14,6 +14,18 @@ class AccountStarSummary(BaseModel):
     spectral_type: str | None = None
     purchase_date: datetime | None = None
     registration_number: str | None = None
+    ask_price: float | None = None
+    model_value: float | None = None
+
+
+class AccountStarPriceUpdateRequest(BaseModel):
+    ask_price: float | None = None
+
+
+class AccountStarPriceUpdateResponse(BaseModel):
+    star_id: int
+    ask_price: float | None = None
+    model_value: float | None = None
 
 
 class AccountOrderSummary(BaseModel):

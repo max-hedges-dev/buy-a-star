@@ -79,7 +79,9 @@ async def seed():
                 variable_designation=s.get('variable_designation'),
                 variable_min=s.get('variable_min'),
                 variable_max=s.get('variable_max'),
-                price=s.get('price', 12.99),
+                price=s.get('price', settings.STAR_ISSUE_PRICE),
+                gaia_source_id=str(s.get('source_id')) if s.get('source_catalog') == 'Gaia DR3' and s.get('source_id') is not None else None,
+                issue_price=settings.STAR_ISSUE_PRICE,
                 is_bought=False
             ))
 

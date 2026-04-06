@@ -4,9 +4,10 @@ import { Stars } from '@react-three/drei';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
 import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2, Truck } from 'lucide-react';
-import { createCheckoutSession, fetchCheckoutOptions } from '../services/api';
+import { createCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
+import StarValueChart from './StarValueChart';
 
 const formatMaybeNumber = (value, digits = 2) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -110,6 +111,19 @@ const formatMoney = (amount, currency) =>
         currency: (currency || 'gbp').toUpperCase(),
     }).format(amount);
 
+const formatSterling = (amount) =>
+    new Intl.NumberFormat('en-GB', {
+        style: 'currency',
+        currency: 'GBP',
+    }).format(amount || 0);
+
+const formatMarketValue = (amount, emptyLabel = 'Not listed') => {
+    if (typeof amount !== 'number' || Number.isNaN(amount)) {
+        return emptyLabel;
+    }
+    return formatSterling(amount);
+};
+
 const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -126,11 +140,41 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [starDetail, setStarDetail] = useState(star);
+    const [starDetailStatus, setStarDetailStatus] = useState('idle');
 
     const regionNames = useMemo(
         () => (typeof Intl.DisplayNames !== 'undefined' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null),
         []
     );
+    const activeStar = starDetail || star;
+    const valuationHistory = activeStar.valuation_history || [];
+
+    useEffect(() => {
+        let isActive = true;
+        setStarDetail(star);
+        setStarDetailStatus('loading');
+
+        fetchStarById(star.id)
+            .then((data) => {
+                if (!isActive) {
+                    return;
+                }
+                setStarDetail(data);
+                setStarDetailStatus('ready');
+            })
+            .catch((detailError) => {
+                console.error(detailError);
+                if (!isActive) {
+                    return;
+                }
+                setStarDetailStatus('error');
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [star.id]);
 
     useEffect(() => {
         const loadCheckoutOptions = async () => {
@@ -173,7 +217,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         () => checkoutOptions.find((option) => option.code === certificateType) || checkoutOptions[0] || null,
         [certificateType, checkoutOptions]
     );
-    const basePrice = star.common_name ? namedStarPrice : unnamedStarPrice;
+    const basePrice = activeStar.common_name ? namedStarPrice : unnamedStarPrice;
     const certificatePrice = selectedCertificateOption?.price || 0;
     const shippingPrice = selectedCertificateOption?.shipping_amount || 0;
     const total = basePrice + certificatePrice + shippingPrice;
@@ -340,35 +384,35 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
                     <div style={{ paddingLeft: '54px' }}>
                     <h1 style={{ fontSize: '3.5rem', marginBottom: '5px', fontFamily: 'serif', color: 'white' }}>
-                        {star.common_name || star.scientific_name}
+                        {activeStar.common_name || activeStar.scientific_name}
                     </h1>
 
-                    {star.common_name && star.scientific_name && (
+                    {activeStar.common_name && activeStar.scientific_name && (
                         <div style={{ color: '#8e8e9c', marginBottom: '18px', fontSize: '1rem' }}>
-                            {star.scientific_name}
+                            {activeStar.scientific_name}
                         </div>
                     )}
 
                     <div style={{ display: 'flex', gap: '15px', marginBottom: '18px', flexWrap: 'wrap' }}>
                         <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                            {star.category}
+                            {activeStar.category}
                         </span>
                         <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                            {star.distance_ly} ly away
+                            {activeStar.distance_ly} ly away
                         </span>
-                        {star.spectral_type && (
+                        {activeStar.spectral_type && (
                             <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                                Spectral Type: {star.spectral_type}
+                                Spectral Type: {activeStar.spectral_type}
                             </span>
                         )}
-                        {typeof star.apparent_magnitude === 'number' && (
+                        {typeof activeStar.apparent_magnitude === 'number' && (
                             <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                                Apparent Mag: {formatMaybeNumber(star.apparent_magnitude)}
+                                Apparent Mag: {formatMaybeNumber(activeStar.apparent_magnitude)}
                             </span>
                         )}
                     </div>
 
-                    {star.is_bought ? (
+                    {activeStar.is_bought ? (
                         <div
                             style={{
                                 background: 'linear-gradient(135deg, rgba(26,40,30,0.92) 0%, rgba(14,20,18,0.9) 100%)',
@@ -384,7 +428,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 <CheckCircle2 size={22} /> CURRENT OWNER
                             </div>
                             <div style={{ fontSize: '1.9rem', fontFamily: 'serif', marginBottom: '8px' }}>
-                                {star.owner_name}
+                                {activeStar.owner_name}
                             </div>
                             <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap', color: '#9aa89a', fontSize: '0.9rem' }}>
                                 <div>
@@ -393,12 +437,12 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                     </span>
                                     Claimed and recorded in the registry
                                 </div>
-                                {star.purchase_date && (
+                                {activeStar.purchase_date && (
                                     <div>
                                         <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
                                             Owned Since
                                         </span>
-                                        {new Date(star.purchase_date).toLocaleDateString()}
+                                        {new Date(activeStar.purchase_date).toLocaleDateString()}
                                     </div>
                                 )}
                             </div>
@@ -429,53 +473,91 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
                     <div
                         style={{
+                            background: 'rgba(18, 18, 24, 0.86)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '20px',
+                            padding: '24px',
+                            marginBottom: '26px',
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '18px' }}>
+                            <div>
+                                <div style={{ color: '#ff8a4d', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>
+                                    Valuation
+                                </div>
+                                <div style={{ color: 'white', fontSize: '1.45rem', fontWeight: 'bold' }}>
+                                    Single-line house value model
+                                </div>
+                            </div>
+                            <div style={{ color: '#8f8f99', fontSize: '0.88rem', textAlign: 'right' }}>
+                                {activeStar.model_value_last_calculated_at
+                                    ? `Updated ${new Date(activeStar.model_value_last_calculated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                                    : starDetailStatus === 'loading'
+                                        ? 'Loading valuation data...'
+                                        : activeStar.valuation_eligible
+                                            ? 'Awaiting next daily snapshot'
+                                            : 'Valuation unavailable'}
+                            </div>
+                        </div>
+
+                        <StarValueChart points={valuationHistory} currencyFormatter={formatSterling} />
+
+                        {activeStar.last_sale_price || activeStar.last_sale_at ? (
+                            <div style={{ color: '#8f8f99', fontSize: '0.9rem', marginTop: '14px' }}>
+                                Last sale: {formatMarketValue(activeStar.last_sale_price)}{activeStar.last_sale_at ? ` on ${new Date(activeStar.last_sale_at).toLocaleDateString('en-GB')}` : ''}
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div
+                        style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                             gap: '12px',
                             marginBottom: '30px',
                         }}
                     >
-                        {typeof star.luminosity === 'number' && (
+                        {typeof activeStar.luminosity === 'number' && (
                             <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
                                 <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
                                     Luminosity
                                 </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(star.luminosity, 3)} Lsol</div>
+                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(activeStar.luminosity, 3)} Lsol</div>
                             </div>
                         )}
-                        {typeof star.absolute_magnitude === 'number' && (
+                        {typeof activeStar.absolute_magnitude === 'number' && (
                             <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
                                 <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
                                     Absolute Magnitude
                                 </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(star.absolute_magnitude)}</div>
+                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(activeStar.absolute_magnitude)}</div>
                             </div>
                         )}
-                        {star.constellation && (
+                        {activeStar.constellation && (
                             <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
                                 <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
                                     Constellation
                                 </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{star.constellation}</div>
+                                <div style={{ color: 'white', fontSize: '1rem' }}>{activeStar.constellation}</div>
                             </div>
                         )}
-                        {typeof star.color_index === 'number' && (
+                        {typeof activeStar.color_index === 'number' && (
                             <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
                                 <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
                                     Color Index
                                 </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(star.color_index, 3)}</div>
+                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(activeStar.color_index, 3)}</div>
                             </div>
                         )}
                     </div>
 
                     <p style={{ color: '#aaa', lineHeight: 1.6, marginBottom: '40px', fontSize: '1.05rem' }}>
-                        This {star.category.toLowerCase()} is located {star.distance_ly} light years from Earth.
-                        {star.spectral_type ? ` Its spectral classification is ${star.spectral_type}.` : ''}
-                        {typeof star.apparent_magnitude === 'number' ? ` It shines at an apparent magnitude of ${formatMaybeNumber(star.apparent_magnitude)}.` : ''}
+                        This {activeStar.category.toLowerCase()} is located {activeStar.distance_ly} light years from Earth.
+                        {activeStar.spectral_type ? ` Its spectral classification is ${activeStar.spectral_type}.` : ''}
+                        {typeof activeStar.apparent_magnitude === 'number' ? ` It shines at an apparent magnitude of ${formatMaybeNumber(activeStar.apparent_magnitude)}.` : ''}
                     </p>
 
-                    {star.is_bought ? null : (
+                    {activeStar.is_bought ? null : (
                         <div
                             style={{
                                 background: 'rgba(20, 20, 30, 0.8)',

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,8 @@ from app.schemas.account import (
     AccountOrderDetail,
     AccountOrderSummary,
     AccountOverviewResponse,
+    AccountStarPriceUpdateRequest,
+    AccountStarPriceUpdateResponse,
     AccountStarSummary,
 )
 from app.services.certificate_options import certificate_label
@@ -34,6 +37,8 @@ def _star_summary(star: Star, transaction: Transaction) -> AccountStarSummary:
         spectral_type=star.spectral_type,
         purchase_date=star.purchase_date,
         registration_number=transaction.registration_number,
+        ask_price=float(star.ask_price) if star.ask_price is not None else None,
+        model_value=float(star.model_value) if star.model_value is not None else None,
     )
 
 
@@ -101,4 +106,45 @@ async def read_account_order(
     return AccountOrderDetail(
         **summary.model_dump(),
         certificate_available=transaction.includes_certificate and transaction.status == "fulfilled",
+    )
+
+
+@router.patch("/stars/{star_id}/price", response_model=AccountStarPriceUpdateResponse)
+async def update_owned_star_price(
+    star_id: int,
+    payload: AccountStarPriceUpdateRequest,
+    current_user: User = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AccountStarPriceUpdateResponse:
+    result = await db.execute(
+        select(Transaction, Star)
+        .join(Star, Star.id == Transaction.star_id)
+        .where(
+            Star.id == star_id,
+            Transaction.user_id == current_user.id,
+            Transaction.status == "fulfilled",
+        )
+        .order_by(Transaction.fulfilled_at.desc().nullslast(), Transaction.id.desc())
+    )
+    row = result.first()
+
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owned star not found.")
+
+    _, star = row
+    ask_price = payload.ask_price
+    if ask_price is not None:
+        if ask_price <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner price must be greater than zero.")
+        star.ask_price = Decimal(str(ask_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    else:
+        star.ask_price = None
+
+    await db.commit()
+    await db.refresh(star)
+
+    return AccountStarPriceUpdateResponse(
+        star_id=star.id,
+        ask_price=float(star.ask_price) if star.ask_price is not None else None,
+        model_value=float(star.model_value) if star.model_value is not None else None,
     )

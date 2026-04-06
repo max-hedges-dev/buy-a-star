@@ -1,6 +1,17 @@
-from pydantic import BaseModel
+from datetime import date, datetime
 from typing import Optional
-from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class StarValuationHistoryPointRead(BaseModel):
+    valuation_date: date
+    model_value: float
+    energy_price: Optional[float] = None
+    metals_price: Optional[float] = None
+    energy_change_ratio: Optional[float] = None
+    metals_change_ratio: Optional[float] = None
+
 
 class StarBase(BaseModel):
     scientific_name: str
@@ -13,9 +24,20 @@ class StarBase(BaseModel):
     display_name: Optional[str] = None
     category: str
     price: float
+    first_purchase_price: float
+    model_value: Optional[float] = None
+    ask_price: Optional[float] = None
+    highest_bid: Optional[float] = None
+    last_sale_price: Optional[float] = None
+    last_sale_at: Optional[datetime] = None
     distance_ly: float
     is_bought: bool = False
     owner_name: Optional[str] = None
+    purchase_date: Optional[datetime] = None
+    valuation_eligible: bool = False
+    valuation_missing_metrics: Optional[list[str]] = None
+    model_value_last_calculated_at: Optional[datetime] = None
+    gaia_source_id: Optional[str] = None
     hyg_id: Optional[int] = None
     hip: Optional[int] = None
     hd: Optional[int] = None
@@ -46,18 +68,27 @@ class StarBase(BaseModel):
     variable_min: Optional[float] = None
     variable_max: Optional[float] = None
 
-class StarCreate(StarBase):
-    pass
 
-class StarRead(StarBase):
+class StarListRead(StarBase):
     id: int
     x: float
     y: float
     z: float
-    purchase_date: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+
+class StarDetailRead(StarListRead):
+    phot_g_mean_mag: Optional[float] = None
+    parallax: Optional[float] = None
+    lum_flame: Optional[float] = None
+    teff_gspphot: Optional[float] = None
+    mh_gspphot: Optional[float] = None
+    non_single_star: Optional[bool] = None
+    phot_variable_flag: Optional[str] = None
+    best_class_name: Optional[str] = None
+    radius_flame: Optional[float] = None
+    age_flame: Optional[float] = None
+    valuation_history: list[StarValuationHistoryPointRead] = []
+
 
 class StarPurchaseRequest(BaseModel):
     owner_name: str

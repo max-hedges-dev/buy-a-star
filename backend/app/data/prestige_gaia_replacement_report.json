@@ -1,0 +1,342 @@
+{
+  "seed": 42,
+  "requested_replacements": 300,
+  "target_value_band": [
+    30.0,
+    100.0
+  ],
+  "shells": {
+    "0-100 pc": {
+      "targets_available": 87,
+      "requested_top_per_ordering": 80,
+      "candidate_rows": 214,
+      "candidates_scored": 190,
+      "selected_replacements": 14,
+      "ordering_diagnostics": [
+        {
+          "ordering": "luminosity",
+          "used_top": 125,
+          "rows": 125,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "mass",
+          "used_top": 125,
+          "rows": 125,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "radius",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "age",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        }
+      ]
+    },
+    "100-200 pc": {
+      "targets_available": 430,
+      "requested_top_per_ordering": 80,
+      "candidate_rows": 227,
+      "candidates_scored": 208,
+      "selected_replacements": 4,
+      "ordering_diagnostics": [
+        {
+          "ordering": "luminosity",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "mass",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "radius",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "age",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        }
+      ]
+    },
+    "200-400 pc": {
+      "targets_available": 315,
+      "requested_top_per_ordering": 80,
+      "candidate_rows": 266,
+      "candidates_scored": 257,
+      "selected_replacements": 4,
+      "ordering_diagnostics": [
+        {
+          "ordering": "luminosity",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "mass",
+          "used_top": 125,
+          "rows": 125,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "radius",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "age",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        }
+      ]
+    },
+    "400-800 pc": {
+      "targets_available": 532,
+      "requested_top_per_ordering": 80,
+      "candidate_rows": 287,
+      "candidates_scored": 285,
+      "selected_replacements": 0,
+      "ordering_diagnostics": [
+        {
+          "ordering": "luminosity",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "mass",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "radius",
+          "used_top": 125,
+          "rows": 125,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "age",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        }
+      ]
+    },
+    "800-1600 pc": {
+      "targets_available": 566,
+      "requested_top_per_ordering": 80,
+      "candidate_rows": 331,
+      "candidates_scored": 331,
+      "selected_replacements": 0,
+      "ordering_diagnostics": [
+        {
+          "ordering": "luminosity",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "mass",
+          "used_top": 125,
+          "rows": 125,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "radius",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "age",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        }
+      ]
+    },
+    "1600-3200 pc": {
+      "targets_available": 574,
+      "requested_top_per_ordering": 80,
+      "candidate_rows": 298,
+      "candidates_scored": 298,
+      "selected_replacements": 0,
+      "ordering_diagnostics": [
+        {
+          "ordering": "luminosity",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "mass",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "radius",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        },
+        {
+          "ordering": "age",
+          "used_top": 80,
+          "rows": 80,
+          "status": "ok",
+          "error": ""
+        }
+      ]
+    }
+  },
+  "dry_run": true,
+  "run_at": "2026-04-07T00:31:22.573300+00:00",
+  "completed_replacements": 22,
+  "sample_replacements": [
+    {
+      "star_id": 51581,
+      "new_source_id": "6768690548071651072",
+      "old_distance_pc": 79.826,
+      "new_distance_pc": 80.922,
+      "predicted_value": 30.67
+    },
+    {
+      "star_id": 53001,
+      "new_source_id": "3538643831716891904",
+      "old_distance_pc": 70.636,
+      "new_distance_pc": 70.878,
+      "predicted_value": 30.08
+    },
+    {
+      "star_id": 49809,
+      "new_source_id": "5381155355407638400",
+      "old_distance_pc": 67.15,
+      "new_distance_pc": 69.288,
+      "predicted_value": 31.22
+    },
+    {
+      "star_id": 49277,
+      "new_source_id": "4094816154992870144",
+      "old_distance_pc": 82.296,
+      "new_distance_pc": 84.835,
+      "predicted_value": 30.28
+    },
+    {
+      "star_id": 53256,
+      "new_source_id": "243466822542773248",
+      "old_distance_pc": 71.367,
+      "new_distance_pc": 72.85,
+      "predicted_value": 30.35
+    },
+    {
+      "star_id": 49811,
+      "new_source_id": "1351701838132169472",
+      "old_distance_pc": 44.253,
+      "new_distance_pc": 43.665,
+      "predicted_value": 30.82
+    },
+    {
+      "star_id": 48819,
+      "new_source_id": "3831963881551912576",
+      "old_distance_pc": 86.561,
+      "new_distance_pc": 86.786,
+      "predicted_value": 30.05
+    },
+    {
+      "star_id": 48925,
+      "new_source_id": "1942527533757602176",
+      "old_distance_pc": 53.427,
+      "new_distance_pc": 60.225,
+      "predicted_value": 30.48
+    },
+    {
+      "star_id": 50860,
+      "new_source_id": "6355841524023560832",
+      "old_distance_pc": 70.969,
+      "new_distance_pc": 73.725,
+      "predicted_value": 30.32
+    },
+    {
+      "star_id": 52339,
+      "new_source_id": "706858471967571328",
+      "old_distance_pc": 73.213,
+      "new_distance_pc": 75.123,
+      "predicted_value": 30.51
+    },
+    {
+      "star_id": 53762,
+      "new_source_id": "1750554388392102016",
+      "old_distance_pc": 65.275,
+      "new_distance_pc": 63.308,
+      "predicted_value": 30.46
+    },
+    {
+      "star_id": 48822,
+      "new_source_id": "1894698507367805568",
+      "old_distance_pc": 95.701,
+      "new_distance_pc": 96.147,
+      "predicted_value": 34.04
+    },
+    {
+      "star_id": 50487,
+      "new_source_id": "284694351053495296",
+      "old_distance_pc": 82.905,
+      "new_distance_pc": 40.682,
+      "predicted_value": 30.14
+    },
+    {
+      "star_id": 51357,
+      "new_source_id": "6617542093345362432",
+      "old_distance_pc": 58.989,
+      "new_distance_pc": 33.467,
+      "predicted_value": 30.53
+    },
+    {
+      "star_id": 52044,
+      "new_source_id": "3311329732637946112",
+      "old_distance_pc": 153.116,
+      "new_distance_pc": 148.837,
+      "predicted_value": 30.0
+    }
+  ]
+}

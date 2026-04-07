@@ -72,6 +72,9 @@ SPECTRAL_AGES = {
 def apply_metrics_to_star(star: Star, candidate) -> None:
     star.gaia_source_id = candidate.source_id
     star.phot_g_mean_mag = candidate.phot_g_mean_mag
+    star.bp_rp = candidate.bp_rp
+    star.bp_g = candidate.bp_g
+    star.g_rp = candidate.g_rp
     star.parallax = candidate.parallax
     star.lum_flame = candidate.lum_flame
     star.teff_gspphot = candidate.teff_gspphot
@@ -80,12 +83,18 @@ def apply_metrics_to_star(star: Star, candidate) -> None:
     star.phot_variable_flag = candidate.phot_variable_flag
     star.best_class_name = candidate.best_class_name
     star.radius_flame = candidate.radius_flame
+    star.mass_flame = candidate.mass_flame
     star.age_flame = candidate.age_flame
+    star.evolstage_flame = candidate.evolstage_flame
+    star.classprob_dsc_combmod_binarystar = candidate.classprob_dsc_combmod_binarystar
 
 
 def apply_solar_metrics(star: Star) -> None:
     star.gaia_source_id = "SOL"
     star.phot_g_mean_mag = -26.9
+    star.bp_rp = 0.82
+    star.bp_g = 0.33
+    star.g_rp = 0.49
     star.parallax = 1_000_000.0
     star.lum_flame = 1.0
     star.teff_gspphot = 5772.0
@@ -94,7 +103,10 @@ def apply_solar_metrics(star: Star) -> None:
     star.phot_variable_flag = "CONSTANT"
     star.best_class_name = "SOLAR_LIKE"
     star.radius_flame = 1.0
+    star.mass_flame = 1.0
     star.age_flame = 4.6
+    star.evolstage_flame = 1.0
+    star.classprob_dsc_combmod_binarystar = 0.0
 
 
 def approximate_temperature_from_spectral_type(spectral_type: str | None) -> float:
@@ -136,6 +148,36 @@ def classify_named_star(star: Star, temperature: float, variable_flag: str) -> s
     return "SOLAR_LIKE"
 
 
+def approximate_mass_from_luminosity(luminosity: float, category: str | None) -> float:
+    if luminosity <= 0:
+        return 1.0
+    base_mass = max(0.08, luminosity ** (1.0 / 3.5))
+    normalized_category = (category or "").upper()
+    if "SUPERGIANT" in normalized_category:
+        return min(60.0, max(base_mass, 12.0))
+    if "GIANT" in normalized_category:
+        return min(20.0, max(base_mass, 2.0))
+    if "SUBGIANT" in normalized_category:
+        return min(8.0, max(base_mass, 1.2))
+    if "WHITE DWARF" in normalized_category:
+        return min(1.4, max(0.5, base_mass * 0.5))
+    return min(20.0, base_mass)
+
+
+def approximate_evolstage(category: str | None, spectral_type: str | None) -> float:
+    normalized_category = (category or "").upper()
+    normalized_spectral = (spectral_type or "").upper()
+    if "SUPERGIANT" in normalized_category:
+        return 6.0
+    if "GIANT" in normalized_category:
+        return 4.0
+    if "SUBGIANT" in normalized_category:
+        return 3.0
+    if "WHITE DWARF" in normalized_category or normalized_spectral.startswith("D"):
+        return 7.0
+    return 1.0
+
+
 def apply_named_star_fallback_metrics(star: Star) -> None:
     distance_pc = float(star.distance_parsecs or 0.0)
     luminosity = max(float(star.luminosity or 1.0), 0.01)
@@ -159,8 +201,17 @@ def apply_named_star_fallback_metrics(star: Star) -> None:
     metallicity = 0.0
     if star.color_index is not None:
         metallicity = max(-0.6, min(0.5, (0.65 - float(star.color_index)) * 0.25))
+    mass = approximate_mass_from_luminosity(luminosity, star.category)
+    evolstage = approximate_evolstage(star.category, star.spectral_type)
+    proper_motion = None
+    if star.pmra is not None and star.pmdec is not None:
+        proper_motion = math.sqrt(float(star.pmra) ** 2 + float(star.pmdec) ** 2)
+    binary_probability = 0.85 if non_single_star else 0.12
 
     star.phot_g_mean_mag = float(star.apparent_magnitude or star.absolute_magnitude or 0.0)
+    star.bp_rp = float(star.color_index) if star.color_index is not None else None
+    star.bp_g = None
+    star.g_rp = None
     star.parallax = max(0.01, 1000.0 / distance_pc) if distance_pc > 0 else 1_000_000.0
     star.lum_flame = luminosity
     star.teff_gspphot = temperature
@@ -169,7 +220,11 @@ def apply_named_star_fallback_metrics(star: Star) -> None:
     star.phot_variable_flag = variable_flag
     star.best_class_name = classify_named_star(star, temperature, variable_flag)
     star.radius_flame = radius
+    star.mass_flame = mass
     star.age_flame = approximate_age_from_spectral_type(star.spectral_type)
+    star.evolstage_flame = evolstage
+    star.classprob_dsc_combmod_binarystar = binary_probability
+    star.pm = proper_motion
 
 
 def replace_star_identity_from_candidate(star: Star, candidate) -> None:
@@ -202,7 +257,41 @@ def replace_star_identity_from_candidate(star: Star, candidate) -> None:
     star.absolute_magnitude = candidate.absolute_magnitude
     star.luminosity = candidate.luminosity
     star.color_index = candidate.color_index
+    star.radial_velocity = candidate.radial_velocity
+    star.pm = candidate.pm
+    star.pmra = candidate.pmra
+    star.pmdec = candidate.pmdec
     apply_metrics_to_star(star, candidate)
+
+
+def hydrate_existing_gaia_star_from_candidate(star: Star, candidate) -> None:
+    star.category = candidate.category
+    star.constellation = candidate.constellation
+    star.spectral_type = candidate.spectral_type
+    star.apparent_magnitude = candidate.phot_g_mean_mag
+    star.absolute_magnitude = candidate.absolute_magnitude
+    star.luminosity = candidate.luminosity
+    star.color_index = candidate.color_index
+    star.radial_velocity = candidate.radial_velocity
+    star.pm = candidate.pm
+    star.pmra = candidate.pmra
+    star.pmdec = candidate.pmdec
+    apply_metrics_to_star(star, candidate)
+
+
+def apply_secondary_metric_fallbacks(star: Star) -> None:
+    if star.bp_rp is None and star.color_index is not None:
+        star.bp_rp = float(star.color_index)
+    if star.pm is None and star.pmra is not None and star.pmdec is not None:
+        star.pm = math.sqrt(float(star.pmra) ** 2 + float(star.pmdec) ** 2)
+    if star.mass_flame is None:
+        luminosity = float(star.lum_flame or star.luminosity or 0.0)
+        if luminosity > 0:
+            star.mass_flame = approximate_mass_from_luminosity(luminosity, star.category)
+    if star.evolstage_flame is None:
+        star.evolstage_flame = approximate_evolstage(star.category, star.spectral_type)
+    if star.classprob_dsc_combmod_binarystar is None and star.non_single_star is not None:
+        star.classprob_dsc_combmod_binarystar = 0.85 if star.non_single_star else 0.05
 
 
 def assign_radial_bin(distance_pc: float, bin_edges: list[float]) -> int:
@@ -458,6 +547,11 @@ async def main() -> None:
             and not star.is_bought
             and transaction_counts.get(star.id, 0) == 0
         ]
+        current_generic_source_ids = [
+            str(star.gaia_source_id or star.source_id or "").strip()
+            for star in rebalanceable_generic_stars
+            if str(star.gaia_source_id or star.source_id or "").strip()
+        ]
         reserved_source_ids -= {
             str(star.gaia_source_id or star.source_id or "").strip()
             for star in rebalanceable_generic_stars
@@ -474,52 +568,61 @@ async def main() -> None:
             "required_metrics": list(REQUIRED_PRICING_METRICS),
         }
 
-        balanced_pool, pool_diagnostics = fetch_balanced_eligible_valuation_pool(
-            distance_bins_pc=VALUATION_DISTANCE_BINS_PC,
-            top_per_bin=VALUATION_TOP_PER_BIN,
-        )
-        report["eligible_pool_by_distance_bin"] = pool_diagnostics
-
-        rebalance_candidates = [
-            candidate
-            for candidate in balanced_pool
-            if candidate.source_id not in reserved_source_ids
-        ]
-        balanced_selection, balanced_selection_diagnostics = select_balanced_candidates(
-            rebalance_candidates,
-            len(rebalanceable_generic_stars),
-            VALUATION_DISTANCE_BINS_PC,
-        )
-        apply_ranked_renderer_positions(balanced_selection)
-        report["generic_rebalance"] = {
-            **balanced_selection_diagnostics,
-            "target_star_count": len(rebalanceable_generic_stars),
-            "available_candidate_count": len(rebalance_candidates),
-        }
-
-        if len(balanced_selection) < len(rebalanceable_generic_stars):
-            report["generic_rebalance"]["warning"] = (
-                f"Only {len(balanced_selection)} eligible Gaia candidates were selected for "
-                f"{len(rebalanceable_generic_stars)} generic stars."
-            )
-
         generic_targets = sorted(
             rebalanceable_generic_stars,
             key=lambda item: (float(item.distance_parsecs or 0.0), item.id),
         )
-        balanced_replacements = sorted(
-            balanced_selection,
-            key=lambda item: (item.distance_parsecs, int(item.source_id)),
-        )
-        selected_replacement_by_star_id = {
-            star.id: candidate
-            for star, candidate in zip(generic_targets, balanced_replacements)
-        }
-        report["replaced"] = len(selected_replacement_by_star_id)
+        selected_replacement_by_star_id = {}
+        try:
+            balanced_pool, pool_diagnostics = fetch_balanced_eligible_valuation_pool(
+                distance_bins_pc=VALUATION_DISTANCE_BINS_PC,
+                top_per_bin=VALUATION_TOP_PER_BIN,
+            )
+            report["eligible_pool_by_distance_bin"] = pool_diagnostics
 
-        for star in generic_targets:
-            star.scientific_name = f"__REBALANCE_PENDING__{star.id}"
-        await db.flush()
+            rebalance_candidates = [
+                candidate
+                for candidate in balanced_pool
+                if candidate.source_id not in reserved_source_ids
+            ]
+            balanced_selection, balanced_selection_diagnostics = select_balanced_candidates(
+                rebalance_candidates,
+                len(rebalanceable_generic_stars),
+                VALUATION_DISTANCE_BINS_PC,
+            )
+            apply_ranked_renderer_positions(balanced_selection)
+            report["generic_rebalance"] = {
+                **balanced_selection_diagnostics,
+                "target_star_count": len(rebalanceable_generic_stars),
+                "available_candidate_count": len(rebalance_candidates),
+            }
+
+            if len(balanced_selection) < len(rebalanceable_generic_stars):
+                report["generic_rebalance"]["warning"] = (
+                    f"Only {len(balanced_selection)} eligible Gaia candidates were selected for "
+                    f"{len(rebalanceable_generic_stars)} generic stars."
+                )
+
+            balanced_replacements = sorted(
+                balanced_selection,
+                key=lambda item: (item.distance_parsecs, int(item.source_id)),
+            )
+            selected_replacement_by_star_id = {
+                star.id: candidate
+                for star, candidate in zip(generic_targets, balanced_replacements)
+            }
+            report["replaced"] = len(selected_replacement_by_star_id)
+        except Exception as exc:
+            report["generic_rebalance"] = {
+                "warning": f"Balanced Gaia replacement pool unavailable, preserving current distribution: {exc}",
+                "target_star_count": len(rebalanceable_generic_stars),
+            }
+            report["replaced"] = 0
+
+        if selected_replacement_by_star_id:
+            for star in generic_targets:
+                star.scientific_name = f"__REBALANCE_PENDING__{star.id}"
+            await db.flush()
 
         for star in stars:
             star.issue_price = money_decimal(settings.STAR_ISSUE_PRICE)
@@ -540,6 +643,8 @@ async def main() -> None:
                 current_source_id = str(star.gaia_source_id or star.source_id or "").strip()
                 if current_source_id:
                     reserved_source_ids.add(current_source_id)
+
+            apply_secondary_metric_fallbacks(star)
 
             missing = missing_valuation_metrics(star)
             star.valuation_eligible = not missing

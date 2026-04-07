@@ -15,6 +15,7 @@ import {
     getStarDisplayName,
     getVisibilityLabel,
 } from '../utils/ownership';
+import { getSpectralDisplay } from '../utils/starAppearance';
 
 const pageStyle = {
     minHeight: '100vh',
@@ -99,6 +100,7 @@ const OwnedStarPage = () => {
 
         return `${window.location.origin}${getPublicStarPath(order.star)}`;
     }, [order]);
+    const spectralDisplay = useMemo(() => (order ? getSpectralDisplay(order.star) : null), [order]);
 
     const handleCopyLink = async () => {
         if (!shareLink) {
@@ -244,10 +246,12 @@ const OwnedStarPage = () => {
                                             <span style={{ color: 'rgba(255,255,255,0.62)' }}>Distance</span>
                                             <strong style={{ textAlign: 'right' }}>{order.star.distance_ly.toFixed(2)} light years</strong>
                                         </div>
-                                        <div style={detailItemStyle}>
-                                            <span style={{ color: 'rgba(255,255,255,0.62)' }}>Spectral type</span>
-                                            <strong style={{ textAlign: 'right' }}>{order.star.spectral_type || 'Not listed'}</strong>
-                                        </div>
+                                        {spectralDisplay ? (
+                                            <div style={detailItemStyle}>
+                                                <span style={{ color: 'rgba(255,255,255,0.62)' }}>{spectralDisplay.label}</span>
+                                                <strong style={{ textAlign: 'right' }}>{spectralDisplay.value}</strong>
+                                            </div>
+                                        ) : null}
                                         <div style={detailItemStyle}>
                                             <span style={{ color: 'rgba(255,255,255,0.62)' }}>Delivery</span>
                                             <strong style={{ textAlign: 'right' }}>{getDeliveryLabel(order)}</strong>
@@ -296,10 +300,12 @@ const OwnedStarPage = () => {
                                                 <div style={{ color: 'rgba(255,255,255,0.58)', marginBottom: 6 }}>Distance from Earth</div>
                                                 <strong>{order.star.distance_ly.toFixed(2)} light years</strong>
                                             </div>
-                                            <div>
-                                                <div style={{ color: 'rgba(255,255,255,0.58)', marginBottom: 6 }}>Spectral type</div>
-                                                <strong>{order.star.spectral_type || 'Not listed'}</strong>
-                                            </div>
+                                            {spectralDisplay ? (
+                                                <div>
+                                                    <div style={{ color: 'rgba(255,255,255,0.58)', marginBottom: 6 }}>{spectralDisplay.label}</div>
+                                                    <strong>{spectralDisplay.value}</strong>
+                                                </div>
+                                            ) : null}
                                         </div>
                                     </section>
 

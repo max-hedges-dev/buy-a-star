@@ -8,6 +8,7 @@ import { createCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../s
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 import StarValueChart from './StarValueChart';
+import { getSpectralDisplay } from '../utils/starAppearance';
 
 const formatMaybeNumber = (value, digits = 2) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -149,6 +150,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     );
     const activeStar = starDetail || star;
     const valuationHistory = activeStar.valuation_history || [];
+    const spectralDisplay = useMemo(() => getSpectralDisplay(activeStar), [activeStar]);
 
     useEffect(() => {
         let isActive = true;
@@ -400,9 +402,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                         <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
                             {activeStar.distance_ly} ly away
                         </span>
-                        {activeStar.spectral_type && (
+                        {spectralDisplay && (
                             <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                                Spectral Type: {activeStar.spectral_type}
+                                {spectralDisplay.label}: {spectralDisplay.value}
                             </span>
                         )}
                         {typeof activeStar.apparent_magnitude === 'number' && (
@@ -553,7 +555,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
                     <p style={{ color: '#aaa', lineHeight: 1.6, marginBottom: '40px', fontSize: '1.05rem' }}>
                         This {activeStar.category.toLowerCase()} is located {activeStar.distance_ly} light years from Earth.
-                        {activeStar.spectral_type ? ` Its spectral classification is ${activeStar.spectral_type}.` : ''}
+                        {spectralDisplay ? ` ${spectralDisplay.sentence}` : ''}
                         {typeof activeStar.apparent_magnitude === 'number' ? ` It shines at an apparent magnitude of ${formatMaybeNumber(activeStar.apparent_magnitude)}.` : ''}
                     </p>
 

@@ -51,6 +51,9 @@ REQUIRED_PRICING_METRICS = (
 class GaiaValuationCandidate:
     source_id: str
     phot_g_mean_mag: float
+    bp_rp: Optional[float]
+    bp_g: Optional[float]
+    g_rp: Optional[float]
     parallax: float
     lum_flame: float
     teff_gspphot: float
@@ -59,7 +62,10 @@ class GaiaValuationCandidate:
     phot_variable_flag: str
     best_class_name: str
     radius_flame: float
+    mass_flame: Optional[float]
     age_flame: float
+    evolstage_flame: Optional[float]
+    classprob_dsc_combmod_binarystar: Optional[float]
     ra_degrees: float
     dec_degrees: float
     distance_parsecs: float
@@ -72,6 +78,10 @@ class GaiaValuationCandidate:
     distance_ly: float
     galactic_longitude_deg: float
     galactic_latitude_deg: float
+    radial_velocity: Optional[float]
+    pm: Optional[float]
+    pmra: Optional[float]
+    pmdec: Optional[float]
     x_pc: float
     y_pc: float
     z_pc: float
@@ -106,21 +116,11 @@ def absolute_mag_from_distance(apparent_mag: float, distance_pc: float) -> Optio
     return apparent_mag - 5.0 * (math.log10(distance_pc) - 1.0)
 
 
-def derive_star_class_label(spectral_type: str) -> str:
+def _spectral_color_from_letter(spectral_type: str) -> Optional[str]:
     spectral = (spectral_type or "").strip().upper()
     if not spectral:
-        return "Yellow Dwarf"
+        return None
     primary = spectral[0]
-    if primary == "D":
-        return "White Dwarf"
-    if any(tag in spectral for tag in ("IA", "IAB", "IB")):
-        size = "Supergiant"
-    elif "III" in spectral or "II" in spectral:
-        size = "Giant"
-    elif "IV" in spectral:
-        size = "Subgiant"
-    else:
-        size = "Dwarf"
     color_map = {
         "O": "Blue",
         "B": "Blue-White",
@@ -136,7 +136,153 @@ def derive_star_class_label(spectral_type: str) -> str:
         "Y": "Red",
         "W": "Blue",
     }
-    color = color_map.get(primary, "Yellow")
+    return color_map.get(primary)
+
+
+def _spectral_color_from_temperature(teff_gspphot: Optional[float]) -> Optional[str]:
+    if teff_gspphot in (None, ""):
+        return None
+    teff = float(teff_gspphot)
+    if teff <= 0:
+        return None
+    if teff >= 30000:
+        return "Blue"
+    if teff >= 10000:
+        return "Blue-White"
+    if teff >= 7500:
+        return "White"
+    if teff >= 6000:
+        return "Yellow-White"
+    if teff >= 5200:
+        return "Yellow"
+    if teff >= 3700:
+        return "Orange"
+    return "Red"
+
+
+def _spectral_color_from_bp_rp(bp_rp: Optional[float]) -> Optional[str]:
+    if bp_rp in (None, ""):
+        return None
+    value = float(bp_rp)
+    if value <= -0.1:
+        return "Blue"
+    if value <= 0.15:
+        return "Blue-White"
+    if value <= 0.45:
+        return "White"
+    if value <= 0.75:
+        return "Yellow-White"
+    if value <= 1.05:
+        return "Yellow"
+    if value <= 1.55:
+        return "Orange"
+    return "Red"
+
+
+def _luminosity_size_label(
+    spectral_type: str,
+    radius_flame: Optional[float] = None,
+    lum_flame: Optional[float] = None,
+    absolute_magnitude: Optional[float] = None,
+    evolstage_flame: Optional[float] = None,
+    mass_flame: Optional[float] = None,
+    teff_gspphot: Optional[float] = None,
+) -> str:
+    spectral = (spectral_type or "").strip().upper()
+    if spectral.startswith("D"):
+        return "White Dwarf"
+    if any(tag in spectral for tag in ("IA", "IAB", "IB")):
+        return "Supergiant"
+    if "III" in spectral or "II" in spectral:
+        return "Giant"
+    if "IV" in spectral:
+        return "Subgiant"
+
+    radius = float(radius_flame) if radius_flame not in (None, "") else None
+    luminosity = float(lum_flame) if lum_flame not in (None, "") else None
+    abs_mag = float(absolute_magnitude) if absolute_magnitude not in (None, "") else None
+    evolstage = float(evolstage_flame) if evolstage_flame not in (None, "") else None
+    mass = float(mass_flame) if mass_flame not in (None, "") else None
+    teff = float(teff_gspphot) if teff_gspphot not in (None, "") else None
+
+    if (
+        radius is not None
+        and radius <= 0.15
+        and ((luminosity is not None and luminosity <= 1.0) or (abs_mag is not None and abs_mag >= 8.0))
+        and (teff is None or teff >= 4500)
+    ):
+        return "White Dwarf"
+
+    supergiant_signals = 0
+    if radius is not None and radius >= 100:
+        supergiant_signals += 1
+    if luminosity is not None and luminosity >= 2000:
+        supergiant_signals += 1
+    if abs_mag is not None and abs_mag <= -4.5:
+        supergiant_signals += 1
+    if mass is not None and mass >= 8:
+        supergiant_signals += 1
+    if evolstage is not None and evolstage >= 900:
+        supergiant_signals += 1
+    if supergiant_signals >= 3 or (
+        radius is not None and radius >= 150 and luminosity is not None and luminosity >= 1000
+    ):
+        return "Supergiant"
+
+    giant_signals = 0
+    if radius is not None and radius >= 10:
+        giant_signals += 1
+    if luminosity is not None and luminosity >= 30:
+        giant_signals += 1
+    if abs_mag is not None and abs_mag <= 1.0:
+        giant_signals += 1
+    if evolstage is not None and evolstage >= 500:
+        giant_signals += 1
+    if giant_signals >= 2:
+        return "Giant"
+
+    subgiant_signals = 0
+    if radius is not None and radius >= 2:
+        subgiant_signals += 1
+    if luminosity is not None and luminosity >= 3:
+        subgiant_signals += 1
+    if abs_mag is not None and abs_mag <= 3.5:
+        subgiant_signals += 1
+    if evolstage is not None and evolstage >= 350:
+        subgiant_signals += 1
+    if subgiant_signals >= 2:
+        return "Subgiant"
+
+    return "Dwarf"
+
+
+def derive_star_class_label(
+    spectral_type: str,
+    teff_gspphot: Optional[float] = None,
+    bp_rp: Optional[float] = None,
+    radius_flame: Optional[float] = None,
+    lum_flame: Optional[float] = None,
+    absolute_magnitude: Optional[float] = None,
+    evolstage_flame: Optional[float] = None,
+    mass_flame: Optional[float] = None,
+) -> str:
+    size = _luminosity_size_label(
+        spectral_type=spectral_type,
+        radius_flame=radius_flame,
+        lum_flame=lum_flame,
+        absolute_magnitude=absolute_magnitude,
+        evolstage_flame=evolstage_flame,
+        mass_flame=mass_flame,
+        teff_gspphot=teff_gspphot,
+    )
+    if size == "White Dwarf":
+        return "White Dwarf"
+    color = (
+        _spectral_color_from_temperature(teff_gspphot)
+        or _spectral_color_from_bp_rp(bp_rp)
+        or _spectral_color_from_letter(spectral_type)
+        or "Yellow"
+    )
     return f"{color} {size}"
 
 
@@ -256,10 +402,17 @@ SELECT TOP {top}
     gs.ra,
     gs.dec,
     gs.phot_g_mean_mag,
-    gs.parallax,
     gs.bp_rp,
+    gs.phot_bp_mean_mag,
+    gs.phot_rp_mean_mag,
+    gs.parallax,
+    gs.pm,
+    gs.pmra,
+    gs.pmdec,
+    gs.radial_velocity,
     gs.non_single_star,
     gs.phot_variable_flag,
+    gs.classprob_dsc_combmod_binarystar,
     ap.distance_gspphot,
     ap.mg_gspphot,
     ap.lum_flame,
@@ -267,7 +420,9 @@ SELECT TOP {top}
     ap.teff_gspphot,
     ap.mh_gspphot,
     ap.radius_flame,
+    ap.mass_flame,
     ap.age_flame,
+    ap.evolstage_flame,
     vc.best_class_name
 FROM gaiadr3.gaia_source gs
 JOIN gaiadr3.astrophysical_parameters ap ON gs.source_id = ap.source_id
@@ -497,14 +652,24 @@ def row_to_valuation_candidate(row: dict[str, str]) -> Optional[GaiaValuationCan
     dec_degrees = parse_float(row.get("dec"))
     phot_g_mean_mag = parse_float(row.get("phot_g_mean_mag"))
     parallax = parse_float(row.get("parallax"))
+    bp_rp = parse_float(row.get("bp_rp"))
+    phot_bp_mean_mag = parse_float(row.get("phot_bp_mean_mag"))
+    phot_rp_mean_mag = parse_float(row.get("phot_rp_mean_mag"))
     distance_parsecs = parse_float(row.get("distance_gspphot"))
     absolute_magnitude = parse_float(row.get("mg_gspphot"))
     lum_flame = parse_float(row.get("lum_flame"))
     teff_gspphot = parse_float(row.get("teff_gspphot"))
     mh_gspphot = parse_float(row.get("mh_gspphot"))
     radius_flame = parse_float(row.get("radius_flame"))
+    mass_flame = parse_float(row.get("mass_flame"))
     age_flame = parse_float(row.get("age_flame"))
+    evolstage_flame = parse_float(row.get("evolstage_flame"))
     color_index = parse_float(row.get("bp_rp"))
+    proper_motion = parse_float(row.get("pm"))
+    pmra = parse_float(row.get("pmra"))
+    pmdec = parse_float(row.get("pmdec"))
+    radial_velocity = parse_float(row.get("radial_velocity"))
+    binary_probability = parse_float(row.get("classprob_dsc_combmod_binarystar"))
     non_single_star = parse_bool(row.get("non_single_star"))
     phot_variable_flag = str(row.get("phot_variable_flag") or "").strip()
     best_class_name = str(row.get("best_class_name") or "").strip()
@@ -531,6 +696,14 @@ def row_to_valuation_candidate(row: dict[str, str]) -> Optional[GaiaValuationCan
 
     if absolute_magnitude is None:
         absolute_magnitude = absolute_mag_from_distance(phot_g_mean_mag, distance_parsecs)
+    bp_g = None
+    g_rp = None
+    if phot_bp_mean_mag is not None:
+        bp_g = phot_bp_mean_mag - phot_g_mean_mag
+    if phot_rp_mean_mag is not None:
+        g_rp = phot_g_mean_mag - phot_rp_mean_mag
+    if proper_motion is None and pmra is not None and pmdec is not None:
+        proper_motion = math.sqrt(pmra**2 + pmdec**2)
 
     coord = SkyCoord(ra=ra_degrees * u.deg, dec=dec_degrees * u.deg, distance=distance_parsecs * u.pc, frame="icrs")
     gal = coord.galactic
@@ -544,6 +717,9 @@ def row_to_valuation_candidate(row: dict[str, str]) -> Optional[GaiaValuationCan
     return GaiaValuationCandidate(
         source_id=source_id,
         phot_g_mean_mag=phot_g_mean_mag,
+        bp_rp=bp_rp if bp_rp is not None else color_index,
+        bp_g=bp_g,
+        g_rp=g_rp,
         parallax=parallax,
         lum_flame=lum_flame,
         teff_gspphot=teff_gspphot,
@@ -552,7 +728,10 @@ def row_to_valuation_candidate(row: dict[str, str]) -> Optional[GaiaValuationCan
         phot_variable_flag=phot_variable_flag,
         best_class_name=best_class_name,
         radius_flame=radius_flame,
+        mass_flame=mass_flame,
         age_flame=age_flame,
+        evolstage_flame=evolstage_flame,
+        classprob_dsc_combmod_binarystar=binary_probability,
         ra_degrees=ra_degrees,
         dec_degrees=dec_degrees,
         distance_parsecs=distance_parsecs,
@@ -561,10 +740,23 @@ def row_to_valuation_candidate(row: dict[str, str]) -> Optional[GaiaValuationCan
         spectral_type=spectral_type or "",
         color_index=color_index,
         constellation=constellation,
-        category=derive_star_class_label(spectral_type),
+        category=derive_star_class_label(
+            spectral_type,
+            teff_gspphot=teff_gspphot,
+            bp_rp=bp_rp if bp_rp is not None else color_index,
+            radius_flame=radius_flame,
+            lum_flame=lum_flame,
+            absolute_magnitude=absolute_magnitude,
+            evolstage_flame=evolstage_flame,
+            mass_flame=mass_flame,
+        ),
         distance_ly=distance_parsecs * 3.26156,
         galactic_longitude_deg=galactic_longitude_deg,
         galactic_latitude_deg=galactic_latitude_deg,
+        radial_velocity=radial_velocity,
+        pm=proper_motion,
+        pmra=pmra,
+        pmdec=pmdec,
         x_pc=x_pc,
         y_pc=y_pc,
         z_pc=z_pc,

@@ -3,6 +3,7 @@ import { useFrame, useThree, extend } from '@react-three/fiber';
 import { Html, shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import GalaxyGenerator from '../utils/GalaxyGenerator';
+import { getStarAppearance } from '../utils/starAppearance';
 
 // Change this number to force galaxy regeneration during development
 const GALAXY_VERSION = 31;
@@ -94,37 +95,7 @@ const GalaxyOverlayMaterial = shaderMaterial(
 
 extend({ GalaxyOverlayMaterial });
 
-const getGalaxyStarPalette = (star) => {
-    const category = star.category || '';
-    if (category.includes('Blue')) {
-        return {
-            surface: new THREE.Color('#2f97ff'),
-            bloom: new THREE.Color('#8fd8ff'),
-        };
-    }
-    if (category.includes('White')) {
-        return {
-            surface: new THREE.Color('#dbefff'),
-            bloom: new THREE.Color('#edf7ff'),
-        };
-    }
-    if (category.includes('Red Giant')) {
-        return {
-            surface: new THREE.Color('#ff8e4f'),
-            bloom: new THREE.Color('#ffc89f'),
-        };
-    }
-    if (category.includes('Red Dwarf')) {
-        return {
-            surface: new THREE.Color('#ff6847'),
-            bloom: new THREE.Color('#ffba96'),
-        };
-    }
-    return {
-        surface: new THREE.Color('#ffc44e'),
-        bloom: new THREE.Color('#ffe6a8'),
-    };
-};
+const getGalaxyStarPalette = (star) => getStarAppearance(star);
 
 const GalaxyStarOverlay = ({ star, distSq }) => {
     const materialRef = useRef();
@@ -224,11 +195,17 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
             tempObject.scale.set(scaleMulti, scaleMulti, scaleMulti);
             tempObject.updateMatrix();
             meshRef.current.setMatrixAt(i, tempObject.matrix);
+            const palette = getGalaxyStarPalette(star);
+            tempColor.copy(palette.surface).lerp(palette.bloom, 0.18);
+            meshRef.current.setColorAt(i, tempColor);
         });
         meshRef.current.instanceMatrix.needsUpdate = true;
-    }, [stars, tempObject]);
+        if (meshRef.current.instanceColor) {
+            meshRef.current.instanceColor.needsUpdate = true;
+        }
+    }, [stars, tempColor, tempObject]);
 
-    const starMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffffff }), []);
+    const starMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true }), []);
 
     // Soft particle texture
     const cloudTexture = useMemo(() => {

@@ -1,27 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { Eye } from 'lucide-react';
-
-const getPreviewPalette = (category) => {
-    if (!category) {
-        return { core: '#fff6de', glow: '#ffe6a8', rim: '#fffdf7' };
-    }
-    if (category.includes('Blue')) {
-        return { core: '#8fd4ff', glow: '#4ca8ff', rim: '#eef8ff' };
-    }
-    if (category.includes('White')) {
-        return { core: '#f4fbff', glow: '#b9dfff', rim: '#ffffff' };
-    }
-    if (category.includes('Red Giant')) {
-        return { core: '#ffc38f', glow: '#ff8c57', rim: '#fff0df' };
-    }
-    if (category.includes('Red Dwarf')) {
-        return { core: '#ffae8e', glow: '#ff6f4d', rim: '#ffe3d8' };
-    }
-    return { core: '#ffe08b', glow: '#ffbf47', rim: '#fff7d6' };
-};
+import { getStarAppearance } from '../utils/starAppearance';
 
 const StarTilePreview = ({ star }) => {
-    const palette = useMemo(() => getPreviewPalette(star.category), [star.category]);
+    const palette = useMemo(() => {
+        const appearance = getStarAppearance(star);
+        return {
+            core: appearance.previewCoreHex,
+            glow: appearance.previewGlowHex,
+            rim: appearance.previewRimHex,
+        };
+    }, [star]);
 
     return (
         <svg
@@ -33,18 +22,18 @@ const StarTilePreview = ({ star }) => {
             <defs>
                 <radialGradient id={`star-core-${star.id}`} cx="50%" cy="45%" r="52%">
                     <stop offset="0%" stopColor={palette.rim} />
-                    <stop offset="34%" stopColor={palette.core} />
-                    <stop offset="72%" stopColor={palette.glow} />
+                    <stop offset="20%" stopColor={palette.core} />
+                    <stop offset="62%" stopColor={palette.glow} />
                     <stop offset="100%" stopColor={palette.glow} />
                 </radialGradient>
                 <radialGradient id={`star-halo-${star.id}`} cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor={palette.rim} stopOpacity="0.55" />
-                    <stop offset="50%" stopColor={palette.glow} stopOpacity="0.18" />
+                    <stop offset="0%" stopColor={palette.core} stopOpacity="0.42" />
+                    <stop offset="46%" stopColor={palette.glow} stopOpacity="0.24" />
                     <stop offset="100%" stopColor={palette.glow} stopOpacity="0" />
                 </radialGradient>
                 <radialGradient id={`star-corona-${star.id}`} cx="50%" cy="50%" r="50%">
-                    <stop offset="52%" stopColor={palette.glow} stopOpacity="0.22" />
-                    <stop offset="78%" stopColor={palette.glow} stopOpacity="0.08" />
+                    <stop offset="48%" stopColor={palette.glow} stopOpacity="0.34" />
+                    <stop offset="78%" stopColor={palette.glow} stopOpacity="0.12" />
                     <stop offset="100%" stopColor={palette.glow} stopOpacity="0" />
                 </radialGradient>
                 <filter id={`star-blur-${star.id}`} x="-60%" y="-60%" width="220%" height="220%">
@@ -94,8 +83,8 @@ const StarTilePreview = ({ star }) => {
                        C100 14, 106 15, 110 21 Z"
                     fill="none"
                     stroke={palette.glow}
-                    strokeOpacity="0.22"
-                    strokeWidth="3"
+                    strokeOpacity="0.34"
+                    strokeWidth="3.2"
                 />
             </g>
             <circle
@@ -111,7 +100,7 @@ const StarTilePreview = ({ star }) => {
                 rx="9"
                 ry="6"
                 fill={palette.rim}
-                fillOpacity="0.18"
+                fillOpacity="0.12"
                 transform="rotate(-18 103 47)"
             />
         </svg>

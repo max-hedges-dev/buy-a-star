@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -61,12 +61,18 @@ class StarBase(BaseModel):
     absolute_magnitude: Optional[float] = None
     luminosity: Optional[float] = None
     color_index: Optional[float] = None
+    bp_rp: Optional[float] = None
+    bp_g: Optional[float] = None
+    g_rp: Optional[float] = None
     radial_velocity: Optional[float] = None
+    pm: Optional[float] = None
     pmra: Optional[float] = None
     pmdec: Optional[float] = None
     variable_designation: Optional[str] = None
     variable_min: Optional[float] = None
     variable_max: Optional[float] = None
+    valuation_scores: Optional[dict[str, Any]] = None
+    valuation_debug: Optional[dict[str, Any]] = None
 
 
 class StarListRead(StarBase):
@@ -86,7 +92,10 @@ class StarDetailRead(StarListRead):
     phot_variable_flag: Optional[str] = None
     best_class_name: Optional[str] = None
     radius_flame: Optional[float] = None
+    mass_flame: Optional[float] = None
     age_flame: Optional[float] = None
+    evolstage_flame: Optional[float] = None
+    classprob_dsc_combmod_binarystar: Optional[float] = None
     valuation_history: list[StarValuationHistoryPointRead] = []
 
 

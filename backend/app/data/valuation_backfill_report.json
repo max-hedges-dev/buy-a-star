@@ -1,8 +1,8 @@
 {
   "stars_scanned": 5045,
-  "hydrated": 5045,
+  "hydrated": 45,
   "named_star_fallbacks": 44,
-  "replaced": 5000,
+  "replaced": 0,
   "manual_review": [],
   "ineligible_after_pass": [],
   "required_metrics": [
@@ -17,56 +17,9 @@
     "radius_flame",
     "age_flame"
   ],
-  "eligible_pool_by_distance_bin": {
-    "0-200 pc": 983,
-    "200-500 pc": 592,
-    "500-1000 pc": 594,
-    "1000-2000 pc": 977,
-    "2000-4000 pc": 984,
-    "4000-7000 pc": 988,
-    "7000-10000 pc": 998,
-    "10000-15000 pc": 998,
-    "15000-22000 pc": 995,
-    "22000-32000 pc": 281
-  },
   "generic_rebalance": {
-    "radial_quotas": {
-      "0-200 pc": 525,
-      "200-500 pc": 525,
-      "500-1000 pc": 525,
-      "1000-2000 pc": 524,
-      "2000-4000 pc": 524,
-      "4000-7000 pc": 524,
-      "7000-10000 pc": 524,
-      "10000-15000 pc": 524,
-      "15000-22000 pc": 524,
-      "22000-32000 pc": 281
-    },
-    "radial_selected_counts": {
-      "0-200 pc": 525,
-      "200-500 pc": 525,
-      "500-1000 pc": 525,
-      "1000-2000 pc": 524,
-      "2000-4000 pc": 524,
-      "4000-7000 pc": 524,
-      "7000-10000 pc": 524,
-      "10000-15000 pc": 524,
-      "15000-22000 pc": 524,
-      "22000-32000 pc": 281
-    },
-    "base_spacing_pc": 458.299,
-    "separation_attempts_pc": [
-      458.299,
-      366.639,
-      274.98,
-      183.32,
-      114.575,
-      45.83,
-      0.0
-    ],
-    "selected_count": 5000,
-    "target_star_count": 5000,
-    "available_candidate_count": 8390
+    "warning": "Balanced Gaia replacement pool unavailable, preserving current distribution: HTTP Error 404: 404",
+    "target_star_count": 5000
   },
   "valuation_summary": {
     "stars_seen": 5045,

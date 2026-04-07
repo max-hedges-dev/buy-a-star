@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { shaderMaterial } from '@react-three/drei';
 import { extend } from '@react-three/fiber';
 import * as THREE from 'three';
+import { getStarAppearance } from '../utils/starAppearance';
 
 const textureCache = new Map();
 
@@ -213,65 +214,7 @@ const CoronaShellMaterial = shaderMaterial(
 extend({ StarSurfaceMaterial, CoronaShellMaterial });
 
 export const getStarPalette = (star) => {
-    const category = star.category || '';
-    if (category.includes('Orange')) {
-        return {
-            surface: new THREE.Color('#ff9b4a'),
-            hot: new THREE.Color('#fff0d4'),
-            corona: new THREE.Color('#ffbf6b'),
-            flare: new THREE.Color('#ffd7a0'),
-            bloom: new THREE.Color('#ffc27b'),
-            hotCore: 0.24,
-        };
-    }
-    if (category.includes('Blue')) {
-        return {
-            surface: new THREE.Color('#2f97ff'),
-            hot: new THREE.Color('#dff3ff'),
-            corona: new THREE.Color('#58c1ff'),
-            flare: new THREE.Color('#82d6ff'),
-            bloom: new THREE.Color('#8fd8ff'),
-            hotCore: 0.26,
-        };
-    }
-    if (category.includes('White')) {
-        return {
-            surface: new THREE.Color('#dbefff'),
-            hot: new THREE.Color('#ffffff'),
-            corona: new THREE.Color('#9fd8ff'),
-            flare: new THREE.Color('#e4f4ff'),
-            bloom: new THREE.Color('#edf7ff'),
-            hotCore: 0.55,
-        };
-    }
-    if (category.includes('Red Giant')) {
-        return {
-            surface: new THREE.Color('#ff8e4f'),
-            hot: new THREE.Color('#fff0d8'),
-            corona: new THREE.Color('#ffb36d'),
-            flare: new THREE.Color('#ffd2a4'),
-            bloom: new THREE.Color('#ffc89f'),
-            hotCore: 0.22,
-        };
-    }
-    if (category.includes('Red Dwarf')) {
-        return {
-            surface: new THREE.Color('#ff6847'),
-            hot: new THREE.Color('#ffe0d2'),
-            corona: new THREE.Color('#ff8a63'),
-            flare: new THREE.Color('#ffb08e'),
-            bloom: new THREE.Color('#ffba96'),
-            hotCore: 0.18,
-        };
-    }
-    return {
-        surface: new THREE.Color('#ffc44e'),
-        hot: new THREE.Color('#fff4d3'),
-        corona: new THREE.Color('#ffe48b'),
-        flare: new THREE.Color('#fff0bd'),
-        bloom: new THREE.Color('#ffe6a8'),
-        hotCore: 0.3,
-    };
+    return getStarAppearance(star);
 };
 
 const HeroStar = ({ palette, playAnimation = true }) => {

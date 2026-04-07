@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import CertificatePreview from '../components/CertificatePreview';
@@ -14,6 +14,7 @@ import {
     getOwnedStarPath,
     getPublicStarPath,
 } from '../utils/ownership';
+import { getSpectralDisplay } from '../utils/starAppearance';
 
 const pageStyle = {
     minHeight: '100vh',
@@ -33,6 +34,7 @@ const OrderCertificatePage = () => {
     const [order, setOrder] = useState(null);
     const [status, setStatus] = useState('loading');
     const [error, setError] = useState('');
+    const spectralDisplay = useMemo(() => (order ? getSpectralDisplay(order.star) : null), [order]);
 
     useEffect(() => {
         const loadOrder = async () => {
@@ -182,10 +184,12 @@ const OrderCertificatePage = () => {
                                             <span>Constellation</span>
                                             <strong>{order.star.constellation || 'Not listed'}</strong>
                                         </div>
-                                        <div>
-                                            <span>Spectral type</span>
-                                            <strong>{order.star.spectral_type || 'Not listed'}</strong>
-                                        </div>
+                                        {spectralDisplay ? (
+                                            <div>
+                                                <span>{spectralDisplay.label}</span>
+                                                <strong>{spectralDisplay.value}</strong>
+                                            </div>
+                                        ) : null}
                                         <div>
                                             <span>Distance</span>
                                             <strong>{order.star.distance_ly.toFixed(2)} light years</strong>

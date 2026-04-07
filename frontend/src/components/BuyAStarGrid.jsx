@@ -1,18 +1,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import StarTile from './StarTile';
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react';
+import { getColorFamily } from '../utils/starAppearance';
 
 const LIMIT = 24;
 const CONTENT_TOP_OFFSET = 100;
-
-const getColorFamily = (category = '') => {
-    if (category.includes('Blue')) return 'Blue';
-    if (category.includes('White')) return 'White';
-    if (category.includes('Yellow')) return 'Yellow';
-    if (category.includes('Orange')) return 'Orange';
-    if (category.includes('Red')) return 'Red';
-    return 'Other';
-};
 
 const filterSectionTitle = {
     color: '#ff9150',
@@ -154,7 +146,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
                 (statusFilter === 'claimed' && star.is_bought) ||
                 (statusFilter === 'unclaimed' && !star.is_bought);
 
-            const matchesColor = colorFilter === 'all' || getColorFamily(star.category) === colorFilter;
+            const matchesColor = colorFilter === 'all' || getColorFamily(star) === colorFilter;
             const matchesConstellation = constellationFilter === 'all' || star.constellation === constellationFilter;
             const matchesType = typeFilter === 'all' || star.category === typeFilter;
             const matchesDistance = maxDistanceCap === 0 || star.distance_ly <= maxDistance;
@@ -170,6 +162,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
             if (sortBy === 'distance-near') return a.distance_ly - b.distance_ly;
             if (sortBy === 'distance-far') return b.distance_ly - a.distance_ly;
             if (sortBy === 'brightness') return (a.apparent_magnitude ?? 999) - (b.apparent_magnitude ?? 999);
+            if (sortBy === 'predicted-price') return (b.model_value ?? Number.NEGATIVE_INFINITY) - (a.model_value ?? Number.NEGATIVE_INFINITY) || aName.localeCompare(bName);
             if (sortBy === 'claimed-first') return Number(b.is_bought) - Number(a.is_bought) || aName.localeCompare(bName);
             return 0;
         });
@@ -327,6 +320,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
                                     <option style={optionStyle} value="distance-near">Distance: nearest first</option>
                                     <option style={optionStyle} value="distance-far">Distance: farthest first</option>
                                     <option style={optionStyle} value="brightness">Brightness</option>
+                                    <option style={optionStyle} value="predicted-price">Predicted price</option>
                                     <option style={optionStyle} value="claimed-first">Claimed first</option>
                                 </select>
                             </div>

@@ -103,6 +103,7 @@ const GalaxyStarOverlay = ({ star, distSq }) => {
     const distance = Math.sqrt(distSq);
     const rawBlend = 1 - THREE.MathUtils.smoothstep(distance, COLOR_RAMP_START, MEDIUM_DETAIL_DISTANCE);
     const colorBlend = Math.pow(rawBlend, 3.8);
+    const useSimpleWhiteFallback = rawBlend < 0.2;
     const bloomTexture = useMemo(() => {
         const size = 96;
         const canvas = document.createElement('canvas');
@@ -122,11 +123,13 @@ const GalaxyStarOverlay = ({ star, distSq }) => {
         return texture;
     }, []);
     const bloomColor = useMemo(
-        () => new THREE.Color('#ffffff').lerp(palette.bloom.clone(), Math.pow(rawBlend, 1.6)),
-        [palette, rawBlend]
+        () => useSimpleWhiteFallback
+            ? new THREE.Color('#ffffff')
+            : new THREE.Color('#ffffff').lerp(palette.bloom.clone(), Math.pow(rawBlend, 1.6)),
+        [palette, rawBlend, useSimpleWhiteFallback]
     );
-    const bloomOpacity = 0.012 + colorBlend * 0.06;
-    const bloomScale = 2.4 + colorBlend * 1.2;
+    const bloomOpacity = useSimpleWhiteFallback ? 0.02 : 0.012 + colorBlend * 0.06;
+    const bloomScale = useSimpleWhiteFallback ? 2.8 : 2.4 + colorBlend * 1.2;
 
     useFrame((state) => {
         if (materialRef.current) {
@@ -136,18 +139,25 @@ const GalaxyStarOverlay = ({ star, distSq }) => {
 
     return (
         <group>
-            <mesh>
-                <sphereGeometry args={[2, 16, 16]} />
-                <galaxyOverlayMaterial
-                    ref={materialRef}
-                    baseColor={palette.surface}
-                    hotColor={palette.bloom}
-                    colorBlend={colorBlend}
-                    transparent={true}
-                    depthWrite={false}
-                    blending={THREE.NormalBlending}
-                />
-            </mesh>
+            {useSimpleWhiteFallback ? (
+                <mesh>
+                    <sphereGeometry args={[2, 12, 12]} />
+                    <meshBasicMaterial color="#ffffff" depthWrite={false} toneMapped={false} />
+                </mesh>
+            ) : (
+                <mesh>
+                    <sphereGeometry args={[2, 16, 16]} />
+                    <galaxyOverlayMaterial
+                        ref={materialRef}
+                        baseColor={palette.surface}
+                        hotColor={palette.bloom}
+                        colorBlend={colorBlend}
+                        transparent={true}
+                        depthWrite={false}
+                        blending={THREE.NormalBlending}
+                    />
+                </mesh>
+            )}
 
             <sprite scale={[bloomScale, bloomScale, 1]}>
                 <spriteMaterial
@@ -156,6 +166,7 @@ const GalaxyStarOverlay = ({ star, distSq }) => {
                     transparent
                     opacity={bloomOpacity}
                     depthWrite={false}
+                    toneMapped={false}
                     blending={THREE.AdditiveBlending}
                 />
             </sprite>
@@ -195,17 +206,15 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
             tempObject.scale.set(scaleMulti, scaleMulti, scaleMulti);
             tempObject.updateMatrix();
             meshRef.current.setMatrixAt(i, tempObject.matrix);
-            const palette = getGalaxyStarPalette(star);
-            tempColor.copy(palette.surface).lerp(palette.bloom, 0.18);
-            meshRef.current.setColorAt(i, tempColor);
+            tempColor.set('#ffffff');
         });
         meshRef.current.instanceMatrix.needsUpdate = true;
-        if (meshRef.current.instanceColor) {
-            meshRef.current.instanceColor.needsUpdate = true;
-        }
     }, [stars, tempColor, tempObject]);
 
-    const starMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true }), []);
+    const starMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        toneMapped: false,
+    }), []);
 
     // Soft particle texture
     const cloudTexture = useMemo(() => {

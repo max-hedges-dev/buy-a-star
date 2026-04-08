@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ import { createCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../s
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 import StarValueChart from './StarValueChart';
-import { getSpectralDisplay } from '../utils/starAppearance';
+import { getColorFamily, getSpectralDisplay } from '../utils/starAppearance';
 
 const formatMaybeNumber = (value, digits = 2) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -16,6 +16,44 @@ const formatMaybeNumber = (value, digits = 2) => {
     }
     return value.toFixed(digits);
 };
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const OBSERVATORY_LAYOUT_STORAGE_KEY = 'aster-atlas-observatory-layout-v3';
+const OBSERVATORY_STAR_STORAGE_KEY = 'aster-atlas-observatory-star-v2';
+
+const DEFAULT_OBSERVATORY_LAYOUT = {
+    luminosity: { x: 73, y: 3, w: 25 },
+    colorIndex: { x: 13, y: 24, w: 19 },
+    brightness: { x: 10, y: 36, w: 22 },
+    structure: { x: 73, y: 51, w: 24 },
+    distance: { x: 6, y: 67, w: 37 },
+    spectral: { x: 68, y: 73, w: 30 },
+    sky: { x: 72, y: 84, w: 24 },
+    age: { x: 17, y: 86, w: 44 },
+};
+
+const DEFAULT_STAR_LAYOUT = { x: 55, y: 48 };
+
+const sanitizeObservatoryLayout = (value) => {
+    const next = {};
+
+    for (const [key, defaults] of Object.entries(DEFAULT_OBSERVATORY_LAYOUT)) {
+        const candidate = value?.[key];
+        next[key] = {
+            x: clamp(typeof candidate?.x === 'number' ? candidate.x : defaults.x, 0, 100 - defaults.w),
+            y: clamp(typeof candidate?.y === 'number' ? candidate.y : defaults.y, 0, 92),
+            w: defaults.w,
+        };
+    }
+
+    return next;
+};
+
+const sanitizeStarLayout = (value) => ({
+    x: clamp(typeof value?.x === 'number' ? value.x : DEFAULT_STAR_LAYOUT.x, 14, 84),
+    y: clamp(typeof value?.y === 'number' ? value.y : DEFAULT_STAR_LAYOUT.y, 18, 82),
+});
 
 const TIMEZONE_TO_COUNTRY = {
     'Europe/London': 'GB',
@@ -125,6 +163,659 @@ const formatMarketValue = (amount, emptyLabel = 'Not listed') => {
     return formatSterling(amount);
 };
 
+const formatCompact = (value, digits = 1) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return null;
+    }
+
+    return new Intl.NumberFormat('en-GB', {
+        notation: 'compact',
+        maximumFractionDigits: digits,
+    }).format(value);
+};
+
+const getGaiaIdentifier = (star) => {
+    if (star?.gaia_source_id) {
+        return `Gaia DR3 ${star.gaia_source_id}`;
+    }
+    if (star?.source_catalog === 'Gaia DR3' && star?.source_id) {
+        return `Gaia DR3 ${star.source_id}`;
+    }
+    if (star?.source_id) {
+        return `${star.source_catalog || 'Source'} ${star.source_id}`;
+    }
+    return star?.catalog_id || null;
+};
+
+const getPercentileSubtitle = (star, componentKey, labelPrefix = 'Catalog percentile') => {
+    const percentile = star?.valuation_debug?.coolness?.components?.[componentKey]?.local_percentile;
+    if (typeof percentile !== 'number' || Number.isNaN(percentile)) {
+        return null;
+    }
+
+    return `${labelPrefix} · ${Math.round(percentile * 100)}th`;
+};
+
+const getSpectralBandKey = (star, spectralDisplay) => {
+    const spectralValue = `${spectralDisplay?.value || star?.spectral_type || ''}`.trim().toUpperCase();
+    const firstLetter = spectralValue[0];
+    if (['O', 'B', 'A', 'F', 'G', 'K', 'M'].includes(firstLetter)) {
+        return firstLetter;
+    }
+
+    const colorFamily = getColorFamily(star);
+    const fallbackMap = {
+        Blue: 'O',
+        'Blue-White': 'B',
+        White: 'A',
+        'Yellow-White': 'F',
+        Yellow: 'G',
+        Orange: 'K',
+        Red: 'M',
+    };
+    return fallbackMap[colorFamily] || 'G';
+};
+
+const instrumentShellStyle = {
+    position: 'relative',
+    borderRadius: '26px',
+    border: '1px solid rgba(150,179,255,0.12)',
+    background: 'linear-gradient(180deg, rgba(9,13,22,0.42) 0%, rgba(7,10,18,0.18) 100%)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 42px rgba(0,0,0,0.12)',
+    backdropFilter: 'blur(10px)',
+    overflow: 'hidden',
+    clipPath: 'polygon(0 18px, 18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px))',
+};
+
+const moduleLabelStyle = {
+    color: '#ff8a4d',
+    fontSize: '0.68rem',
+    letterSpacing: '0.2em',
+    textTransform: 'uppercase',
+    fontWeight: 'bold',
+    marginBottom: '8px',
+};
+
+const getInstrumentFrameStyle = (variant = 'panel', hovered = false, accent = '#ff8a4d') => {
+    const accentGlow = accent === '#ff8a4d' ? 'rgba(255,138,77,0.18)' : 'rgba(130,168,255,0.18)';
+
+    const variants = {
+        panel: {
+            borderRadius: '24px',
+            background: 'linear-gradient(180deg, rgba(8,11,20,0.34) 0%, rgba(7,10,18,0.14) 100%)',
+            border: '1px solid rgba(150,179,255,0.1)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 42px rgba(0,0,0,0.1)',
+        },
+        hero: {
+            borderRadius: '28px',
+            background: 'linear-gradient(180deg, rgba(10,14,24,0.48) 0%, rgba(7,10,18,0.16) 100%)',
+            border: '1px solid rgba(255,177,122,0.16)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 24px 56px rgba(0,0,0,0.14)',
+        },
+        floating: {
+            borderRadius: '22px',
+            background: 'linear-gradient(180deg, rgba(9,13,22,0.22) 0%, rgba(8,11,18,0.08) 100%)',
+            border: '1px solid rgba(150,179,255,0.08)',
+            boxShadow: '0 16px 36px rgba(0,0,0,0.08)',
+        },
+        rail: {
+            borderRadius: '22px',
+            background: 'linear-gradient(180deg, rgba(8,11,20,0.3) 0%, rgba(6,9,16,0.1) 100%)',
+            border: '1px solid rgba(150,179,255,0.08)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+        },
+        band: {
+            borderRadius: '24px',
+            background: 'linear-gradient(180deg, rgba(9,13,22,0.28) 0%, rgba(7,10,18,0.1) 100%)',
+            border: '1px solid rgba(150,179,255,0.08)',
+            boxShadow: '0 14px 30px rgba(0,0,0,0.08)',
+        },
+        map: {
+            borderRadius: '22px',
+            background: 'linear-gradient(180deg, rgba(9,13,22,0.34) 0%, rgba(7,10,18,0.14) 100%)',
+            border: '1px solid rgba(150,179,255,0.1)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 38px rgba(0,0,0,0.1)',
+        },
+    };
+
+    const base = variants[variant] || variants.panel;
+
+    return {
+        ...instrumentShellStyle,
+        ...base,
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        borderColor: hovered ? 'rgba(255,186,132,0.28)' : base.border.match(/rgba\([^)]+\)/)?.[0] || base.borderColor,
+        boxShadow: hovered
+            ? `${base.boxShadow}, 0 0 0 1px rgba(255,186,132,0.12) inset, 0 20px 40px ${accentGlow}`
+            : base.boxShadow,
+    };
+};
+
+const ObservatoryModule = ({ title, subtitle, children, style, variant = 'panel', hovered = false, accent = '#ff8a4d', titleStyle, contentStyle }) => (
+    <div
+        style={{
+            ...getInstrumentFrameStyle(variant, hovered, accent),
+            padding: '18px 18px 16px',
+            transition: 'border-color 0.2s ease, transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease',
+            pointerEvents: 'auto',
+            ...style,
+        }}
+    >
+        <div
+            style={{
+                position: 'absolute',
+                left: '18px',
+                right: '18px',
+                top: '14px',
+                height: '1px',
+                background: 'linear-gradient(90deg, rgba(130,161,255,0.28) 0%, rgba(255,255,255,0.03) 44%, rgba(255,151,80,0.18) 100%)',
+                opacity: 0.8,
+            }}
+        />
+        <div
+            style={{
+                position: 'absolute',
+                right: '18px',
+                top: '18px',
+                width: '34px',
+                height: '34px',
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                borderRight: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '0 18px 0 0',
+                opacity: 0.8,
+            }}
+        />
+        <div style={{ ...moduleLabelStyle, ...titleStyle }}>{title}</div>
+        {subtitle ? (
+            <div style={{ color: '#8f94ad', fontSize: '0.84rem', marginBottom: '14px' }}>{subtitle}</div>
+        ) : null}
+        <div style={contentStyle}>{children}</div>
+    </div>
+);
+
+const CircularGauge = ({ value, max = 1, label, subtitle, accent = '#ff8a4d', hovered = false }) => {
+    const normalized = Math.min(1, Math.max(0, value / max));
+    const circumference = 2 * Math.PI * 56;
+    const dashOffset = circumference * (1 - normalized);
+
+    return (
+        <ObservatoryModule
+            title="Luminosity"
+            subtitle={subtitle}
+            variant="hero"
+            accent={accent}
+            hovered={hovered}
+            style={{
+                padding: '22px 22px 18px',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <svg width="150" height="150" viewBox="0 0 150 150" style={{ flexShrink: 0 }}>
+                    <defs>
+                        <linearGradient id="luminosityGauge" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#fff4d1" />
+                            <stop offset="100%" stopColor={accent} />
+                        </linearGradient>
+                    </defs>
+                    <circle cx="75" cy="75" r="56" stroke="rgba(255,255,255,0.08)" strokeWidth="12" fill="none" />
+                    <circle
+                        cx="75"
+                        cy="75"
+                        r="56"
+                        stroke="url(#luminosityGauge)"
+                        strokeWidth="12"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={dashOffset}
+                        transform="rotate(-90 75 75)"
+                    />
+                    <circle cx="75" cy="75" r="44" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.05)" />
+                    <text x="75" y="68" fill="#f6f3eb" textAnchor="middle" style={{ fontSize: '1.45rem', fontWeight: 'bold' }}>
+                        {label}
+                    </text>
+                    <text x="75" y="90" fill="#8f94ad" textAnchor="middle" style={{ fontSize: '0.78rem' }}>
+                        L☉
+                    </text>
+                </svg>
+                <div style={{ display: 'grid', gap: '10px', minWidth: 0 }}>
+                    <div style={{ color: '#f3f4f8', fontSize: '1rem', fontWeight: 'bold' }}>
+                        {label} times the Sun
+                    </div>
+                    <div style={{ color: '#8f94ad', lineHeight: 1.6, fontSize: '0.88rem' }}>
+                        Total radiative output relative to Solar luminosity.
+                    </div>
+                </div>
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const ComparisonModule = ({ radius, mass, radiusSubtitle, massSubtitle, hovered = false }) => {
+    const radiusRatio = Math.max(0.24, Math.min(1.9, Math.log10(1 + (radius || 0.2)) + 0.5));
+    const massRatio = Math.max(0.04, Math.min(1, (mass || 0) / 12));
+
+    return (
+        <ObservatoryModule
+            title="Structure"
+            subtitle="Radius and mass relative to the Sun"
+            variant="panel"
+            hovered={hovered}
+            style={{ padding: '18px 20px 16px' }}
+        >
+            <div style={{ display: 'grid', gap: '18px' }}>
+                {typeof radius === 'number' ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', height: '110px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{ width: '34px', height: '34px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.24)', background: 'rgba(255,208,118,0.12)', position: 'absolute' }} />
+                            <div
+                                style={{
+                                    width: `${Math.min(102, 34 * radiusRatio)}px`,
+                                    height: `${Math.min(102, 34 * radiusRatio)}px`,
+                                    borderRadius: '999px',
+                                    border: '1px solid rgba(255,158,92,0.42)',
+                                    background: 'radial-gradient(circle, rgba(255,181,88,0.26) 0%, rgba(255,120,52,0.08) 70%, transparent 100%)',
+                                    position: 'absolute',
+                                }}
+                            />
+                        </div>
+                        <div>
+                            <div style={{ color: '#f3f4f8', fontWeight: 'bold', marginBottom: '6px' }}>
+                                Radius · {formatMaybeNumber(radius, radius > 10 ? 1 : 2)} R☉
+                            </div>
+                            <div style={{ color: '#8f94ad', fontSize: '0.86rem', lineHeight: 1.6 }}>
+                                {radiusSubtitle || 'Compared visually against a Solar-radius reference circle.'}
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+
+                {typeof mass === 'number' ? (
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#f3f4f8', fontWeight: 'bold' }}>
+                            <span>Mass</span>
+                            <span>{formatMaybeNumber(mass, mass > 10 ? 1 : 2)} M☉</span>
+                        </div>
+                        <div style={{ height: '12px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '8px' }}>
+                            <div
+                                style={{
+                                    width: `${massRatio * 100}%`,
+                                    height: '100%',
+                                    borderRadius: '999px',
+                                    background: 'linear-gradient(90deg, rgba(130,196,255,0.72) 0%, rgba(255,160,98,0.86) 100%)',
+                                    boxShadow: '0 0 18px rgba(255,163,92,0.18)',
+                                }}
+                            />
+                        </div>
+                        <div style={{ color: '#8f94ad', fontSize: '0.84rem' }}>
+                            {massSubtitle || 'Mass compared against a high-mass stellar scale for context.'}
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const DistanceModule = ({ distanceLy, hovered = false }) => {
+    const clampedDistance = typeof distanceLy === 'number' ? Math.max(0, distanceLy) : null;
+    const scaleMax = 100000;
+    const ratio = clampedDistance === null ? 0 : Math.min(1, clampedDistance / scaleMax);
+
+    return (
+        <ObservatoryModule
+            title="Distance"
+            subtitle={clampedDistance !== null ? `${formatCompact(clampedDistance, clampedDistance > 999 ? 1 : 2)} light years from Earth` : null}
+            variant="rail"
+            hovered={hovered}
+            style={{
+                padding: '16px 22px 16px',
+            }}
+        >
+            <div style={{ position: 'relative', paddingTop: '20px' }}>
+                <div style={{ height: '2px', background: 'linear-gradient(90deg, rgba(112,156,255,0.44) 0%, rgba(255,146,84,0.4) 100%)' }} />
+                <div
+                    style={{
+                        position: 'absolute',
+                        left: `${ratio * 100}%`,
+                        top: '12px',
+                        transform: 'translateX(-50%)',
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '999px',
+                        background: '#fff0d6',
+                        boxShadow: '0 0 0 6px rgba(255,140,68,0.16), 0 0 24px rgba(255,196,118,0.34)',
+                    }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '18px', color: '#8f94ad', fontSize: '0.8rem' }}>
+                    <span>Earth</span>
+                    <span>Milky Way scale · 100k ly</span>
+                </div>
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const SpectralBandModule = ({ activeBand, subtitle, hovered = false }) => {
+    const bands = ['O', 'B', 'A', 'F', 'G', 'K', 'M'];
+    const colors = {
+        O: '#74b6ff',
+        B: '#95d3ff',
+        A: '#e7f4ff',
+        F: '#fff4da',
+        G: '#ffe38d',
+        K: '#ffba70',
+        M: '#ff7c64',
+    };
+
+    return (
+        <ObservatoryModule title="Spectral Family" subtitle={subtitle} variant="band" hovered={hovered} style={{ padding: '16px 18px 16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '8px' }}>
+                {bands.map((band) => {
+                    const isActive = band === activeBand;
+                    return (
+                        <div
+                            key={band}
+                            style={{
+                                padding: '14px 0',
+                                borderRadius: '14px',
+                                textAlign: 'center',
+                                border: `1px solid ${isActive ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                                background: isActive ? `linear-gradient(180deg, ${colors[band]}22 0%, rgba(255,255,255,0.02) 100%)` : 'rgba(255,255,255,0.02)',
+                                boxShadow: isActive ? `0 0 0 1px ${colors[band]}44 inset, 0 0 22px ${colors[band]}22` : 'none',
+                            }}
+                        >
+                            <div style={{ color: colors[band], fontWeight: 'bold', fontSize: '1rem' }}>{band}</div>
+                        </div>
+                    );
+                })}
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const ColorIndexModule = ({ colorIndex, hovered = false }) => {
+    const min = -0.3;
+    const max = 2.3;
+    const ratio = typeof colorIndex === 'number' ? clamp((colorIndex - min) / (max - min), 0, 1) : null;
+
+    return (
+        <ObservatoryModule title="Colour Index" subtitle={typeof colorIndex === 'number' ? `B−V index · ${formatMaybeNumber(colorIndex, 3)}` : 'Colour-index reading unavailable'} variant="floating" hovered={hovered} style={{ padding: '14px 16px 12px' }}>
+            <div style={{ position: 'relative', padding: '16px 0 8px' }}>
+                <div
+                    style={{
+                        height: '14px',
+                        borderRadius: '999px',
+                        background: 'linear-gradient(90deg, #81b7ff 0%, #edf6ff 26%, #ffe58d 56%, #ffb36d 77%, #ff7864 100%)',
+                        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
+                    }}
+                />
+                {ratio !== null ? (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: `${ratio * 100}%`,
+                            top: '8px',
+                            transform: 'translateX(-50%)',
+                            width: '18px',
+                            height: '30px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(255,255,255,0.22)',
+                            background: 'rgba(7,9,16,0.76)',
+                            boxShadow: '0 0 18px rgba(255,255,255,0.08)',
+                        }}
+                    />
+                ) : null}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', color: '#8f94ad', fontSize: '0.78rem' }}>
+                    <span>Blue</span>
+                    <span>Red</span>
+                </div>
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const BrightnessModule = ({ apparentMagnitude, absoluteMagnitude, hovered = false }) => {
+    const normalizeMagnitude = (value, min = -10, max = 18) => {
+        if (typeof value !== 'number' || Number.isNaN(value)) {
+            return null;
+        }
+        return 1 - clamp((value - min) / (max - min), 0, 1);
+    };
+
+    const apparentFill = normalizeMagnitude(apparentMagnitude);
+    const absoluteFill = normalizeMagnitude(absoluteMagnitude, -12, 10);
+
+    return (
+        <ObservatoryModule
+            title="Brightness"
+            subtitle="Observed brightness compared with intrinsic brightness"
+            variant="floating"
+            hovered={hovered}
+            style={{ padding: '14px 16px 12px' }}
+        >
+            <div style={{ display: 'grid', gap: '16px' }}>
+                {typeof apparentMagnitude === 'number' ? (
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#f3f4f8' }}>
+                            <span>Apparent</span>
+                            <span>{formatMaybeNumber(apparentMagnitude, 2)} mag</span>
+                        </div>
+                        <div style={{ height: '12px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                            <div style={{ width: `${(apparentFill || 0) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #7ab5ff 0%, #fff0c2 100%)' }} />
+                        </div>
+                    </div>
+                ) : null}
+                {typeof absoluteMagnitude === 'number' ? (
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#f3f4f8' }}>
+                            <span>Absolute</span>
+                            <span>{formatMaybeNumber(absoluteMagnitude, 2)} mag</span>
+                        </div>
+                        <div style={{ height: '12px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                            <div style={{ width: `${(absoluteFill || 0) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #ff9957 0%, #fff2b2 100%)' }} />
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const SkyPositionModule = ({ star, hovered = false }) => {
+    const hasCoordinates = typeof star?.ra_degrees === 'number' && typeof star?.dec_degrees === 'number';
+    const x = hasCoordinates ? (star.ra_degrees / 360) * 100 : 50;
+    const y = hasCoordinates ? 100 - (((star.dec_degrees + 90) / 180) * 100) : 50;
+
+    return (
+        <ObservatoryModule title="Sky Position" subtitle={star?.constellation ? `Constellation · ${star.constellation}` : 'Equatorial coordinate panel'} variant="map" hovered={hovered} style={{ padding: '14px 16px 14px' }}>
+            <div style={{ position: 'relative', height: '148px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', background: 'radial-gradient(circle at 50% 50%, rgba(102,127,186,0.14) 0%, rgba(6,8,14,0.7) 70%)' }}>
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+                    {[20, 40, 60, 80].map((line) => (
+                        <g key={line}>
+                            <line x1={line} y1="0" x2={line} y2="100" stroke="rgba(255,255,255,0.08)" strokeDasharray="2 4" />
+                            <line x1="0" y1={line} x2="100" y2={line} stroke="rgba(255,255,255,0.08)" strokeDasharray="2 4" />
+                        </g>
+                    ))}
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.12)" />
+                    <line x1="50" y1="0" x2="50" y2="100" stroke="rgba(255,255,255,0.12)" />
+                    {hasCoordinates ? (
+                        <>
+                            <circle cx={x} cy={y} r="2.8" fill="#fff2d5" />
+                            <circle cx={x} cy={y} r="7.2" fill="none" stroke="rgba(255,150,84,0.48)" />
+                        </>
+                    ) : null}
+                </svg>
+                <div style={{ position: 'absolute', left: '14px', bottom: '12px', color: '#8f94ad', fontSize: '0.78rem' }}>
+                    {hasCoordinates ? `RA ${formatMaybeNumber(star.ra_degrees, 2)}° · Dec ${formatMaybeNumber(star.dec_degrees, 2)}°` : 'Precise sky coordinates unavailable'}
+                </div>
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const AgeTimelineModule = ({ age, hovered = false }) => {
+    const ratio = typeof age === 'number' ? clamp(age / 13.8, 0, 1) : null;
+
+    return (
+        <ObservatoryModule
+            title="Age"
+            subtitle={typeof age === 'number' ? `${formatMaybeNumber(age, age > 10 ? 1 : 2)} billion years` : 'Stellar age unavailable'}
+            variant="rail"
+            hovered={hovered}
+            style={{ padding: '14px 18px 14px' }}
+        >
+            <div style={{ position: 'relative', paddingTop: '10px' }}>
+                <div style={{ height: '8px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div
+                        style={{
+                            width: `${(ratio || 0) * 100}%`,
+                            height: '100%',
+                            borderRadius: '999px',
+                            background: 'linear-gradient(90deg, rgba(123,193,255,0.72) 0%, rgba(255,162,89,0.9) 55%, rgba(255,86,86,0.88) 100%)',
+                        }}
+                    />
+                </div>
+                {ratio !== null ? (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: `${ratio * 100}%`,
+                            top: '2px',
+                            transform: 'translateX(-50%)',
+                            width: '12px',
+                            height: '20px',
+                            borderRadius: '999px',
+                            background: '#fff0cf',
+                            boxShadow: '0 0 20px rgba(255,192,112,0.28)',
+                        }}
+                    />
+                ) : null}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', color: '#8f94ad', fontSize: '0.78rem' }}>
+                    <span>0 Gyr</span>
+                    <span>Cosmic age · 13.8 Gyr</span>
+                </div>
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const StatusModule = ({ star }) => {
+    const variability = star?.phot_variable_flag && !['NOT_AVAILABLE', 'CONSTANT', 'N', 'FALSE', '0', 'NO'].includes(String(star.phot_variable_flag).toUpperCase());
+    const binaryProbability = typeof star?.classprob_dsc_combmod_binarystar === 'number'
+        ? Math.round(star.classprob_dsc_combmod_binarystar * 100)
+        : null;
+    const binaryKnown = binaryProbability !== null ? binaryProbability >= 50 : Boolean(star?.non_single_star);
+
+    return (
+        <ObservatoryModule
+            title="System Status"
+            subtitle="Observed behaviour and system architecture"
+            style={{ padding: '16px 18px 14px' }}
+        >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
+                <div style={{ padding: '14px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ color: '#8f94ad', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: '10px' }}>Variability</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f3f4f8', fontWeight: 'bold' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '999px', background: variability ? '#ff8a4d' : '#8d93aa', boxShadow: variability ? '0 0 12px rgba(255,138,77,0.42)' : 'none' }} />
+                        {variability ? (star.best_class_name || 'Variable') : 'Steady'}
+                    </div>
+                </div>
+                <div style={{ padding: '14px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ color: '#8f94ad', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: '10px' }}>Multiplicity</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f3f4f8', fontWeight: 'bold' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '999px', background: binaryKnown ? '#8ed6ff' : '#8d93aa', boxShadow: binaryKnown ? '0 0 12px rgba(142,214,255,0.36)' : 'none' }} />
+                        {binaryProbability !== null ? `${binaryProbability}% binary likelihood` : binaryKnown ? 'Multi-star signal' : 'No strong binary signal'}
+                    </div>
+                </div>
+            </div>
+        </ObservatoryModule>
+    );
+};
+
+const ObservatoryBackdrop = ({ starLayout, hoveredInstrument }) => {
+    const starLeft = `${starLayout.x}%`;
+    const starTop = `${starLayout.y}%`;
+    const haloBoost = hoveredInstrument === 'luminosity' ? 1 : 0;
+    const structureBoost = hoveredInstrument === 'structure' ? 1 : 0;
+    const spectralBoost = hoveredInstrument === 'spectral' ? 1 : 0;
+    const skyBoost = hoveredInstrument === 'sky' ? 1 : 0;
+
+    return (
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+            <div
+                style={{
+                    position: 'absolute',
+                    left: starLeft,
+                    top: starTop,
+                    width: '720px',
+                    height: '720px',
+                    transform: 'translate(-50%, -50%)',
+                    borderRadius: '999px',
+                    background: `radial-gradient(circle, rgba(255,220,170,${0.08 + haloBoost * 0.08}) 0%, rgba(255,154,94,${0.06 + haloBoost * 0.06}) 26%, rgba(96,134,255,${0.05 + spectralBoost * 0.07}) 46%, rgba(0,0,0,0) 74%)`,
+                    filter: 'blur(18px)',
+                }}
+            />
+            {[220, 360, 520, 700].map((size, index) => (
+                <div
+                    key={size}
+                    style={{
+                        position: 'absolute',
+                        left: starLeft,
+                        top: starTop,
+                        width: `${size}px`,
+                        height: `${size}px`,
+                        transform: 'translate(-50%, -50%)',
+                        borderRadius: '999px',
+                        border: `${index === 2 ? '1px dashed' : '1px solid'} rgba(255,255,255,${index === 0 ? 0.08 : 0.04})`,
+                        opacity: 0.7,
+                    }}
+                />
+            ))}
+            {[0, 45, 90, 135].map((angle) => (
+                <div
+                    key={angle}
+                    style={{
+                        position: 'absolute',
+                        left: starLeft,
+                        top: starTop,
+                        width: '860px',
+                        height: '1px',
+                        transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+                        background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0) 100%)',
+                        opacity: 0.45,
+                    }}
+                />
+            ))}
+            <div
+                style={{
+                    position: 'absolute',
+                    left: starLeft,
+                    top: starTop,
+                    width: '510px',
+                    height: '510px',
+                    transform: 'translate(-50%, -50%)',
+                    borderRadius: '999px',
+                    border: `1px solid rgba(255,210,140,${0.08 + structureBoost * 0.12})`,
+                    opacity: 0.6,
+                }}
+            />
+            <div
+                style={{
+                    position: 'absolute',
+                    left: starLeft,
+                    top: `calc(${starTop} + 112px)`,
+                    width: '440px',
+                    height: '120px',
+                    transform: 'translateX(-50%)',
+                    background: 'radial-gradient(ellipse at center, rgba(255,188,120,0.08) 0%, rgba(255,128,64,0.03) 44%, rgba(0,0,0,0) 72%)',
+                    filter: 'blur(10px)',
+                }}
+            />
+        </div>
+    );
+};
+
 const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -143,6 +834,26 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [starDetail, setStarDetail] = useState(star);
     const [starDetailStatus, setStarDetailStatus] = useState('idle');
+    const [layoutEditMode, setLayoutEditMode] = useState(false);
+    const [hoveredInstrument, setHoveredInstrument] = useState(null);
+    const [observatoryLayout, setObservatoryLayout] = useState(() => {
+        try {
+            const raw = window.localStorage.getItem(OBSERVATORY_LAYOUT_STORAGE_KEY);
+            return raw ? sanitizeObservatoryLayout(JSON.parse(raw)) : DEFAULT_OBSERVATORY_LAYOUT;
+        } catch {
+            return DEFAULT_OBSERVATORY_LAYOUT;
+        }
+    });
+    const [starLayout, setStarLayout] = useState(() => {
+        try {
+            const raw = window.localStorage.getItem(OBSERVATORY_STAR_STORAGE_KEY);
+            return raw ? sanitizeStarLayout(JSON.parse(raw)) : DEFAULT_STAR_LAYOUT;
+        } catch {
+            return DEFAULT_STAR_LAYOUT;
+        }
+    });
+    const observatoryCanvasRef = useRef(null);
+    const dragStateRef = useRef(null);
 
     const regionNames = useMemo(
         () => (typeof Intl.DisplayNames !== 'undefined' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null),
@@ -151,6 +862,134 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const activeStar = starDetail || star;
     const valuationHistory = activeStar.valuation_history || [];
     const spectralDisplay = useMemo(() => getSpectralDisplay(activeStar), [activeStar]);
+    const gaiaIdentifier = useMemo(() => getGaiaIdentifier(activeStar), [activeStar]);
+    const spectralBand = useMemo(() => getSpectralBandKey(activeStar, spectralDisplay), [activeStar, spectralDisplay]);
+    const luminosityPercentile = useMemo(
+        () => getPercentileSubtitle(activeStar, 'luminosity_outlier'),
+        [activeStar]
+    );
+    const radiusPercentile = useMemo(
+        () => getPercentileSubtitle(activeStar, 'radius_outlier'),
+        [activeStar]
+    );
+    const massPercentile = useMemo(
+        () => getPercentileSubtitle(activeStar, 'mass_outlier'),
+        [activeStar]
+    );
+    const hasLuminosity = typeof activeStar.luminosity === 'number';
+    const hasColorIndex = typeof activeStar.color_index === 'number' || typeof activeStar.bp_rp === 'number';
+    const hasBrightness = typeof activeStar.apparent_magnitude === 'number' || typeof activeStar.absolute_magnitude === 'number';
+    const hasSkyPosition = Boolean(activeStar.constellation || (typeof activeStar.ra_degrees === 'number' && typeof activeStar.dec_degrees === 'number'));
+    const hasAge = typeof activeStar.age_flame === 'number';
+    const hasDistance = typeof activeStar.distance_ly === 'number';
+    const hasSpectral = Boolean(spectralDisplay);
+
+    const visibleInstrumentKeys = useMemo(
+        () => ([
+            hasLuminosity && 'luminosity',
+            'structure',
+            hasDistance && 'distance',
+            hasSpectral && 'spectral',
+            hasColorIndex && 'colorIndex',
+            hasBrightness && 'brightness',
+            hasSkyPosition && 'sky',
+            hasAge && 'age',
+        ].filter(Boolean)),
+        [hasAge, hasBrightness, hasColorIndex, hasDistance, hasLuminosity, hasSkyPosition, hasSpectral]
+    );
+
+    const observatoryConnectors = useMemo(() => {
+        return visibleInstrumentKeys.map((key) => {
+            const layout = observatoryLayout[key];
+            if (!layout) {
+                return null;
+            }
+
+            const starX = starLayout.x;
+            const starY = starLayout.y;
+            const moduleOnLeft = layout.x + layout.w / 2 < starX;
+            const startX = moduleOnLeft ? layout.x + layout.w : layout.x;
+            const startY = layout.y + 8;
+            const dx = starX - startX;
+            const dy = starY - startY;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+            return {
+                key,
+                startX,
+                startY,
+                length,
+                angle,
+            };
+        }).filter(Boolean);
+    }, [observatoryLayout, starLayout, visibleInstrumentKeys]);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(OBSERVATORY_LAYOUT_STORAGE_KEY, JSON.stringify(observatoryLayout));
+        } catch {
+            // Ignore storage failures.
+        }
+    }, [observatoryLayout]);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(OBSERVATORY_STAR_STORAGE_KEY, JSON.stringify(starLayout));
+        } catch {
+            // Ignore storage failures.
+        }
+    }, [starLayout]);
+
+    useEffect(() => {
+        if (!layoutEditMode) {
+            return undefined;
+        }
+
+        const handlePointerMove = (event) => {
+            const state = dragStateRef.current;
+            const bounds = observatoryCanvasRef.current?.getBoundingClientRect();
+
+            if (!state || !bounds?.width || !bounds?.height) {
+                return;
+            }
+
+            const deltaXPct = ((event.clientX - state.startX) / bounds.width) * 100;
+            const deltaYPct = ((event.clientY - state.startY) / bounds.height) * 100;
+
+            if (state.kind === 'star') {
+                setStarLayout({
+                    x: clamp(state.startLayout.x + deltaXPct, 28, 84),
+                    y: clamp(state.startLayout.y + deltaYPct, 18, 82),
+                });
+                return;
+            }
+
+            const width = state.startLayout.w;
+
+            setObservatoryLayout((current) => ({
+                ...current,
+                [state.key]: {
+                    ...current[state.key],
+                    x: clamp(state.startLayout.x + deltaXPct, 0, 100 - width),
+                    y: clamp(state.startLayout.y + deltaYPct, 0, 92),
+                    w: width,
+                },
+            }));
+        };
+
+        const handlePointerUp = () => {
+            dragStateRef.current = null;
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+
+        return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+        };
+    }, [layoutEditMode]);
 
     useEffect(() => {
         let isActive = true;
@@ -281,16 +1120,101 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         setIsCheckoutOpen(false);
     }, []);
 
+    const handleResetObservatoryLayout = useCallback(() => {
+        setObservatoryLayout(DEFAULT_OBSERVATORY_LAYOUT);
+        setStarLayout(DEFAULT_STAR_LAYOUT);
+    }, []);
+
+    const handleStartModuleDrag = useCallback((key, event) => {
+        if (!layoutEditMode) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        dragStateRef.current = {
+            kind: 'module',
+            key,
+            startX: event.clientX,
+            startY: event.clientY,
+            startLayout: observatoryLayout[key],
+        };
+    }, [layoutEditMode, observatoryLayout]);
+
+    const handleStartStarDrag = useCallback((event) => {
+        if (!layoutEditMode) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        dragStateRef.current = {
+            kind: 'star',
+            startX: event.clientX,
+            startY: event.clientY,
+            startLayout: starLayout,
+        };
+    }, [layoutEditMode, starLayout]);
+
+    const renderObservatoryModule = useCallback((key, children) => {
+        const layout = observatoryLayout[key];
+        if (!layout) {
+            return null;
+        }
+
+        const isHovered = hoveredInstrument === key;
+
+        return (
+            <div
+                key={key}
+                onPointerDown={(event) => handleStartModuleDrag(key, event)}
+                onPointerEnter={() => setHoveredInstrument(key)}
+                onPointerLeave={() => setHoveredInstrument((current) => (current === key ? null : current))}
+                style={{
+                    position: 'absolute',
+                    left: `${layout.x}%`,
+                    top: `${layout.y}%`,
+                    width: `${layout.w}%`,
+                    pointerEvents: 'auto',
+                    cursor: layoutEditMode ? 'grab' : 'default',
+                    zIndex: layoutEditMode ? 6 : isHovered ? 4 : 2,
+                    touchAction: 'none',
+                    transition: 'transform 0.18s ease, filter 0.18s ease',
+                    transform: isHovered ? 'translateY(-2px)' : 'none',
+                    filter: isHovered ? 'drop-shadow(0 18px 30px rgba(255,150,84,0.1))' : 'none',
+                }}
+            >
+                {layoutEditMode ? (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: '-12px',
+                            left: '12px',
+                            padding: '5px 10px',
+                            borderRadius: '999px',
+                            background: 'rgba(255,122,64,0.92)',
+                            color: '#fff8f0',
+                            fontSize: '0.68rem',
+                            letterSpacing: '0.12em',
+                            textTransform: 'uppercase',
+                            fontWeight: 'bold',
+                            boxShadow: '0 8px 18px rgba(255,77,0,0.18)',
+                        }}
+                    >
+                        Drag
+                    </div>
+                ) : null}
+                {React.isValidElement(children) ? React.cloneElement(children, { hovered: isHovered }) : children}
+            </div>
+        );
+    }, [handleStartModuleDrag, hoveredInstrument, layoutEditMode, observatoryLayout]);
+
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', background: '#000' }}>
             <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
-                <ambientLight intensity={0.2} />
-                <pointLight position={[10, 5, 10]} intensity={1.5} />
-                <pointLight position={[-10, -5, -10]} intensity={0.5} />
                 <Stars radius={100} depth={50} count={2000} factor={4} saturation={0} fade speed={0.5} />
-                <group position={[2.3, 0, 0]}>
-                    <DetailedStar star={star} detailLevel="hero" />
-                </group>
             </Canvas>
 
             <div
@@ -343,11 +1267,11 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     top: 0,
                     left: '88px',
                     bottom: 0,
-                    width: '65%',
-                    minWidth: '520px',
-                    maxWidth: '936px',
-                    background: 'linear-gradient(90deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.8) 60%, rgba(0,0,0,0) 100%)',
-                    padding: '40px 44px 40px 20px',
+                    width: '53%',
+                    minWidth: '624px',
+                    maxWidth: '864px',
+                    background: 'linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.82) 70%, rgba(0,0,0,0.28) 100%)',
+                    padding: '40px 30px 40px 20px',
                     display: 'flex',
                     flexDirection: 'column',
                     pointerEvents: 'none',
@@ -385,179 +1309,111 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     <div style={{ height: '66px' }} />
 
                     <div style={{ paddingLeft: '54px' }}>
-                    <h1 style={{ fontSize: '3.5rem', marginBottom: '5px', fontFamily: 'serif', color: 'white' }}>
-                        {activeStar.common_name || activeStar.scientific_name}
-                    </h1>
-
-                    {activeStar.common_name && activeStar.scientific_name && (
-                        <div style={{ color: '#8e8e9c', marginBottom: '18px', fontSize: '1rem' }}>
-                            {activeStar.scientific_name}
+                        <div style={{ marginBottom: '24px' }}>
+                            <h1 style={{ fontSize: '3.06rem', marginBottom: '6px', fontFamily: 'serif', color: 'white', lineHeight: 0.96 }}>
+                                {activeStar.common_name || activeStar.scientific_name}
+                            </h1>
                         </div>
-                    )}
 
-                    <div style={{ display: 'flex', gap: '15px', marginBottom: '18px', flexWrap: 'wrap' }}>
-                        <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                            {activeStar.category}
-                        </span>
-                        <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                            {activeStar.distance_ly} ly away
-                        </span>
-                        {spectralDisplay && (
-                            <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                                {spectralDisplay.label}: {spectralDisplay.value}
-                            </span>
-                        )}
-                        {typeof activeStar.apparent_magnitude === 'number' && (
-                            <span style={{ background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.9rem', color: '#ccc' }}>
-                                Apparent Mag: {formatMaybeNumber(activeStar.apparent_magnitude)}
-                            </span>
-                        )}
-                    </div>
-
-                    {activeStar.is_bought ? (
-                        <div
-                            style={{
-                                background: 'linear-gradient(135deg, rgba(26,40,30,0.92) 0%, rgba(14,20,18,0.9) 100%)',
-                                border: '1px solid rgba(136,204,136,0.28)',
-                                padding: '22px 24px',
-                                borderRadius: '18px',
-                                color: 'white',
-                                marginBottom: '24px',
-                                boxShadow: '0 16px 34px rgba(0,0,0,0.28)',
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#9ce29c', marginBottom: '10px', fontWeight: 'bold', letterSpacing: '0.04em' }}>
-                                <CheckCircle2 size={22} /> CURRENT OWNER
-                            </div>
-                            <div style={{ fontSize: '1.9rem', fontFamily: 'serif', marginBottom: '8px' }}>
-                                {activeStar.owner_name}
-                            </div>
-                            <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap', color: '#9aa89a', fontSize: '0.9rem' }}>
-                                <div>
-                                    <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
-                                        Ownership Status
-                                    </span>
-                                    Claimed and recorded in the registry
+                        {activeStar.is_bought ? (
+                            <div
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(26,40,30,0.92) 0%, rgba(14,20,18,0.9) 100%)',
+                                    border: '1px solid rgba(136,204,136,0.28)',
+                                    padding: '24px 24px 22px',
+                                    borderRadius: '22px',
+                                    color: 'white',
+                                    marginBottom: '24px',
+                                    boxShadow: '0 16px 34px rgba(0,0,0,0.28)',
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#9ce29c', marginBottom: '10px', fontWeight: 'bold', letterSpacing: '0.04em' }}>
+                                    <CheckCircle2 size={22} /> OWNERSHIP
                                 </div>
-                                {activeStar.purchase_date && (
+                                <div style={{ fontSize: '1.9rem', fontFamily: 'serif', marginBottom: '8px' }}>
+                                    {activeStar.owner_name}
+                                </div>
+                                <div style={{ color: '#b7c6b8', lineHeight: 1.65, fontSize: '0.94rem', marginBottom: '14px' }}>
+                                    This star is already claimed and recorded in the Aster Atlas registry.
+                                </div>
+                                <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap', color: '#9aa89a', fontSize: '0.9rem' }}>
                                     <div>
                                         <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
-                                            Owned Since
+                                            Registry State
                                         </span>
-                                        {new Date(activeStar.purchase_date).toLocaleDateString()}
+                                        Claimed and visible in account records
                                     </div>
-                                )}
+                                    {activeStar.purchase_date ? (
+                                        <div>
+                                            <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
+                                                Owned Since
+                                            </span>
+                                            {new Date(activeStar.purchase_date).toLocaleDateString('en-GB')}
+                                        </div>
+                                    ) : null}
+                                </div>
                             </div>
-                        </div>
-                    ) : (
+                        ) : (
+                            <div
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(255,77,0,0.18) 0%, rgba(30,18,12,0.88) 100%)',
+                                    border: '1px solid rgba(255,122,64,0.32)',
+                                    padding: '24px 24px 22px',
+                                    borderRadius: '22px',
+                                    color: 'white',
+                                    marginBottom: '24px',
+                                    boxShadow: '0 18px 40px rgba(255,77,0,0.12)',
+                                }}
+                            >
+                                <div style={{ color: '#ffb08a', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px', fontWeight: 'bold' }}>
+                                    Ownership
+                                </div>
+                                <div style={{ fontSize: '1.85rem', fontFamily: 'serif', marginBottom: '8px' }}>
+                                    Be The First Owner
+                                </div>
+                                <div style={{ color: '#f0c2af', lineHeight: 1.65, fontSize: '0.97rem' }}>
+                                    Register this star in your name and establish the first ownership record in the registry.
+                                </div>
+                            </div>
+                        )}
+
                         <div
                             style={{
-                                background: 'linear-gradient(135deg, rgba(255,77,0,0.18) 0%, rgba(30,18,12,0.88) 100%)',
-                                border: '1px solid rgba(255,122,64,0.32)',
-                                padding: '24px 24px 22px',
-                                borderRadius: '18px',
-                                color: 'white',
-                                marginBottom: '24px',
-                                boxShadow: '0 18px 40px rgba(255,77,0,0.12)',
+                                background: 'rgba(18, 18, 24, 0.86)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: '22px',
+                                padding: '24px',
+                                marginBottom: '28px',
                             }}
                         >
-                            <div style={{ color: '#ffb08a', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px', fontWeight: 'bold' }}>
-                                Ownership Status
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '18px' }}>
+                                <div>
+                                    <div style={{ color: '#ff8a4d', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>
+                                        Valuation
+                                    </div>
+                                    <div style={{ color: 'white', fontSize: '1.45rem', fontWeight: 'bold' }}>
+                                        Single-line house value model
+                                    </div>
+                                </div>
+                                <div style={{ color: '#8f8f99', fontSize: '0.88rem', textAlign: 'right' }}>
+                                    {activeStar.model_value_last_calculated_at
+                                        ? `Updated ${new Date(activeStar.model_value_last_calculated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                                        : starDetailStatus === 'loading'
+                                            ? 'Loading valuation data...'
+                                            : activeStar.valuation_eligible
+                                                ? 'Awaiting next daily snapshot'
+                                                : 'Valuation unavailable'}
+                                </div>
                             </div>
-                            <div style={{ fontSize: '1.85rem', fontFamily: 'serif', marginBottom: '8px' }}>
-                                Be The First Owner
-                            </div>
-                            <div style={{ color: '#f0c2af', lineHeight: 1.6, fontSize: '0.98rem' }}>
-                                This star is currently unclaimed. Register your name to become its first recorded owner and place it permanently in the registry.
-                            </div>
+
+                            <StarValueChart points={valuationHistory} currencyFormatter={formatSterling} />
+
+                            {activeStar.last_sale_price || activeStar.last_sale_at ? (
+                                <div style={{ color: '#8f8f99', fontSize: '0.9rem', marginTop: '14px' }}>
+                                    Last sale: {formatMarketValue(activeStar.last_sale_price)}{activeStar.last_sale_at ? ` on ${new Date(activeStar.last_sale_at).toLocaleDateString('en-GB')}` : ''}
+                                </div>
+                            ) : null}
                         </div>
-                    )}
-
-                    <div
-                        style={{
-                            background: 'rgba(18, 18, 24, 0.86)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderRadius: '20px',
-                            padding: '24px',
-                            marginBottom: '26px',
-                        }}
-                    >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '18px' }}>
-                            <div>
-                                <div style={{ color: '#ff8a4d', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>
-                                    Valuation
-                                </div>
-                                <div style={{ color: 'white', fontSize: '1.45rem', fontWeight: 'bold' }}>
-                                    Single-line house value model
-                                </div>
-                            </div>
-                            <div style={{ color: '#8f8f99', fontSize: '0.88rem', textAlign: 'right' }}>
-                                {activeStar.model_value_last_calculated_at
-                                    ? `Updated ${new Date(activeStar.model_value_last_calculated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
-                                    : starDetailStatus === 'loading'
-                                        ? 'Loading valuation data...'
-                                        : activeStar.valuation_eligible
-                                            ? 'Awaiting next daily snapshot'
-                                            : 'Valuation unavailable'}
-                            </div>
-                        </div>
-
-                        <StarValueChart points={valuationHistory} currencyFormatter={formatSterling} />
-
-                        {activeStar.last_sale_price || activeStar.last_sale_at ? (
-                            <div style={{ color: '#8f8f99', fontSize: '0.9rem', marginTop: '14px' }}>
-                                Last sale: {formatMarketValue(activeStar.last_sale_price)}{activeStar.last_sale_at ? ` on ${new Date(activeStar.last_sale_at).toLocaleDateString('en-GB')}` : ''}
-                            </div>
-                        ) : null}
-                    </div>
-
-                    <div
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                            gap: '12px',
-                            marginBottom: '30px',
-                        }}
-                    >
-                        {typeof activeStar.luminosity === 'number' && (
-                            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
-                                <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
-                                    Luminosity
-                                </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(activeStar.luminosity, 3)} Lsol</div>
-                            </div>
-                        )}
-                        {typeof activeStar.absolute_magnitude === 'number' && (
-                            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
-                                <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
-                                    Absolute Magnitude
-                                </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(activeStar.absolute_magnitude)}</div>
-                            </div>
-                        )}
-                        {activeStar.constellation && (
-                            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
-                                <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
-                                    Constellation
-                                </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{activeStar.constellation}</div>
-                            </div>
-                        )}
-                        {typeof activeStar.color_index === 'number' && (
-                            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
-                                <div style={{ color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px' }}>
-                                    Color Index
-                                </div>
-                                <div style={{ color: 'white', fontSize: '1rem' }}>{formatMaybeNumber(activeStar.color_index, 3)}</div>
-                            </div>
-                        )}
-                    </div>
-
-                    <p style={{ color: '#aaa', lineHeight: 1.6, marginBottom: '40px', fontSize: '1.05rem' }}>
-                        This {activeStar.category.toLowerCase()} is located {activeStar.distance_ly} light years from Earth.
-                        {spectralDisplay ? ` ${spectralDisplay.sentence}` : ''}
-                        {typeof activeStar.apparent_magnitude === 'number' ? ` It shines at an apparent magnitude of ${formatMaybeNumber(activeStar.apparent_magnitude)}.` : ''}
-                    </p>
 
                     {activeStar.is_bought ? null : (
                         <div
@@ -796,6 +1652,273 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             )}
                         </div>
                     )}
+                    </div>
+                </div>
+            </div>
+
+            <div
+                style={{
+                    position: 'absolute',
+                    top: '78px',
+                    right: '28px',
+                    bottom: '22px',
+                    width: '54%',
+                    minWidth: '760px',
+                    pointerEvents: 'none',
+                }}
+            >
+                <div
+                    style={{
+                        position: 'relative',
+                        width: '100%',
+                        height: '100%',
+                    }}
+                >
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: '-6px',
+                            right: '4px',
+                            zIndex: 8,
+                            display: 'flex',
+                            gap: '10px',
+                            pointerEvents: 'auto',
+                        }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setLayoutEditMode((current) => !current)}
+                            style={{
+                                padding: '10px 14px',
+                                borderRadius: '999px',
+                                border: `1px solid ${layoutEditMode ? 'rgba(255,122,64,0.45)' : 'rgba(255,255,255,0.12)'}`,
+                                background: layoutEditMode ? 'rgba(255,122,64,0.16)' : 'rgba(9,13,22,0.55)',
+                                color: 'white',
+                                fontSize: '0.82rem',
+                                fontWeight: 'bold',
+                                letterSpacing: '0.04em',
+                                backdropFilter: 'blur(12px)',
+                            }}
+                        >
+                            {layoutEditMode ? 'Done Arranging' : 'Arrange Modules'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleResetObservatoryLayout}
+                            style={{
+                                padding: '10px 14px',
+                                borderRadius: '999px',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                background: 'rgba(9,13,22,0.55)',
+                                color: '#d7dae7',
+                                fontSize: '0.82rem',
+                                fontWeight: 'bold',
+                                letterSpacing: '0.04em',
+                                backdropFilter: 'blur(12px)',
+                            }}
+                        >
+                            Reset Layout
+                        </button>
+                    </div>
+
+                    <ObservatoryBackdrop starLayout={starLayout} hoveredInstrument={hoveredInstrument} />
+
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: `${starLayout.x}%`,
+                            top: `${starLayout.y}%`,
+                            width: '430px',
+                            height: '430px',
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 3,
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
+                            <ambientLight intensity={0.2} />
+                            <pointLight position={[10, 5, 10]} intensity={1.5} />
+                            <pointLight position={[-10, -5, -10]} intensity={0.5} />
+                            <group scale={[0.392, 0.392, 0.392]}>
+                                <DetailedStar star={star} detailLevel="hero" />
+                            </group>
+                        </Canvas>
+                    </div>
+
+                    <div ref={observatoryCanvasRef} style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+                        <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+                            {observatoryConnectors.map((connector) => (
+                                <React.Fragment key={connector.key}>
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            left: `${connector.startX}%`,
+                                            top: `${connector.startY}%`,
+                                            width: `${connector.length}%`,
+                                            height: '1px',
+                                            transformOrigin: '0 50%',
+                                            transform: `rotate(${connector.angle}deg)`,
+                                            background: hoveredInstrument === connector.key
+                                                ? 'linear-gradient(90deg, rgba(255,170,120,0.42) 0%, rgba(255,255,255,0.14) 56%, rgba(255,255,255,0) 100%)'
+                                                : 'linear-gradient(90deg, rgba(132,166,255,0.16) 0%, rgba(255,255,255,0.08) 56%, rgba(255,255,255,0) 100%)',
+                                            opacity: hoveredInstrument && hoveredInstrument !== connector.key ? 0.3 : 0.8,
+                                        }}
+                                    />
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            left: `${connector.startX}%`,
+                                            top: `${connector.startY}%`,
+                                            width: '7px',
+                                            height: '7px',
+                                            transform: 'translate(-50%, -50%)',
+                                            borderRadius: '999px',
+                                            background: hoveredInstrument === connector.key ? '#ffb17a' : 'rgba(188,206,255,0.72)',
+                                            boxShadow: hoveredInstrument === connector.key ? '0 0 18px rgba(255,177,122,0.3)' : '0 0 12px rgba(188,206,255,0.18)',
+                                        }}
+                                    />
+                                </React.Fragment>
+                            ))}
+                        </div>
+
+                        {layoutEditMode ? (
+                            <div
+                                onPointerDown={handleStartStarDrag}
+                                style={{
+                                    position: 'absolute',
+                                    left: `${starLayout.x}%`,
+                                    top: `${starLayout.y}%`,
+                                    transform: 'translate(-50%, -50%)',
+                                    width: '250px',
+                                    height: '250px',
+                                    borderRadius: '999px',
+                                    border: '1px dashed rgba(255,255,255,0.22)',
+                                    boxShadow: '0 0 0 1px rgba(255,122,64,0.16) inset',
+                                    background: 'radial-gradient(circle, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 42%, rgba(255,255,255,0) 72%)',
+                                    cursor: 'grab',
+                                    pointerEvents: 'auto',
+                                    zIndex: 7,
+                                    touchAction: 'none',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        top: '-14px',
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        padding: '5px 10px',
+                                        borderRadius: '999px',
+                                        background: 'rgba(255,122,64,0.92)',
+                                        color: '#fff8f0',
+                                        fontSize: '0.68rem',
+                                        letterSpacing: '0.12em',
+                                        textTransform: 'uppercase',
+                                        fontWeight: 'bold',
+                                        boxShadow: '0 8px 18px rgba(255,77,0,0.18)',
+                                    }}
+                                >
+                                    Drag Star
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {hasLuminosity
+                            ? renderObservatoryModule(
+                                'luminosity',
+                                <CircularGauge
+                                    value={Math.log10(1 + activeStar.luminosity)}
+                                    max={Math.log10(100001)}
+                                    label={formatCompact(activeStar.luminosity, activeStar.luminosity > 999 ? 1 : 2)}
+                                    subtitle={luminosityPercentile || 'Relative to Solar luminosity'}
+                                />
+                            )
+                            : null}
+
+                        {renderObservatoryModule(
+                            'structure',
+                            <ComparisonModule
+                                radius={activeStar.radius_flame}
+                                mass={activeStar.mass_flame}
+                                radiusSubtitle={radiusPercentile || undefined}
+                                massSubtitle={massPercentile || undefined}
+                            />
+                        )}
+
+                        {hasDistance
+                            ? renderObservatoryModule('distance', <DistanceModule distanceLy={activeStar.distance_ly} />)
+                            : null}
+
+                        {false && spectralDisplay ? (
+                            <div style={{ position: 'absolute', right: '1%', top: '74%', width: '24%' }}>
+                                <SpectralBandModule
+                                    activeBand={spectralBand}
+                                    subtitle={`${spectralDisplay.label} · ${spectralDisplay.value}`}
+                                />
+                            </div>
+                        ) : null}
+
+                        {false && (typeof activeStar.color_index === 'number' || typeof activeStar.bp_rp === 'number') ? (
+                            <div style={{ position: 'absolute', left: '4%', top: '31%', width: '20%' }}>
+                                <ColorIndexModule colorIndex={activeStar.color_index ?? activeStar.bp_rp} />
+                            </div>
+                        ) : null}
+
+                        {false && ((typeof activeStar.apparent_magnitude === 'number' || typeof activeStar.absolute_magnitude === 'number')) ? (
+                            <div style={{ position: 'absolute', right: '1%', top: '34%', width: '21%' }}>
+                                <BrightnessModule
+                                    apparentMagnitude={activeStar.apparent_magnitude}
+                                    absoluteMagnitude={activeStar.absolute_magnitude}
+                                />
+                            </div>
+                        ) : null}
+
+                        {false && (activeStar.constellation || (typeof activeStar.ra_degrees === 'number' && typeof activeStar.dec_degrees === 'number')) ? (
+                            <div style={{ position: 'absolute', right: '1%', bottom: '1.5%', width: '24%' }}>
+                                <SkyPositionModule star={activeStar} />
+                            </div>
+                        ) : null}
+
+                        {false && typeof activeStar.age_flame === 'number' ? (
+                            <div style={{ position: 'absolute', left: '11%', bottom: '2%', width: '34%' }}>
+                                <AgeTimelineModule age={activeStar.age_flame} />
+                            </div>
+                        ) : null}
+
+                        {hasSpectral
+                            ? renderObservatoryModule(
+                                'spectral',
+                                <SpectralBandModule
+                                    activeBand={spectralBand}
+                                    subtitle={`${spectralDisplay.label} · ${spectralDisplay.value}`}
+                                />
+                            )
+                            : null}
+
+                        {hasColorIndex
+                            ? renderObservatoryModule(
+                                'colorIndex',
+                                <ColorIndexModule colorIndex={activeStar.color_index ?? activeStar.bp_rp} />
+                            )
+                            : null}
+
+                        {hasBrightness
+                            ? renderObservatoryModule(
+                                'brightness',
+                                <BrightnessModule
+                                    apparentMagnitude={activeStar.apparent_magnitude}
+                                    absoluteMagnitude={activeStar.absolute_magnitude}
+                                />
+                            )
+                            : null}
+
+                        {hasSkyPosition
+                            ? renderObservatoryModule('sky', <SkyPositionModule star={activeStar} />)
+                            : null}
+
+                        {hasAge
+                            ? renderObservatoryModule('age', <AgeTimelineModule age={activeStar.age_flame} />)
+                            : null}
                     </div>
                 </div>
             </div>

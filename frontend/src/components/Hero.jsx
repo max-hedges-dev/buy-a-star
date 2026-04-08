@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Link } from 'react-router-dom';
@@ -12,11 +12,43 @@ const Hero = () => {
     }), []);
     const [showHeroScene] = useState(true);
     const [heroSceneVisible, setHeroSceneVisible] = useState(false);
+    const [viewportSize, setViewportSize] = useState(() => ({
+        width: typeof window !== 'undefined' ? window.innerWidth : 1440,
+        height: typeof window !== 'undefined' ? window.innerHeight : 900,
+    }));
 
     const pointerX = useMotionValue(0);
     const pointerY = useMotionValue(0);
     const parallaxX = useSpring(pointerX, { stiffness: 70, damping: 18, mass: 0.6 });
     const parallaxY = useSpring(pointerY, { stiffness: 70, damping: 18, mass: 0.6 });
+
+    useEffect(() => {
+        const handleResize = () => setViewportSize({
+            width: window.innerWidth,
+            height: window.innerHeight,
+        });
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const { width: viewportWidth, height: viewportHeight } = viewportSize;
+    const isTablet = viewportWidth < 1100;
+    const isMobile = viewportWidth < 760;
+    const isShort = viewportHeight < 860;
+    const widthDrivenStar = isMobile
+        ? Math.min(320, viewportWidth * 0.76)
+        : isTablet
+            ? Math.min(400, viewportWidth * 0.44)
+            : Math.min(518, viewportWidth * 0.34);
+    const heightDrivenStar = isMobile
+        ? viewportHeight * 0.34
+        : isTablet
+            ? viewportHeight * 0.38
+            : viewportHeight * 0.46;
+    const heroStarSize = Math.max(220, Math.min(widthDrivenStar, heightDrivenStar));
+    const heroButtonMarginBottom = isMobile ? 112 : isTablet ? 120 : isShort ? 126 : 160;
+    const heroTextTop = isMobile ? '41%' : isTablet ? '43%' : isShort ? '44%' : '48%';
+    const heroGlowSize = isMobile ? '140vw' : isTablet ? '122vw' : '108vw';
 
     const handlePointerMove = (event) => {
         const { innerWidth, innerHeight } = window;
@@ -92,13 +124,13 @@ const Hero = () => {
                 style={{
                     position: 'absolute',
                     zIndex: 1,
-                    top: '48%',
+                    top: heroTextTop,
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
                     textAlign: 'center',
                     width: '100%',
                     maxWidth: '920px',
-                    padding: '0 28px',
+                    padding: isMobile ? '0 20px' : '0 28px',
                 }}
             >
                 <motion.div
@@ -107,7 +139,7 @@ const Hero = () => {
                     transition={{ duration: 0.6 }}
                     style={{
                         color: '#ff9c63',
-                        fontSize: '0.86rem',
+                        fontSize: isMobile ? '0.74rem' : '0.86rem',
                         letterSpacing: '0.22em',
                         textTransform: 'uppercase',
                         fontWeight: 700,
@@ -137,9 +169,9 @@ const Hero = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.15, duration: 0.8 }}
                     style={{
-                        fontSize: '1.12rem',
+                        fontSize: isMobile ? '1rem' : isTablet ? '1.04rem' : '1.12rem',
                         color: '#b5b5bc',
-                        lineHeight: '1.9',
+                        lineHeight: isMobile ? '1.72' : '1.9',
                         maxWidth: '760px',
                         margin: '0 auto 34px',
                     }}
@@ -147,7 +179,7 @@ const Hero = () => {
                     Choose a real catalogued star, record it in the Aster Atlas registry, and receive a digital certificate issued straight after purchase. Each registered star and its owner can be found forever inside the galaxy.
                 </motion.p>
 
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '20px', flexWrap: 'wrap', marginBottom: '160px'}}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '20px', flexWrap: 'wrap', marginBottom: `${heroButtonMarginBottom}px` }}>
                     <Link to="/buy" style={primaryButtonStyle}>
                         Register a Star
                     </Link>
@@ -162,10 +194,10 @@ const Hero = () => {
                     position: 'absolute',
                     left: '50%',
                     bottom: '-3vh',
-                    width: '518px',
-                    height: '518px',
+                    width: `${heroStarSize}px`,
+                    height: `${heroStarSize}px`,
                     transform: 'translateX(-50%)',
-                    zIndex: 1,
+                    zIndex: 0,
                     pointerEvents: 'none',
                     mixBlendMode: 'screen',
                 }}
@@ -221,8 +253,8 @@ const Hero = () => {
                     bottom: '-88%',
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    width: '108vw',
-                    height: '108vw',
+                    width: heroGlowSize,
+                    height: heroGlowSize,
                     background: 'radial-gradient(circle, #ff4d00 0%, transparent 60%)',
                     opacity: 0.2,
                     zIndex: 0,

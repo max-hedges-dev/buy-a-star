@@ -34,6 +34,17 @@ const DEFAULT_OBSERVATORY_LAYOUT = {
 };
 
 const DEFAULT_STAR_LAYOUT = { x: 55, y: 48 };
+const RESPONSIVE_STAR_LAYOUT = { x: 54, y: 43 };
+const RESPONSIVE_OBSERVATORY_LAYOUT = {
+    luminosity: { x: 74, y: 5, w: 22 },
+    colorIndex: { x: 5, y: 10, w: 18 },
+    brightness: { x: 3, y: 33, w: 20 },
+    structure: { x: 76, y: 40, w: 21 },
+    distance: { x: 5, y: 64, w: 28 },
+    spectral: { x: 68, y: 71, w: 29 },
+    sky: { x: 76, y: 84, w: 20 },
+    age: { x: 20, y: 86, w: 38 },
+};
 
 const sanitizeObservatoryLayout = (value) => {
     const next = {};
@@ -820,6 +831,10 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const { isAuthenticated, isLoadingUser } = useAuth();
+    const [viewportSize, setViewportSize] = useState(() => ({
+        width: typeof window !== 'undefined' ? window.innerWidth : 1720,
+        height: typeof window !== 'undefined' ? window.innerHeight : 980,
+    }));
     const detectedCountryCode = useMemo(() => detectCountryCode(), []);
     const [ownerName, setOwnerName] = useState('');
     const [certificateType, setCertificateType] = useState('digital');
@@ -876,6 +891,28 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         () => getPercentileSubtitle(activeStar, 'mass_outlier'),
         [activeStar]
     );
+    const isCompactDesktop = viewportSize.width < 1680;
+    const isLaptop = viewportSize.width < 1440;
+    const isTablet = viewportSize.width < 1180;
+    const allowFreeformLayout = viewportSize.width >= 1600 && viewportSize.height >= 930;
+    const leftPanelWidth = isTablet
+        ? 'clamp(320px, 38vw, 520px)'
+        : isLaptop
+            ? 'clamp(360px, 40vw, 620px)'
+            : isCompactDesktop
+                ? 'clamp(440px, 43vw, 760px)'
+                : 'clamp(520px, 46vw, 864px)';
+    const leftPanelLeft = isLaptop ? '28px' : '88px';
+    const leftPanelPadding = isLaptop ? '32px 20px 32px 16px' : '40px 30px 40px 20px';
+    const rightPanelWidth = allowFreeformLayout ? '54%' : isTablet ? '52%' : '50%';
+    const rightPanelMinWidth = allowFreeformLayout ? (isTablet ? '560px' : isLaptop ? '620px' : '760px') : '540px';
+    const rightPanelRight = isLaptop ? '18px' : '28px';
+    const observatoryScale = allowFreeformLayout ? 1 : isTablet ? 0.86 : isLaptop ? 0.9 : 0.94;
+    const observatoryCanvasWidth = '100%';
+    const observatoryCanvasHeight = '100%';
+    const observatoryCanvasMinHeight = isLaptop ? '820px' : '100%';
+    const observatoryStarBoxSize = allowFreeformLayout ? '430px' : isTablet ? '250px' : isLaptop ? '280px' : '320px';
+    const observatoryEditButtonsScale = allowFreeformLayout ? 1 : 0.9;
     const hasLuminosity = typeof activeStar.luminosity === 'number';
     const hasColorIndex = typeof activeStar.color_index === 'number' || typeof activeStar.bp_rp === 'number';
     const hasBrightness = typeof activeStar.apparent_magnitude === 'number' || typeof activeStar.absolute_magnitude === 'number';
@@ -883,6 +920,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const hasAge = typeof activeStar.age_flame === 'number';
     const hasDistance = typeof activeStar.distance_ly === 'number';
     const hasSpectral = Boolean(spectralDisplay);
+    const activeObservatoryLayout = allowFreeformLayout ? observatoryLayout : RESPONSIVE_OBSERVATORY_LAYOUT;
+    const activeStarLayout = allowFreeformLayout ? starLayout : RESPONSIVE_STAR_LAYOUT;
 
     const visibleInstrumentKeys = useMemo(
         () => ([
@@ -900,13 +939,13 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
     const observatoryConnectors = useMemo(() => {
         return visibleInstrumentKeys.map((key) => {
-            const layout = observatoryLayout[key];
+            const layout = activeObservatoryLayout[key];
             if (!layout) {
                 return null;
             }
 
-            const starX = starLayout.x;
-            const starY = starLayout.y;
+            const starX = activeStarLayout.x;
+            const starY = activeStarLayout.y;
             const moduleOnLeft = layout.x + layout.w / 2 < starX;
             const startX = moduleOnLeft ? layout.x + layout.w : layout.x;
             const startY = layout.y + 8;
@@ -923,7 +962,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 angle,
             };
         }).filter(Boolean);
-    }, [observatoryLayout, starLayout, visibleInstrumentKeys]);
+    }, [activeObservatoryLayout, activeStarLayout, visibleInstrumentKeys]);
+
+    useEffect(() => {
+        if (allowFreeformLayout) {
+            return;
+        }
+        setLayoutEditMode(false);
+    }, [allowFreeformLayout]);
 
     useEffect(() => {
         try {
@@ -934,6 +980,18 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, [observatoryLayout]);
 
     useEffect(() => {
+        const handleResize = () => {
+            setViewportSize({
+                width: window.innerWidth,
+                height: window.innerHeight,
+            });
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    useEffect(() => {
         try {
             window.localStorage.setItem(OBSERVATORY_STAR_STORAGE_KEY, JSON.stringify(starLayout));
         } catch {
@@ -942,7 +1000,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, [starLayout]);
 
     useEffect(() => {
-        if (!layoutEditMode) {
+        if (!layoutEditMode || !allowFreeformLayout) {
             return undefined;
         }
 
@@ -989,7 +1047,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
         };
-    }, [layoutEditMode]);
+    }, [allowFreeformLayout, layoutEditMode]);
 
     useEffect(() => {
         let isActive = true;
@@ -1126,7 +1184,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, []);
 
     const handleStartModuleDrag = useCallback((key, event) => {
-        if (!layoutEditMode) {
+        if (!layoutEditMode || !allowFreeformLayout) {
             return;
         }
 
@@ -1140,10 +1198,10 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             startY: event.clientY,
             startLayout: observatoryLayout[key],
         };
-    }, [layoutEditMode, observatoryLayout]);
+    }, [allowFreeformLayout, layoutEditMode, observatoryLayout]);
 
     const handleStartStarDrag = useCallback((event) => {
-        if (!layoutEditMode) {
+        if (!layoutEditMode || !allowFreeformLayout) {
             return;
         }
 
@@ -1156,10 +1214,10 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             startY: event.clientY,
             startLayout: starLayout,
         };
-    }, [layoutEditMode, starLayout]);
+    }, [allowFreeformLayout, layoutEditMode, starLayout]);
 
     const renderObservatoryModule = useCallback((key, children) => {
-        const layout = observatoryLayout[key];
+        const layout = activeObservatoryLayout[key];
         if (!layout) {
             return null;
         }
@@ -1178,15 +1236,15 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     top: `${layout.y}%`,
                     width: `${layout.w}%`,
                     pointerEvents: 'auto',
-                    cursor: layoutEditMode ? 'grab' : 'default',
-                    zIndex: layoutEditMode ? 6 : isHovered ? 4 : 2,
+                    cursor: layoutEditMode && allowFreeformLayout ? 'grab' : 'default',
+                    zIndex: layoutEditMode && allowFreeformLayout ? 6 : isHovered ? 4 : 2,
                     touchAction: 'none',
                     transition: 'transform 0.18s ease, filter 0.18s ease',
                     transform: isHovered ? 'translateY(-2px)' : 'none',
                     filter: isHovered ? 'drop-shadow(0 18px 30px rgba(255,150,84,0.1))' : 'none',
                 }}
             >
-                {layoutEditMode ? (
+                {layoutEditMode && allowFreeformLayout ? (
                     <div
                         style={{
                             position: 'absolute',
@@ -1209,7 +1267,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 {React.isValidElement(children) ? React.cloneElement(children, { hovered: isHovered }) : children}
             </div>
         );
-    }, [handleStartModuleDrag, hoveredInstrument, layoutEditMode, observatoryLayout]);
+    }, [activeObservatoryLayout, allowFreeformLayout, handleStartModuleDrag, hoveredInstrument, layoutEditMode]);
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', background: '#000' }}>
@@ -1234,18 +1292,18 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '10px',
-                        minWidth: '240px',
+                        minWidth: isLaptop ? '210px' : '240px',
                         background: 'var(--primary)',
                         border: '1px solid rgba(255,255,255,0.22)',
                         color: 'white',
-                        padding: '15px 32px',
+                        padding: isLaptop ? '13px 26px' : '15px 32px',
                         borderRadius: '999px',
                         cursor: 'pointer',
                         backdropFilter: 'blur(14px)',
                         transition: 'all 0.2s',
                         boxShadow: '0 16px 36px rgba(255,77,0,0.38)',
                         fontWeight: 'bold',
-                        fontSize: '1rem',
+                        fontSize: isLaptop ? '0.92rem' : '1rem',
                         letterSpacing: '0.02em',
                     }}
                     onMouseEnter={(e) => {
@@ -1265,13 +1323,11 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 style={{
                     position: 'absolute',
                     top: 0,
-                    left: '88px',
+                    left: leftPanelLeft,
                     bottom: 0,
-                    width: '53%',
-                    minWidth: '624px',
-                    maxWidth: '864px',
+                    width: leftPanelWidth,
                     background: 'linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.82) 70%, rgba(0,0,0,0.28) 100%)',
-                    padding: '40px 30px 40px 20px',
+                    padding: leftPanelPadding,
                     display: 'flex',
                     flexDirection: 'column',
                     pointerEvents: 'none',
@@ -1279,9 +1335,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             >
                 <div
                     style={{
-                        position: 'absolute',
-                        top: '40px',
-                        left: '-42px',
+                    position: 'absolute',
+                    top: '40px',
+                    left: '-42px',
                         zIndex: 2,
                         pointerEvents: 'auto',
                     }}
@@ -1660,18 +1716,21 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 style={{
                     position: 'absolute',
                     top: '78px',
-                    right: '28px',
+                    right: rightPanelRight,
                     bottom: '22px',
-                    width: '54%',
-                    minWidth: '760px',
+                    width: rightPanelWidth,
+                    minWidth: rightPanelMinWidth,
                     pointerEvents: 'none',
                 }}
             >
                 <div
                     style={{
                         position: 'relative',
-                        width: '100%',
-                        height: '100%',
+                        width: observatoryCanvasWidth,
+                        height: observatoryCanvasHeight,
+                        minHeight: observatoryCanvasMinHeight,
+                        transform: `scale(${observatoryScale})`,
+                        transformOrigin: 'top right',
                     }}
                 >
                     <div
@@ -1682,7 +1741,10 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             zIndex: 8,
                             display: 'flex',
                             gap: '10px',
-                            pointerEvents: 'auto',
+                            pointerEvents: allowFreeformLayout ? 'auto' : 'none',
+                            transform: `scale(${observatoryEditButtonsScale})`,
+                            transformOrigin: 'top right',
+                            opacity: allowFreeformLayout ? 1 : 0,
                         }}
                     >
                         <button
@@ -1721,15 +1783,15 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                         </button>
                     </div>
 
-                    <ObservatoryBackdrop starLayout={starLayout} hoveredInstrument={hoveredInstrument} />
+                    <ObservatoryBackdrop starLayout={activeStarLayout} hoveredInstrument={hoveredInstrument} />
 
                     <div
                         style={{
                             position: 'absolute',
-                            left: `${starLayout.x}%`,
-                            top: `${starLayout.y}%`,
-                            width: '430px',
-                            height: '430px',
+                            left: `${activeStarLayout.x}%`,
+                            top: `${activeStarLayout.y}%`,
+                            width: observatoryStarBoxSize,
+                            height: observatoryStarBoxSize,
                             transform: 'translate(-50%, -50%)',
                             zIndex: 3,
                             pointerEvents: 'none',
@@ -1781,13 +1843,13 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             ))}
                         </div>
 
-                        {layoutEditMode ? (
+                        {layoutEditMode && allowFreeformLayout ? (
                             <div
                                 onPointerDown={handleStartStarDrag}
                                 style={{
                                     position: 'absolute',
-                                    left: `${starLayout.x}%`,
-                                    top: `${starLayout.y}%`,
+                                    left: `${activeStarLayout.x}%`,
+                                    top: `${activeStarLayout.y}%`,
                                     transform: 'translate(-50%, -50%)',
                                     width: '250px',
                                     height: '250px',

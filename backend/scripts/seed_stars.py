@@ -1,108 +1,98 @@
 import asyncio
-import random
 import sys
 import os
-import math
+import json
 
-# Add parent dir to path to import app
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, delete
+from sqlalchemy import delete
 from app.core.config import settings
 from app.models.star import Star
-
 from app.models.transaction import Transaction
 
-# Create async session manually as we are in a script
 engine = create_async_engine(settings.DATABASE_URL)
 AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
-CATALOG_PREFIXES = ["HIP", "HD", "SAO", "TYC"]
-
-def generate_star_name():
-    return f"{random.choice(CATALOG_PREFIXES)}-{random.randint(1000, 9999)}-{random.randint(10, 99)}"
 
 async def seed():
-    print("Seeding database...")
+    print("Seeding database with galaxy stars...")
     async with AsyncSessionLocal() as session:
-        # Clear existing stars to re-seed with new coordinates
         print("Clearing existing data...")
         await session.execute(delete(Transaction))
         await session.execute(delete(Star))
-        
-        stars = []
-        
-        # Spiral Galaxy Parameters
-        # 3 arms
-        arms = 3
-        arm_separation_distance = 2 * math.pi / arms
-        
-        print("Generating spiral galaxy coordinates...")
-        
-        for i in range(1000):
-            scientific_name = generate_star_name()
-            
-            # Spiral distribution
-            # Distance from center (0 to 1200 ly radius)
-            # Use a distribution that puts more stars in the center but spreads them out
-            r_norm = random.random()
-            r_norm = 1 - r_norm * r_norm # Bias towards center? No, let's keep it simple.
-            distance = random.uniform(50, 1000) 
-            
-            # Angle based on distance + arm offset
-            spin = 5.0 # How tight the spiral is
-            
-            # Determine which arm
-            arm_index = i % arms
-            arm_angle = arm_index * arm_separation_distance
-            
-            # Angle increases with distance
-            angle = (distance / 1000.0) * spin + arm_angle
-            
-            # Add randomness/scatter to the arm width
-            random_offset = random.normalvariate(0, 0.5) 
-            angle += random_offset
-            
-            x = math.cos(angle) * distance
-            z = math.sin(angle) * distance
-            
-            # Y is the thickness of the disk
-            # Thicker at center
-            thickness_at_dist = 100 * (1 - (distance/1200))
-            if thickness_at_dist < 20: thickness_at_dist = 20
-            
-            y = random.normalvariate(0, thickness_at_dist)
-            
-            # Determine category based on rarity
-            rand_val = random.random()
-            if rand_val < 0.05:
-                category = "Blue Giant"
-            elif rand_val < 0.15:
-                category = "Red Giant"
-            elif rand_val < 0.30:
-                category = "White Dwarf"
-            elif rand_val < 0.60:
-                category = "Yellow Dwarf" # Like Sun
-            else:
-                category = "Red Dwarf"
-                
-            stars.append(Star(
-                scientific_name=scientific_name,
-                common_name=f"{scientific_name} (Common)" if random.random() < 0.1 else None,
-                category=category,
-                x=x,
-                y=y,
-                z=z,
-                distance_ly=math.sqrt(x*x + y*y + z*z),
-                price=12.99,
+
+        # Load stars from JSON (positions are pre-computed model coordinates)
+        json_path = os.path.join(os.path.dirname(__file__), "../app/data/stars.json")
+        try:
+            with open(json_path, 'r') as f:
+                stars_data = json.load(f)
+        except FileNotFoundError:
+            print(f"Error: {json_path} not found. Run generate_galaxy_stars.py first.")
+            sys.exit(1)
+
+        print(f"Loading {len(stars_data)} stars...")
+
+        stars_to_add = []
+        for s in stars_data:
+            stars_to_add.append(Star(
+                scientific_name=s['scientific_name'],
+                common_name=s.get('common_name'),
+                catalog_id=str(s.get('catalog_id') or s.get('canonical_id') or s.get('id', '')),
+                canonical_id=s.get('canonical_id'),
+                identifier_type=s.get('identifier_type'),
+                source_catalog=s.get('source_catalog'),
+                source_id=str(s.get('source_id')) if s.get('source_id') is not None else None,
+                display_name=s.get('display_name'),
+                category=s['category'],
+                x=s['x'],
+                y=s['y'],
+                z=s['z'],
+                distance_ly=s.get('distance_ly', 0),
+                hyg_id=s.get('hyg_id'),
+                hip=s.get('hip'),
+                hd=s.get('hd'),
+                hr=s.get('hr'),
+                gl=s.get('gl'),
+                bf=s.get('bf'),
+                bayer=s.get('bayer'),
+                flamsteed=s.get('flamsteed'),
+                constellation=s.get('constellation'),
+                spectral_type=s.get('spectral_type'),
+                ra_degrees=s.get('ra_degrees') or s.get('ra_deg'),
+                ra_hours=s.get('ra_hours'),
+                dec_degrees=s.get('dec_degrees') or s.get('dec_deg'),
+                distance_parsecs=s.get('distance_parsecs') or s.get('distance_pc'),
+                galactic_longitude_deg=s.get('galactic_longitude_deg') or s.get('galactic_l_deg'),
+                galactic_latitude_deg=s.get('galactic_latitude_deg') or s.get('galactic_b_deg'),
+                x_pc=s.get('x_pc'),
+                y_pc=s.get('y_pc'),
+                z_pc=s.get('z_pc'),
+                apparent_magnitude=s.get('apparent_magnitude') or s.get('apparent_mag'),
+                absolute_magnitude=s.get('absolute_magnitude') or s.get('absolute_mag'),
+                luminosity=s.get('luminosity') or s.get('luminosity_lsol'),
+                color_index=s.get('color_index'),
+                radial_velocity=s.get('radial_velocity'),
+                pmra=s.get('pmra'),
+                pmdec=s.get('pmdec'),
+                variable_designation=s.get('variable_designation'),
+                variable_min=s.get('variable_min'),
+                variable_max=s.get('variable_max'),
+                price=s.get('price', settings.STAR_ISSUE_PRICE),
+                gaia_source_id=str(s.get('source_id')) if s.get('source_catalog') == 'Gaia DR3' and s.get('source_id') is not None else None,
+                issue_price=settings.STAR_ISSUE_PRICE,
                 is_bought=False
             ))
-            
-        session.add_all(stars)
-        await session.commit()
-        print(f"Successfully seeded {len(stars)} stars.")
+
+        session.add_all(stars_to_add)
+        try:
+            await session.commit()
+            print(f"Successfully seeded {len(stars_to_add)} stars.")
+        except Exception as e:
+            print(f"Error seeding data: {e}")
+            await session.rollback()
+            raise e
 
 if __name__ == "__main__":
     if sys.platform == 'win32':

@@ -1,43 +1,131 @@
-const API_URL = "http://localhost:8000/api/v1";
+import { apiRequest } from './http';
 
-export async function fetchStars({ skip = 0, limit = 100, search = "" } = {}) {
+const STARS_URL = '/stars/';
+const STARS_CACHE_PREFIX = 'aster-atlas-stars-cache:';
+const STARS_CACHE_TTL_MS = 60 * 1000;
+
+const getStarsCacheKey = (params) => `${STARS_CACHE_PREFIX}${params.toString()}`;
+
+const readStarsCache = (cacheKey) => {
+    try {
+        const rawValue = window.localStorage.getItem(cacheKey);
+        if (!rawValue) return null;
+
+        const parsedValue = JSON.parse(rawValue);
+        if (!parsedValue.timestamp || !Array.isArray(parsedValue.data)) return null;
+
+        const isExpired = Date.now() - parsedValue.timestamp > STARS_CACHE_TTL_MS;
+        if (isExpired) {
+            window.localStorage.removeItem(cacheKey);
+            return null;
+        }
+
+        return parsedValue.data;
+    } catch {
+        return null;
+    }
+};
+
+const writeStarsCache = (cacheKey, data) => {
+    try {
+        window.localStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+                timestamp: Date.now(),
+                data,
+            })
+        );
+    } catch {
+        // Ignore cache write failures.
+    }
+};
+
+const clearStarsCache = () => {
+    try {
+        const keysToDelete = [];
+        for (let index = 0; index < window.localStorage.length; index += 1) {
+            const key = window.localStorage.key(index);
+            if (key && key.startsWith(STARS_CACHE_PREFIX)) {
+                keysToDelete.push(key);
+            }
+        }
+        keysToDelete.forEach((key) => window.localStorage.removeItem(key));
+    } catch {
+        // Ignore cache clear failures.
+    }
+};
+
+export async function fetchStars({ skip = 0, limit = 100, search = "", isBought = undefined } = {}) {
     const params = new URLSearchParams({
         skip: skip.toString(),
         limit: limit.toString(),
         ...(search && { search }),
+        ...(isBought !== undefined && { is_bought: isBought })
     });
-
-    const response = await fetch(`${API_URL}/stars?${params}`);
-    if (!response.ok) {
-        throw new Error("Failed to fetch stars");
+    const cacheKey = getStarsCacheKey(params);
+    const cachedData = readStarsCache(cacheKey);
+    if (cachedData) {
+        return cachedData;
     }
-    return response.json();
+
+    const data = await apiRequest(`${STARS_URL}?${params}`);
+    writeStarsCache(cacheKey, data);
+    return data;
 }
 
 export async function fetchStarById(id) {
-    const response = await fetch(`${API_URL}/stars/${id}`);
-    if (!response.ok) {
-        throw new Error("Failed to fetch star");
-    }
-    return response.json();
+    return apiRequest(`${STARS_URL}${id}`);
 }
 
-export async function buyStar(id, ownerName, includeCertificate) {
-    const response = await fetch(`${API_URL}/stars/${id}/buy`, {
+export async function createCheckoutSession({
+    starId,
+    ownerName,
+    certificateType,
+    countryCode,
+    acceptedTerms,
+    acceptedPrivacy,
+}) {
+    return apiRequest('/checkout/session', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
+            star_id: starId,
             owner_name: ownerName,
-            include_certificate: includeCertificate,
-            payment_method: 'paypal_mock'
-        }),
+            certificate_type: certificateType,
+            country_code: countryCode,
+            accepted_terms: acceptedTerms,
+            accepted_privacy: acceptedPrivacy,
+        },
     });
+}
 
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || "Failed to buy star");
+export async function fetchCheckoutOptions(countryCode) {
+    const params = new URLSearchParams({
+        country_code: countryCode,
+    });
+    return apiRequest(`/checkout/options?${params.toString()}`);
+}
+
+export async function fetchCheckoutSessionStatus(sessionId) {
+    const data = await apiRequest(`/checkout/session-status?session_id=${encodeURIComponent(sessionId)}`);
+    if (data.fulfilled) {
+        clearStarsCache();
     }
-    return response.json();
+    return data;
+}
+
+export async function fetchAccountOverview() {
+    return apiRequest('/account/overview');
+}
+
+export async function fetchAccountOrder(transactionId) {
+    return apiRequest(`/account/orders/${transactionId}`);
+}
+
+export async function updateOwnedStarPrice(starId, askPrice) {
+    return apiRequest(`/account/stars/${starId}/price`, {
+        method: 'PATCH',
+        body: {
+            ask_price: askPrice,
+        },
+    });
 }

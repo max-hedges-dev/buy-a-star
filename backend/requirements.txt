@@ -6,3 +6,9 @@ pydantic
 pydantic-settings
 alembic
 psycopg2-binary
+astropy
+email-validator
+google-auth
+requests
+stripe
+tzdata

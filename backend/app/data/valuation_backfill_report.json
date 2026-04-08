@@ -1,0 +1,30 @@
+{
+  "stars_scanned": 5045,
+  "hydrated": 45,
+  "named_star_fallbacks": 44,
+  "replaced": 0,
+  "manual_review": [],
+  "ineligible_after_pass": [],
+  "required_metrics": [
+    "phot_g_mean_mag",
+    "parallax",
+    "lum_flame",
+    "teff_gspphot",
+    "mh_gspphot",
+    "non_single_star",
+    "phot_variable_flag",
+    "best_class_name",
+    "radius_flame",
+    "age_flame"
+  ],
+  "generic_rebalance": {
+    "warning": "Balanced Gaia replacement pool unavailable, preserving current distribution: HTTP Error 404: 404",
+    "target_star_count": 5000
+  },
+  "valuation_summary": {
+    "stars_seen": 5045,
+    "eligible_stars": 5045,
+    "history_rows_created": 0,
+    "stars_updated": 5045
+  }
+}

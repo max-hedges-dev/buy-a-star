@@ -1,128 +1,235 @@
-import React, { useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useMemo, useState } from 'react';
+import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-
-const RotatingStars = () => {
-    const ref = useRef()
-    useFrame((state, delta) => {
-        ref.current.rotation.x -= delta / 10
-        ref.current.rotation.y -= delta / 15
-    })
-    return (
-        <group rotation={[0, 0, Math.PI / 4]}>
-            <Points ref={ref} positions={new Float32Array(5000 * 3)} stride={3} frustumCulled={false}>
-                <pointsMaterial transparent color="#ffa0e0" size={0.005} sizeAttenuation={true} depthWrite={false} />
-            </Points>
-        </group>
-    )
-}
-
-function Points({ ...props }) {
-    const ref = useRef()
-    // Generate random points on a sphere
-    const positions = new Float32Array(3000)
-    for (let i = 0; i < 3000; i++) {
-        positions[i] = (Math.random() - 0.5) * 10
-    }
-
-    return (
-        <points ref={ref} {...props}>
-            <bufferGeometry>
-                <bufferAttribute attach="attributes-position" count={1000} array={positions} itemSize={3} />
-            </bufferGeometry>
-            <pointsMaterial size={0.015} color="white" transparent opacity={0.8} />
-        </points>
-    )
-}
-
+import { motion, useMotionValue, useSpring } from 'framer-motion';
+import DetailedStar from './DetailedStar';
 
 const Hero = () => {
-    return (
-        <div style={{ position: 'relative', height: '100vh', width: '100%', overflow: 'hidden' }}>
+    const heroStar = useMemo(() => ({
+        id: 'hero-orange-star',
+        category: 'Orange Giant',
+    }), []);
+    const [showHeroScene] = useState(true);
+    const [heroSceneVisible, setHeroSceneVisible] = useState(false);
 
-            {/* Background Starfield */}
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
+    const pointerX = useMotionValue(0);
+    const pointerY = useMotionValue(0);
+    const parallaxX = useSpring(pointerX, { stiffness: 70, damping: 18, mass: 0.6 });
+    const parallaxY = useSpring(pointerY, { stiffness: 70, damping: 18, mass: 0.6 });
+
+    const handlePointerMove = (event) => {
+        const { innerWidth, innerHeight } = window;
+        const normalizedX = event.clientX / innerWidth - 0.5;
+        const normalizedY = event.clientY / innerHeight - 0.5;
+
+        pointerX.set(normalizedX * -56.16);
+        pointerY.set(normalizedY * -42.12);
+    };
+
+    const handlePointerLeave = () => {
+        pointerX.set(0);
+        pointerY.set(0);
+    };
+
+    const primaryButtonStyle = {
+        padding: '16px 34px',
+        background: 'linear-gradient(45deg, #ff4d00, #ff8800)',
+        color: 'white',
+        fontWeight: '700',
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        borderRadius: '999px',
+        boxShadow: '0 0 24px rgba(255, 77, 0, 0.35)',
+        border: '1px solid rgba(255,255,255,0.18)',
+        fontSize: '0.95rem',
+    };
+
+    const secondaryButtonStyle = {
+        padding: '16px 34px',
+        background: `
+            radial-gradient(circle at 20% 30%, rgba(255,255,255,0.12) 0%, transparent 18%),
+            radial-gradient(circle at 78% 70%, rgba(255,140,60,0.08) 0%, transparent 22%),
+            linear-gradient(135deg, rgba(22,16,20,0.96) 0%, rgba(10,10,14,0.98) 55%, rgba(28,16,10,0.96) 100%)
+        `,
+        color: 'white',
+        fontWeight: '700',
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        borderRadius: '999px',
+        border: '1px solid rgba(255,255,255,0.12)',
+        fontSize: '0.95rem',
+        backdropFilter: 'blur(14px)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -14px 30px rgba(0,0,0,0.28), 0 14px 28px rgba(0,0,0,0.24)',
+        position: 'relative',
+        overflow: 'hidden',
+    };
+
+    return (
+        <section
+            onMouseMove={handlePointerMove}
+            onMouseLeave={handlePointerLeave}
+            style={{ position: 'relative', height: '100vh', width: '100%', overflow: 'hidden' }}
+        >
+            <motion.div
+                style={{
+                    position: 'absolute',
+                    top: '-3%',
+                    left: '-3%',
+                    width: '106%',
+                    height: '106%',
+                    zIndex: 0,
+                    x: parallaxX,
+                    y: parallaxY,
+                }}
+            >
                 <Canvas>
                     <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
                 </Canvas>
-            </div>
+            </motion.div>
 
-            {/* Central Content */}
-            <div style={{
-                position: 'absolute',
-                zIndex: 1,
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                textAlign: 'center',
-                width: '100%'
-            }}>
-                <motion.h2
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8 }}
+            <div
+                style={{
+                    position: 'absolute',
+                    zIndex: 1,
+                    top: '48%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                    width: '100%',
+                    maxWidth: '920px',
+                    padding: '0 28px',
+                }}
+            >
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6 }}
                     style={{
-                        fontSize: '4rem',
-                        fontWeight: '800',
-                        letterSpacing: '5px',
-                        marginBottom: '10px',
+                        color: '#ff9c63',
+                        fontSize: '0.86rem',
+                        letterSpacing: '0.22em',
                         textTransform: 'uppercase',
-                        color: '#ffffff'
+                        fontWeight: 700,
+                        marginBottom: '22px',
                     }}
                 >
-                    Buy A Star
-                </motion.h2>
+                    ASTER ATLAS CELESTIAL REGISTRY
+                </motion.div>
+
+                <motion.h1
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.7, delay: 0.08 }}
+                    style={{
+                        fontSize: 'clamp(3rem, 6vw, 5.25rem)',
+                        fontWeight: '800',
+                        lineHeight: 0.98,
+                        marginBottom: '24px',
+                        color: '#ffffff',
+                    }}
+                >
+                    Own a real star. Forever.
+                </motion.h1>
 
                 <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3, duration: 0.8 }}
+                    transition={{ delay: 0.15, duration: 0.8 }}
                     style={{
-                        fontSize: '1.2rem',
-                        letterSpacing: '3px',
-                        color: '#aaa',
-                        marginBottom: '50px',
-                        textTransform: 'uppercase'
+                        fontSize: '1.12rem',
+                        color: '#b5b5bc',
+                        lineHeight: '1.9',
+                        maxWidth: '760px',
+                        margin: '0 auto 34px',
                     }}
                 >
-                    The Original & Official Celestial Registry
+                    Choose a real catalogued star, record it in the Aster Atlas registry, and receive a digital certificate issued straight after purchase. Each registered star and its owner can be found forever inside the galaxy.
                 </motion.p>
 
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '40px', marginTop: '40px' }}>
-                    <Link to="/search" style={{
-                        padding: '15px 40px',
-                        background: 'linear-gradient(45deg, #ff4d00, #ff8800)',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        letterSpacing: '2px',
-                        textTransform: 'uppercase',
-                        borderRadius: '30px',
-                        boxShadow: '0 0 20px rgba(255, 77, 0, 0.4)',
-                        transition: 'transform 0.2s',
-                        border: '1px solid rgba(255,255,255,0.2)'
-                    }}>
-                        BUY or FIND A STAR
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '20px', flexWrap: 'wrap', marginBottom: '160px'}}>
+                    <Link to="/buy" style={primaryButtonStyle}>
+                        Register a Star
+                    </Link>
+                    <Link to="/search" style={secondaryButtonStyle}>
+                        Explore the Galaxy
                     </Link>
                 </div>
             </div>
 
-            {/* Bottom Planet/Glow effect (CSS visual) */}
-            <div style={{
-                position: 'absolute',
-                bottom: '-40%',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: '120vw',
-                height: '60vw',
-                background: 'radial-gradient(circle, #ff4d00 0%, transparent 60%)',
-                opacity: 0.2,
-                zIndex: 0,
-                pointerEvents: 'none'
-            }}></div>
+            <div
+                style={{
+                    position: 'absolute',
+                    left: '50%',
+                    bottom: '-3vh',
+                    width: '518px',
+                    height: '518px',
+                    transform: 'translateX(-50%)',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                    mixBlendMode: 'screen',
+                }}
+            >
+                <div
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '50%',
+                        background: `
+                            radial-gradient(circle at 50% 50%, rgba(255,248,214,0.98) 0%, rgba(255,202,112,0.92) 12%, rgba(255,140,48,0.42) 28%, rgba(255,120,30,0.16) 44%, rgba(255,120,30,0) 68%)
+                        `,
+                        filter: 'blur(16px)',
+                        opacity: heroSceneVisible ? 0 : 1,
+                        transform: heroSceneVisible ? 'scale(1.08)' : 'scale(1)',
+                        transition: 'opacity 0.45s ease, transform 0.6s ease',
+                    }}
+                />
 
-        </div>
+                {showHeroScene ? (
+                    <div
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            opacity: heroSceneVisible ? 1 : 0,
+                            transition: 'opacity 0.55s ease',
+                        }}
+                    >
+                        <Canvas
+                            camera={{ position: [0, 0, 8], fov: 38 }}
+                            dpr={[1, 1.5]}
+                            gl={{ alpha: true, antialias: false, premultipliedAlpha: false, powerPreference: 'high-performance' }}
+                            onCreated={({ gl }) => {
+                                gl.setClearColor(0x000000, 0);
+                                window.requestAnimationFrame(() => {
+                                    setHeroSceneVisible(true);
+                                });
+                            }}
+                            style={{ background: 'transparent' }}
+                        >
+                            <ambientLight intensity={0.2} />
+                            <pointLight position={[8, 4, 8]} intensity={1.3} />
+                            <pointLight position={[-6, -3, -6]} intensity={0.35} />
+                            <DetailedStar star={heroStar} detailLevel="hero" />
+                        </Canvas>
+                    </div>
+                ) : null}
+            </div>
+
+            <div
+                style={{
+                    position: 'absolute',
+                    bottom: '-88%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '108vw',
+                    height: '108vw',
+                    background: 'radial-gradient(circle, #ff4d00 0%, transparent 60%)',
+                    opacity: 0.2,
+                    zIndex: 0,
+                    pointerEvents: 'none',
+                }}
+            />
+        </section>
     );
 };
 

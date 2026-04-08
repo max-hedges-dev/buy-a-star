@@ -1,74 +1,156 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from __future__ import annotations
+
+from decimal import Decimal
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from typing import List, Optional
-from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.session import get_db
 from app.models.star import Star
-# from app.schemas.star import StarRead, StarCreate # We'll create schemas later
+from app.models.star_valuation_history import StarValuationHistory
+from app.core.config import settings
+from app.schemas.star import StarDetailRead, StarListRead, StarValuationHistoryPointRead
+
 
 router = APIRouter()
 
-@router.get("/")
+
+def _float(value: Decimal | float | int | None) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def serialize_star(star: Star) -> dict:
+    first_purchase_price = float(settings.STAR_ISSUE_PRICE)
+    current_price = _float(star.ask_price) or first_purchase_price
+    return {
+        "id": star.id,
+        "scientific_name": star.scientific_name,
+        "common_name": star.common_name,
+        "catalog_id": star.catalog_id,
+        "canonical_id": star.canonical_id,
+        "identifier_type": star.identifier_type,
+        "source_catalog": star.source_catalog,
+        "source_id": star.source_id,
+        "display_name": star.display_name,
+        "category": star.category,
+        "price": current_price,
+        "first_purchase_price": first_purchase_price,
+        "model_value": _float(star.model_value),
+        "ask_price": _float(star.ask_price),
+        "highest_bid": _float(star.highest_bid),
+        "last_sale_price": _float(star.last_sale_price),
+        "last_sale_at": star.last_sale_at,
+        "distance_ly": star.distance_ly,
+        "is_bought": bool(star.is_bought),
+        "owner_name": star.owner_name,
+        "purchase_date": star.purchase_date,
+        "valuation_eligible": bool(star.valuation_eligible),
+        "valuation_missing_metrics": list(star.valuation_missing_metrics or []) or None,
+        "model_value_last_calculated_at": star.model_value_last_calculated_at,
+        "gaia_source_id": star.gaia_source_id,
+        "hyg_id": star.hyg_id,
+        "hip": star.hip,
+        "hd": star.hd,
+        "hr": star.hr,
+        "gl": star.gl,
+        "bf": star.bf,
+        "bayer": star.bayer,
+        "flamsteed": star.flamsteed,
+        "constellation": star.constellation,
+        "spectral_type": star.spectral_type,
+        "ra_degrees": star.ra_degrees,
+        "ra_hours": star.ra_hours,
+        "dec_degrees": star.dec_degrees,
+        "distance_parsecs": star.distance_parsecs,
+        "galactic_longitude_deg": star.galactic_longitude_deg,
+        "galactic_latitude_deg": star.galactic_latitude_deg,
+        "x_pc": star.x_pc,
+        "y_pc": star.y_pc,
+        "z_pc": star.z_pc,
+        "apparent_magnitude": star.apparent_magnitude,
+        "absolute_magnitude": star.absolute_magnitude,
+        "luminosity": star.luminosity,
+        "color_index": star.color_index,
+        "bp_rp": star.bp_rp,
+        "bp_g": star.bp_g,
+        "g_rp": star.g_rp,
+        "radial_velocity": star.radial_velocity,
+        "pm": star.pm,
+        "pmra": star.pmra,
+        "pmdec": star.pmdec,
+        "variable_designation": star.variable_designation,
+        "variable_min": star.variable_min,
+        "variable_max": star.variable_max,
+        "valuation_scores": star.valuation_scores,
+        "valuation_debug": star.valuation_debug,
+        "x": star.x,
+        "y": star.y,
+        "z": star.z,
+    }
+
+
+@router.get("")
+@router.get("/", response_model=list[StarListRead])
 async def read_stars(
     db: AsyncSession = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    is_bought: Optional[bool] = None,
 ):
     query = select(Star)
     if search:
         query = query.filter(Star.common_name.ilike(f"%{search}%") | Star.scientific_name.ilike(f"%{search}%"))
+    if is_bought is not None:
+        query = query.filter(Star.is_bought == is_bought)
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     stars = result.scalars().all()
-    return stars
+    return [StarListRead(**serialize_star(star)) for star in stars]
 
-@router.get("/{star_id}")
+
+@router.get("/{star_id}", response_model=StarDetailRead)
 async def read_star(star_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Star).filter(Star.id == star_id))
     star = result.scalars().first()
-    return star
+    if star is None:
+        raise HTTPException(status_code=404, detail="Star not found")
 
-from app.schemas.star import StarPurchaseRequest, StarRead
-from app.models.transaction import Transaction
-
-@router.post("/{star_id}/buy", response_model=StarRead)
-async def buy_star(
-    star_id: int, 
-    purchase_req: StarPurchaseRequest,
-    db: AsyncSession = Depends(get_db)
-):
-    # Start transaction with lock
-    async with db.begin():
-        # Select for update to lock the row
-        result = await db.execute(select(Star).filter(Star.id == star_id).with_for_update())
-        star = result.scalars().first()
-        
-        if not star:
-            raise HTTPException(status_code=404, detail="Star not found")
-            
-        if star.is_bought:
-            raise HTTPException(status_code=400, detail="Star is already owned by someone else")
-            
-        # Process purchase
-        star.is_bought = True
-        star.owner_name = purchase_req.owner_name
-        star.purchase_date = datetime.utcnow()
-        
-        # Create transaction record
-        amount = float(star.price)
-        if purchase_req.include_certificate:
-            amount += 5.00
-            
-        transaction = Transaction(
-            star_id=star.id,
-            amount=amount,
-            includes_certificate=purchase_req.include_certificate
+    history_result = await db.execute(
+        select(StarValuationHistory)
+        .where(StarValuationHistory.star_id == star_id)
+        .order_by(StarValuationHistory.valuation_date.asc())
+    )
+    history = [
+        StarValuationHistoryPointRead(
+            valuation_date=item.valuation_date,
+            model_value=float(item.model_value),
+            energy_price=_float(item.energy_price),
+            metals_price=_float(item.metals_price),
+            energy_change_ratio=item.energy_change_ratio,
+            metals_change_ratio=item.metals_change_ratio,
         )
-        db.add(transaction)
-        
-        await db.commit()
-        await db.refresh(star)
-        
-    return star
+        for item in history_result.scalars().all()
+    ]
+
+    return StarDetailRead(
+        **serialize_star(star),
+        phot_g_mean_mag=star.phot_g_mean_mag,
+        parallax=star.parallax,
+        lum_flame=star.lum_flame,
+        teff_gspphot=star.teff_gspphot,
+        mh_gspphot=star.mh_gspphot,
+        non_single_star=star.non_single_star,
+        phot_variable_flag=star.phot_variable_flag,
+        best_class_name=star.best_class_name,
+        radius_flame=star.radius_flame,
+        mass_flame=star.mass_flame,
+        age_flame=star.age_flame,
+        evolstage_flame=star.evolstage_flame,
+        classprob_dsc_combmod_binarystar=star.classprob_dsc_combmod_binarystar,
+        valuation_history=history,
+    )

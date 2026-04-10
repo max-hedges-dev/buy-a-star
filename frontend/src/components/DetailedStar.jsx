@@ -333,7 +333,7 @@ const DETAIL_SETTINGS = {
         bloomTexture: HERO_BLOOM_TEXTURE,
         bloomScale: 7.8,
         bloomOpacity: 0.24,
-        coronaIntensity: 1.0,
+        coronaIntensity: 1.5,
     },
     high: {
         surfaceGeometry: HIGH_SURFACE_GEOMETRY,

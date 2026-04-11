@@ -35,6 +35,7 @@ const DEFAULT_OBSERVATORY_LAYOUT = {
 
 const DEFAULT_STAR_LAYOUT = { x: 55, y: 48 };
 const RESPONSIVE_STAR_LAYOUT = { x: 54, y: 44 };
+const CENTERED_STAR_LAYOUT = { x: 50, y: 50 };
 const RESPONSIVE_OBSERVATORY_LAYOUT = {
     luminosity: { x: 74, y: 5, w: 22 },
     colorIndex: { x: 5, y: 10, w: 18 },
@@ -44,6 +45,17 @@ const RESPONSIVE_OBSERVATORY_LAYOUT = {
     spectral: { x: 68, y: 71, w: 29 },
     sky: { x: 76, y: 84, w: 20 },
     age: { x: 20, y: 86, w: 38 },
+};
+
+const OBSERVATORY_MODULE_HEIGHTS = {
+    luminosity: 238,
+    colorIndex: 118,
+    brightness: 176,
+    structure: 238,
+    distance: 118,
+    spectral: 142,
+    sky: 202,
+    age: 118,
 };
 
 const sanitizeObservatoryLayout = (value) => {
@@ -360,8 +372,16 @@ const CircularGauge = ({ value, max = 1, label, subtitle, accent = '#ff8a4d', ho
                 padding: '22px 22px 18px',
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <svg width="150" height="150" viewBox="0 0 150 150" style={{ flexShrink: 0 }}>
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(96px, 0.82fr) minmax(0, 1fr)',
+                    alignItems: 'center',
+                    gap: '14px',
+                    minWidth: 0,
+                }}
+            >
+                <svg width="150" height="150" viewBox="0 0 150 150" style={{ width: '100%', maxWidth: '136px', height: 'auto', minWidth: 0 }}>
                     <defs>
                         <linearGradient id="luminosityGauge" x1="0%" y1="0%" x2="100%" y2="100%">
                             <stop offset="0%" stopColor="#fff4d1" />
@@ -390,10 +410,10 @@ const CircularGauge = ({ value, max = 1, label, subtitle, accent = '#ff8a4d', ho
                     </text>
                 </svg>
                 <div style={{ display: 'grid', gap: '10px', minWidth: 0 }}>
-                    <div style={{ color: '#f3f4f8', fontSize: '1rem', fontWeight: 'bold' }}>
-                        {label} times the Sun
+                    <div style={{ color: '#f3f4f8', fontSize: 'clamp(0.78rem, 0.82vw, 0.98rem)', lineHeight: 1.25, fontWeight: 'bold', overflowWrap: 'break-word' }}>
+                        {label}x the Sun
                     </div>
-                    <div style={{ color: '#8f94ad', lineHeight: 1.6, fontSize: '0.88rem' }}>
+                    <div style={{ color: '#8f94ad', lineHeight: 1.45, fontSize: 'clamp(0.7rem, 0.72vw, 0.86rem)', overflowWrap: 'break-word' }}>
                         Total radiative output relative to Solar luminosity.
                     </div>
                 </div>
@@ -848,21 +868,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         [activeStar]
     );
     const isLandscapeLayout = viewportSize.width >= 1180;
-    const allowFreeformLayout = viewportSize.width >= 1680 && viewportSize.height >= 960;
+    const canArrangeObservatory = isLandscapeLayout;
     const leftUiScale = clamp(Math.min(viewportSize.width / 1680, viewportSize.height / 980), 0.82, 1.04);
     const observatoryDesignWidth = 980;
     const observatoryDesignHeight = 920;
-    const observatoryFitScale = clamp(
-        Math.min(
-            observatoryPaneSize.width ? observatoryPaneSize.width / observatoryDesignWidth : 1,
-            observatoryPaneSize.height ? observatoryPaneSize.height / observatoryDesignHeight : 1
-        ),
-        0.52,
-        1
-    );
+    const observatoryResponsiveWidth = 1260;
     const observatoryStarBoxSize = 645;
-    const activeObservatoryLayout = allowFreeformLayout ? observatoryLayout : RESPONSIVE_OBSERVATORY_LAYOUT;
-    const activeStarLayout = allowFreeformLayout ? starLayout : RESPONSIVE_STAR_LAYOUT;
+    const activeObservatoryLayout = isLandscapeLayout ? observatoryLayout : RESPONSIVE_OBSERVATORY_LAYOUT;
+    const activeStarLayout = isLandscapeLayout ? CENTERED_STAR_LAYOUT : RESPONSIVE_STAR_LAYOUT;
     const scalePx = useCallback((value) => `${Math.round(value * leftUiScale)}px`, [leftUiScale]);
     const scaleRem = useCallback((value) => `${(value * leftUiScale).toFixed(3)}rem`, [leftUiScale]);
     const pageTopPadding = Math.round(18 * leftUiScale);
@@ -890,6 +903,88 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         [hasAge, hasBrightness, hasColorIndex, hasDistance, hasLuminosity, hasSkyPosition, hasSpectral]
     );
 
+    const observatorySceneTransform = useMemo(() => {
+        const paneWidth = observatoryPaneSize.width || observatoryDesignWidth;
+        const paneHeight = observatoryPaneSize.height || observatoryDesignHeight;
+        const viewportPaddingX = 24;
+        const viewportPaddingY = 28;
+        const fitOverscanX = observatoryDesignWidth * 0.08;
+        const fitOverscanY = observatoryDesignHeight * 0.08;
+        const bounds = {
+            minX: (activeStarLayout.x / 100) * observatoryDesignWidth - observatoryStarBoxSize / 2,
+            minY: (activeStarLayout.y / 100) * observatoryDesignHeight - observatoryStarBoxSize / 2,
+            maxX: (activeStarLayout.x / 100) * observatoryDesignWidth + observatoryStarBoxSize / 2,
+            maxY: (activeStarLayout.y / 100) * observatoryDesignHeight + observatoryStarBoxSize / 2,
+        };
+
+        visibleInstrumentKeys.forEach((key) => {
+            const layout = activeObservatoryLayout[key];
+            if (!layout) {
+                return;
+            }
+
+            const x = (layout.x / 100) * observatoryDesignWidth;
+            const y = (layout.y / 100) * observatoryDesignHeight;
+            const width = (layout.w / 100) * observatoryDesignWidth;
+            const height = OBSERVATORY_MODULE_HEIGHTS[key] || 160;
+            const fitX = clamp(x, -fitOverscanX, observatoryDesignWidth - width + fitOverscanX);
+            const fitY = clamp(y, -fitOverscanY, observatoryDesignHeight - height + fitOverscanY);
+
+            bounds.minX = Math.min(bounds.minX, fitX);
+            bounds.minY = Math.min(bounds.minY, fitY);
+            bounds.maxX = Math.max(bounds.maxX, fitX + width);
+            bounds.maxY = Math.max(bounds.maxY, fitY + height);
+        });
+
+        const widthResponsiveScale = paneWidth / observatoryResponsiveWidth;
+        const fitScale = Math.min(
+            (paneWidth - viewportPaddingX * 2) / Math.max(1, bounds.maxX - bounds.minX),
+            (paneHeight - viewportPaddingY * 2) / Math.max(1, bounds.maxY - bounds.minY),
+            widthResponsiveScale
+        );
+
+        const scale = Number.isFinite(fitScale) ? Math.max(0.1, fitScale) : 1;
+        const starSceneX = (activeStarLayout.x / 100) * observatoryDesignWidth;
+        const starSceneY = (activeStarLayout.y / 100) * observatoryDesignHeight;
+        const desiredStarX = (activeStarLayout.x / 100) * paneWidth;
+        const desiredStarY = (activeStarLayout.y / 100) * paneHeight;
+        const minOffsetX = viewportPaddingX - bounds.minX * scale;
+        const maxOffsetX = paneWidth - viewportPaddingX - bounds.maxX * scale;
+        const minOffsetY = viewportPaddingY - bounds.minY * scale;
+        const maxOffsetY = paneHeight - viewportPaddingY - bounds.maxY * scale;
+        const offsetX = clamp(desiredStarX - starSceneX * scale, minOffsetX, maxOffsetX);
+        const offsetY = clamp(desiredStarY - starSceneY * scale, minOffsetY, maxOffsetY);
+
+        return {
+            scale,
+            offsetX,
+            offsetY,
+        };
+    }, [activeObservatoryLayout, activeStarLayout, observatoryPaneSize.height, observatoryPaneSize.width, observatoryResponsiveWidth, observatoryStarBoxSize, visibleInstrumentKeys]);
+
+    const centeredStarSceneLayout = useMemo(() => {
+        const paneWidth = observatoryPaneSize.width || observatoryDesignWidth;
+        const paneHeight = observatoryPaneSize.height || observatoryDesignHeight;
+        const scale = observatorySceneTransform.scale || 1;
+        const sceneX = (paneWidth / 2 - observatorySceneTransform.offsetX) / scale;
+        const sceneY = (paneHeight / 2 - observatorySceneTransform.offsetY) / scale;
+
+        return {
+            x: (sceneX / observatoryDesignWidth) * 100,
+            y: (sceneY / observatoryDesignHeight) * 100,
+        };
+    }, [
+        observatoryDesignHeight,
+        observatoryDesignWidth,
+        observatoryPaneSize.height,
+        observatoryPaneSize.width,
+        observatorySceneTransform.offsetX,
+        observatorySceneTransform.offsetY,
+        observatorySceneTransform.scale,
+    ]);
+
+    const centeredStarDisplaySize = observatoryStarBoxSize * observatorySceneTransform.scale;
+
     const observatoryConnectors = useMemo(() => {
         return visibleInstrumentKeys.map((key) => {
             const layout = activeObservatoryLayout[key];
@@ -897,8 +992,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 return null;
             }
 
-            const starX = activeStarLayout.x;
-            const starY = activeStarLayout.y;
+            const starX = centeredStarSceneLayout.x;
+            const starY = centeredStarSceneLayout.y;
             const moduleOnLeft = layout.x + layout.w / 2 < starX;
             const startX = moduleOnLeft ? layout.x + layout.w : layout.x;
             const startY = layout.y + 8;
@@ -915,14 +1010,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 angle,
             };
         }).filter(Boolean);
-    }, [activeObservatoryLayout, activeStarLayout, visibleInstrumentKeys]);
+    }, [activeObservatoryLayout, centeredStarSceneLayout, visibleInstrumentKeys]);
 
     useEffect(() => {
-        if (allowFreeformLayout) {
+        if (canArrangeObservatory) {
             return;
         }
         setLayoutEditMode(false);
-    }, [allowFreeformLayout]);
+    }, [canArrangeObservatory]);
 
     useEffect(() => {
         try {
@@ -979,7 +1074,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, [starLayout]);
 
     useEffect(() => {
-        if (!layoutEditMode || !allowFreeformLayout) {
+        if (!layoutEditMode || !canArrangeObservatory) {
             return undefined;
         }
 
@@ -1026,7 +1121,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
         };
-    }, [allowFreeformLayout, layoutEditMode]);
+    }, [canArrangeObservatory, layoutEditMode]);
 
     useEffect(() => {
         let isActive = true;
@@ -1163,7 +1258,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, []);
 
     const handleStartModuleDrag = useCallback((key, event) => {
-        if (!layoutEditMode || !allowFreeformLayout) {
+        if (!layoutEditMode || !canArrangeObservatory) {
             return;
         }
 
@@ -1177,10 +1272,10 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             startY: event.clientY,
             startLayout: observatoryLayout[key],
         };
-    }, [allowFreeformLayout, layoutEditMode, observatoryLayout]);
+    }, [canArrangeObservatory, layoutEditMode, observatoryLayout]);
 
     const handleStartStarDrag = useCallback((event) => {
-        if (!layoutEditMode || !allowFreeformLayout) {
+        if (!layoutEditMode || !canArrangeObservatory) {
             return;
         }
 
@@ -1193,7 +1288,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             startY: event.clientY,
             startLayout: starLayout,
         };
-    }, [allowFreeformLayout, layoutEditMode, starLayout]);
+    }, [canArrangeObservatory, layoutEditMode, starLayout]);
 
     const renderObservatoryModule = useCallback((key, children) => {
         const layout = activeObservatoryLayout[key];
@@ -1215,13 +1310,13 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     top: `${layout.y}%`,
                     width: `${layout.w}%`,
                     pointerEvents: 'auto',
-                    cursor: layoutEditMode && allowFreeformLayout ? 'grab' : 'default',
-                    zIndex: layoutEditMode && allowFreeformLayout ? 6 : isHovered ? 4 : 2,
+                    cursor: layoutEditMode && canArrangeObservatory ? 'grab' : 'default',
+                    zIndex: layoutEditMode && canArrangeObservatory ? 6 : isHovered ? 4 : 2,
                     touchAction: 'none',
                     transition: 'z-index 0.18s ease',
                 }}
             >
-                {layoutEditMode && allowFreeformLayout ? (
+                {layoutEditMode && canArrangeObservatory ? (
                     <div
                         style={{
                             position: 'absolute',
@@ -1244,7 +1339,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 {React.isValidElement(children) ? React.cloneElement(children, { hovered: isHovered }) : children}
             </div>
         );
-    }, [activeObservatoryLayout, allowFreeformLayout, handleStartModuleDrag, hoveredInstrument, layoutEditMode]);
+    }, [activeObservatoryLayout, canArrangeObservatory, handleStartModuleDrag, hoveredInstrument, layoutEditMode]);
 
     return (
         <div style={{ position: 'relative', width: '100%', minHeight: '100vh', background: '#000', overflow: 'hidden' }}>
@@ -1716,8 +1811,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 display: 'flex',
                                 justifyContent: 'flex-end',
                                 gap: scalePx(10),
-                                pointerEvents: allowFreeformLayout ? 'auto' : 'none',
-                                opacity: allowFreeformLayout ? 1 : 0,
+                                pointerEvents: canArrangeObservatory ? 'auto' : 'none',
+                                opacity: canArrangeObservatory ? 1 : 0,
                             }}
                         >
                             <button
@@ -1770,39 +1865,36 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             style={{
                                 position: 'absolute',
                                 left: '50%',
+                                top: '50%',
+                                width: `${centeredStarDisplaySize}px`,
+                                height: `${centeredStarDisplaySize}px`,
+                                transform: 'translate(-50%, -50%)',
+                                zIndex: 3,
+                                pointerEvents: 'none',
+                            }}
+                        >
+                            <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
+                                <ambientLight intensity={0.2} />
+                                <pointLight position={[10, 5, 10]} intensity={1.5} />
+                                <pointLight position={[-10, -5, -10]} intensity={0.5} />
+                                <group scale={[0.392, 0.392, 0.392]}>
+                                    <DetailedStar star={star} detailLevel="hero" />
+                                </group>
+                            </Canvas>
+                        </div>
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: '0',
                                 top: '0',
                                 width: `${observatoryDesignWidth}px`,
                                 height: `${observatoryDesignHeight}px`,
-                                transform: `translateX(-50%) scale(${observatoryFitScale})`,
-                                transformOrigin: 'top center',
+                                transform: `translate(${observatorySceneTransform.offsetX}px, ${observatorySceneTransform.offsetY}px) scale(${observatorySceneTransform.scale})`,
+                                transformOrigin: 'top left',
                                 pointerEvents: 'auto',
                             }}
                         >
-                            <ObservatoryBackdrop starLayout={activeStarLayout} hoveredInstrument={hoveredInstrument} />
-
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    left: `${activeStarLayout.x}%`,
-                                    top: `${activeStarLayout.y}%`,
-                                    width: `${observatoryStarBoxSize}px`,
-                                    height: `${observatoryStarBoxSize}px`,
-                                    transform: 'translate(-50%, -50%)',
-                                    zIndex: 3,
-                                    pointerEvents: layoutEditMode && allowFreeformLayout ? 'auto' : 'none',
-                                    cursor: layoutEditMode && allowFreeformLayout ? 'grab' : 'default',
-                                }}
-                                onPointerDown={layoutEditMode && allowFreeformLayout ? handleStartStarDrag : undefined}
-                            >
-                                <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
-                                    <ambientLight intensity={0.2} />
-                                    <pointLight position={[10, 5, 10]} intensity={1.5} />
-                                    <pointLight position={[-10, -5, -10]} intensity={0.5} />
-                                    <group scale={[0.392, 0.392, 0.392]}>
-                                        <DetailedStar star={star} detailLevel="hero" />
-                                    </group>
-                                </Canvas>
-                            </div>
+                            <ObservatoryBackdrop starLayout={centeredStarSceneLayout} hoveredInstrument={hoveredInstrument} />
 
                             <div ref={observatoryCanvasRef} style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
                                 <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
@@ -1839,48 +1931,6 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         </React.Fragment>
                                     ))}
                                 </div>
-
-                                {layoutEditMode && allowFreeformLayout ? (
-                                    <div
-                                        onPointerDown={handleStartStarDrag}
-                                        style={{
-                                            position: 'absolute',
-                                            left: `${activeStarLayout.x}%`,
-                                            top: `${activeStarLayout.y}%`,
-                                            transform: 'translate(-50%, -50%)',
-                                            width: `${observatoryStarBoxSize}px`,
-                                            height: `${observatoryStarBoxSize}px`,
-                                            borderRadius: '999px',
-                                            border: '1px dashed rgba(255,255,255,0.22)',
-                                            boxShadow: '0 0 0 1px rgba(255,122,64,0.16) inset',
-                                            background: 'radial-gradient(circle, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 42%, rgba(255,255,255,0) 72%)',
-                                            cursor: 'grab',
-                                            pointerEvents: 'auto',
-                                            zIndex: 7,
-                                            touchAction: 'none',
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                position: 'absolute',
-                                                top: '-14px',
-                                                left: '50%',
-                                                transform: 'translateX(-50%)',
-                                                padding: '5px 10px',
-                                                borderRadius: '999px',
-                                                background: 'rgba(255,122,64,0.92)',
-                                                color: '#fff8f0',
-                                                fontSize: '0.68rem',
-                                                letterSpacing: '0.12em',
-                                                textTransform: 'uppercase',
-                                                fontWeight: 'bold',
-                                                boxShadow: '0 8px 18px rgba(255,77,0,0.18)',
-                                            }}
-                                        >
-                                            Drag Star
-                                        </div>
-                                    </div>
-                                ) : null}
 
                         {hasLuminosity
                             ? renderObservatoryModule(

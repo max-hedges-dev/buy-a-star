@@ -21,6 +21,7 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const OBSERVATORY_LAYOUT_STORAGE_KEY = 'aster-atlas-observatory-layout-v4';
 const OBSERVATORY_STAR_STORAGE_KEY = 'aster-atlas-observatory-star-v3';
+const PORTRAIT_MODAL_LAYOUT_STORAGE_KEY = 'aster-atlas-portrait-observatory-layout-v1';
 
 const DEFAULT_OBSERVATORY_LAYOUT = {
     luminosity: { x: 73, y: 3, w: 25 },
@@ -47,6 +48,17 @@ const RESPONSIVE_OBSERVATORY_LAYOUT = {
     age: { x: 20, y: 86, w: 38 },
 };
 
+const PORTRAIT_MODAL_OBSERVATORY_LAYOUT = {
+    luminosity: { x: 62, y: 8, w: 30 },
+    colorIndex: { x: 6, y: 14, w: 27 },
+    brightness: { x: 6, y: 34, w: 29 },
+    structure: { x: 65, y: 36, w: 31 },
+    distance: { x: 6, y: 61, w: 37 },
+    spectral: { x: 61, y: 64, w: 34 },
+    age: { x: 16, y: 82, w: 52 },
+    sky: { x: 67, y: 78, w: 28 },
+};
+
 const OBSERVATORY_MODULE_HEIGHTS = {
     luminosity: 238,
     colorIndex: 118,
@@ -58,10 +70,10 @@ const OBSERVATORY_MODULE_HEIGHTS = {
     age: 118,
 };
 
-const sanitizeObservatoryLayout = (value) => {
+const sanitizeObservatoryLayout = (value, defaultsMap = DEFAULT_OBSERVATORY_LAYOUT) => {
     const next = {};
 
-    for (const [key, defaults] of Object.entries(DEFAULT_OBSERVATORY_LAYOUT)) {
+    for (const [key, defaults] of Object.entries(defaultsMap)) {
         const candidate = value?.[key];
         next[key] = {
             x: typeof candidate?.x === 'number' && Number.isFinite(candidate.x) ? candidate.x : defaults.x,
@@ -73,9 +85,9 @@ const sanitizeObservatoryLayout = (value) => {
     return next;
 };
 
-const sanitizeStarLayout = (value) => ({
-    x: typeof value?.x === 'number' && Number.isFinite(value.x) ? value.x : DEFAULT_STAR_LAYOUT.x,
-    y: typeof value?.y === 'number' && Number.isFinite(value.y) ? value.y : DEFAULT_STAR_LAYOUT.y,
+const sanitizeStarLayout = (value, defaults = DEFAULT_STAR_LAYOUT) => ({
+    x: typeof value?.x === 'number' && Number.isFinite(value.x) ? value.x : defaults.x,
+    y: typeof value?.y === 'number' && Number.isFinite(value.y) ? value.y : defaults.y,
 });
 
 const TIMEZONE_TO_COUNTRY = {
@@ -824,6 +836,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const [starDetail, setStarDetail] = useState(star);
     const [starDetailStatus, setStarDetailStatus] = useState('idle');
     const [layoutEditMode, setLayoutEditMode] = useState(false);
+    const [isObservatoryModalOpen, setIsObservatoryModalOpen] = useState(false);
+    const [isObservatoryModalClosing, setIsObservatoryModalClosing] = useState(false);
     const [hoveredInstrument, setHoveredInstrument] = useState(null);
     const [observatoryLayout, setObservatoryLayout] = useState(() => {
         try {
@@ -841,9 +855,18 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             return DEFAULT_STAR_LAYOUT;
         }
     });
+    const [portraitModalLayout, setPortraitModalLayout] = useState(() => {
+        try {
+            const raw = window.localStorage.getItem(PORTRAIT_MODAL_LAYOUT_STORAGE_KEY);
+            return raw ? sanitizeObservatoryLayout(JSON.parse(raw), PORTRAIT_MODAL_OBSERVATORY_LAYOUT) : PORTRAIT_MODAL_OBSERVATORY_LAYOUT;
+        } catch {
+            return PORTRAIT_MODAL_OBSERVATORY_LAYOUT;
+        }
+    });
     const observatoryCanvasRef = useRef(null);
     const observatoryPaneRef = useRef(null);
     const dragStateRef = useRef(null);
+    const modalCloseTimeoutRef = useRef(null);
     const [observatoryPaneSize, setObservatoryPaneSize] = useState({ width: 0, height: 0 });
 
     const regionNames = useMemo(
@@ -867,15 +890,23 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         () => getPercentileSubtitle(activeStar, 'mass_outlier'),
         [activeStar]
     );
+    const isPortraitLayout = viewportSize.width < viewportSize.height;
+    const isPortraitObservatoryOpen = isPortraitLayout && isObservatoryModalOpen;
     const isLandscapeLayout = viewportSize.width >= 1180;
-    const canArrangeObservatory = isLandscapeLayout;
+    const canArrangeObservatory = isLandscapeLayout && !isPortraitLayout;
     const leftUiScale = clamp(Math.min(viewportSize.width / 1680, viewportSize.height / 980), 0.82, 1.04);
     const observatoryDesignWidth = 980;
     const observatoryDesignHeight = 920;
     const observatoryResponsiveWidth = 1260;
+    const activeObservatoryResponsiveWidth = isPortraitObservatoryOpen ? 1215 : observatoryResponsiveWidth;
     const observatoryStarBoxSize = 645;
-    const activeObservatoryLayout = isLandscapeLayout ? observatoryLayout : RESPONSIVE_OBSERVATORY_LAYOUT;
-    const activeStarLayout = isLandscapeLayout ? CENTERED_STAR_LAYOUT : RESPONSIVE_STAR_LAYOUT;
+    const activeObservatoryLayout = isPortraitObservatoryOpen
+        ? portraitModalLayout
+        : canArrangeObservatory
+            ? observatoryLayout
+            : RESPONSIVE_OBSERVATORY_LAYOUT;
+    const activeStarLayout = isPortraitObservatoryOpen || canArrangeObservatory ? CENTERED_STAR_LAYOUT : RESPONSIVE_STAR_LAYOUT;
+    const canEditActiveObservatory = canArrangeObservatory || isPortraitObservatoryOpen;
     const scalePx = useCallback((value) => `${Math.round(value * leftUiScale)}px`, [leftUiScale]);
     const scaleRem = useCallback((value) => `${(value * leftUiScale).toFixed(3)}rem`, [leftUiScale]);
     const pageTopPadding = Math.round(18 * leftUiScale);
@@ -904,8 +935,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     );
 
     const observatorySceneTransform = useMemo(() => {
-        const paneWidth = observatoryPaneSize.width || observatoryDesignWidth;
-        const paneHeight = observatoryPaneSize.height || observatoryDesignHeight;
+        const paneWidth = isPortraitLayout ? viewportSize.width : observatoryPaneSize.width || observatoryDesignWidth;
+        const paneHeight = isPortraitLayout ? viewportSize.height : observatoryPaneSize.height || observatoryDesignHeight;
         const viewportPaddingX = 24;
         const viewportPaddingY = 28;
         const fitOverscanX = observatoryDesignWidth * 0.08;
@@ -936,7 +967,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             bounds.maxY = Math.max(bounds.maxY, fitY + height);
         });
 
-        const widthResponsiveScale = paneWidth / observatoryResponsiveWidth;
+        const widthResponsiveScale = paneWidth / activeObservatoryResponsiveWidth;
         const fitScale = Math.min(
             (paneWidth - viewportPaddingX * 2) / Math.max(1, bounds.maxX - bounds.minX),
             (paneHeight - viewportPaddingY * 2) / Math.max(1, bounds.maxY - bounds.minY),
@@ -960,14 +991,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             offsetX,
             offsetY,
         };
-    }, [activeObservatoryLayout, activeStarLayout, observatoryPaneSize.height, observatoryPaneSize.width, observatoryResponsiveWidth, observatoryStarBoxSize, visibleInstrumentKeys]);
+    }, [activeObservatoryLayout, activeObservatoryResponsiveWidth, activeStarLayout, isPortraitLayout, observatoryPaneSize.height, observatoryPaneSize.width, observatoryStarBoxSize, viewportSize.height, viewportSize.width, visibleInstrumentKeys]);
 
     const centeredStarSceneLayout = useMemo(() => {
-        const paneWidth = observatoryPaneSize.width || observatoryDesignWidth;
-        const paneHeight = observatoryPaneSize.height || observatoryDesignHeight;
+        const paneWidth = isPortraitLayout ? viewportSize.width : observatoryPaneSize.width || observatoryDesignWidth;
+        const paneHeight = isPortraitLayout ? viewportSize.height : observatoryPaneSize.height || observatoryDesignHeight;
         const scale = observatorySceneTransform.scale || 1;
-        const sceneX = (paneWidth / 2 - observatorySceneTransform.offsetX) / scale;
-        const sceneY = (paneHeight / 2 - observatorySceneTransform.offsetY) / scale;
+        const sceneX = ((activeStarLayout.x / 100) * paneWidth - observatorySceneTransform.offsetX) / scale;
+        const sceneY = ((activeStarLayout.y / 100) * paneHeight - observatorySceneTransform.offsetY) / scale;
 
         return {
             x: (sceneX / observatoryDesignWidth) * 100,
@@ -976,14 +1007,20 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, [
         observatoryDesignHeight,
         observatoryDesignWidth,
+        activeStarLayout,
+        isPortraitLayout,
         observatoryPaneSize.height,
         observatoryPaneSize.width,
         observatorySceneTransform.offsetX,
         observatorySceneTransform.offsetY,
         observatorySceneTransform.scale,
+        viewportSize.height,
+        viewportSize.width,
     ]);
 
-    const centeredStarDisplaySize = observatoryStarBoxSize * observatorySceneTransform.scale;
+    const centeredStarDisplaySize = isPortraitObservatoryOpen
+        ? Math.min(viewportSize.width * 0.76, viewportSize.height * 0.48, 640)
+        : observatoryStarBoxSize * observatorySceneTransform.scale;
 
     const observatoryConnectors = useMemo(() => {
         return visibleInstrumentKeys.map((key) => {
@@ -1013,11 +1050,26 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, [activeObservatoryLayout, centeredStarSceneLayout, visibleInstrumentKeys]);
 
     useEffect(() => {
-        if (canArrangeObservatory) {
+        if (canEditActiveObservatory) {
             return;
         }
         setLayoutEditMode(false);
-    }, [canArrangeObservatory]);
+    }, [canEditActiveObservatory]);
+
+    useEffect(() => {
+        if (isPortraitLayout) {
+            return;
+        }
+
+        setIsObservatoryModalOpen(false);
+        setIsObservatoryModalClosing(false);
+    }, [isPortraitLayout]);
+
+    useEffect(() => () => {
+        if (modalCloseTimeoutRef.current) {
+            window.clearTimeout(modalCloseTimeoutRef.current);
+        }
+    }, []);
 
     useEffect(() => {
         try {
@@ -1026,6 +1078,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             // Ignore storage failures.
         }
     }, [observatoryLayout]);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(PORTRAIT_MODAL_LAYOUT_STORAGE_KEY, JSON.stringify(portraitModalLayout));
+        } catch {
+            // Ignore storage failures.
+        }
+    }, [portraitModalLayout]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -1063,7 +1123,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         observer.observe(node);
 
         return () => observer.disconnect();
-    }, [isLandscapeLayout]);
+    }, [isLandscapeLayout, isObservatoryModalOpen, isPortraitLayout]);
 
     useEffect(() => {
         try {
@@ -1074,7 +1134,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     }, [starLayout]);
 
     useEffect(() => {
-        if (!layoutEditMode || !canArrangeObservatory) {
+        if (!layoutEditMode || !canEditActiveObservatory) {
             return undefined;
         }
 
@@ -1090,16 +1150,17 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             const deltaYPct = ((event.clientY - state.startY) / bounds.height) * 100;
 
             if (state.kind === 'star') {
-                setStarLayout({
+                const nextLayout = {
                     x: state.startLayout.x + deltaXPct,
                     y: state.startLayout.y + deltaYPct,
-                });
+                };
+                setStarLayout(nextLayout);
                 return;
             }
 
             const width = state.startLayout.w;
 
-            setObservatoryLayout((current) => ({
+            const updateLayout = (current) => ({
                 ...current,
                 [state.key]: {
                     ...current[state.key],
@@ -1107,7 +1168,13 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     y: state.startLayout.y + deltaYPct,
                     w: width,
                 },
-            }));
+            });
+
+            if (state.scope === 'portrait-modal') {
+                setPortraitModalLayout(updateLayout);
+            } else {
+                setObservatoryLayout(updateLayout);
+            }
         };
 
         const handlePointerUp = () => {
@@ -1121,7 +1188,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
         };
-    }, [canArrangeObservatory, layoutEditMode]);
+    }, [canEditActiveObservatory, layoutEditMode]);
 
     useEffect(() => {
         let isActive = true;
@@ -1252,13 +1319,35 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         setIsCheckoutOpen(false);
     }, []);
 
-    const handleResetObservatoryLayout = useCallback(() => {
-        setObservatoryLayout(DEFAULT_OBSERVATORY_LAYOUT);
-        setStarLayout(DEFAULT_STAR_LAYOUT);
+    const handleOpenObservatoryModal = useCallback(() => {
+        if (modalCloseTimeoutRef.current) {
+            window.clearTimeout(modalCloseTimeoutRef.current);
+            modalCloseTimeoutRef.current = null;
+        }
+        setIsObservatoryModalClosing(false);
+        setIsObservatoryModalOpen(true);
     }, []);
 
+    const handleCloseObservatoryModal = useCallback(() => {
+        setIsObservatoryModalClosing(true);
+        modalCloseTimeoutRef.current = window.setTimeout(() => {
+            setIsObservatoryModalOpen(false);
+            setIsObservatoryModalClosing(false);
+            modalCloseTimeoutRef.current = null;
+        }, 320);
+    }, []);
+
+    const handleResetObservatoryLayout = useCallback(() => {
+        if (isPortraitObservatoryOpen) {
+            setPortraitModalLayout(PORTRAIT_MODAL_OBSERVATORY_LAYOUT);
+            return;
+        }
+        setObservatoryLayout(DEFAULT_OBSERVATORY_LAYOUT);
+        setStarLayout(DEFAULT_STAR_LAYOUT);
+    }, [isPortraitObservatoryOpen]);
+
     const handleStartModuleDrag = useCallback((key, event) => {
-        if (!layoutEditMode || !canArrangeObservatory) {
+        if (!layoutEditMode || !canEditActiveObservatory) {
             return;
         }
 
@@ -1267,15 +1356,16 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
         dragStateRef.current = {
             kind: 'module',
+            scope: isPortraitObservatoryOpen ? 'portrait-modal' : 'landscape',
             key,
             startX: event.clientX,
             startY: event.clientY,
-            startLayout: observatoryLayout[key],
+            startLayout: activeObservatoryLayout[key],
         };
-    }, [canArrangeObservatory, layoutEditMode, observatoryLayout]);
+    }, [activeObservatoryLayout, canEditActiveObservatory, isPortraitObservatoryOpen, layoutEditMode]);
 
     const handleStartStarDrag = useCallback((event) => {
-        if (!layoutEditMode || !canArrangeObservatory) {
+        if (!layoutEditMode || !canEditActiveObservatory) {
             return;
         }
 
@@ -1284,11 +1374,12 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
         dragStateRef.current = {
             kind: 'star',
+            scope: 'landscape',
             startX: event.clientX,
             startY: event.clientY,
-            startLayout: starLayout,
+            startLayout: activeStarLayout,
         };
-    }, [canArrangeObservatory, layoutEditMode, starLayout]);
+    }, [activeStarLayout, canEditActiveObservatory, layoutEditMode]);
 
     const renderObservatoryModule = useCallback((key, children) => {
         const layout = activeObservatoryLayout[key];
@@ -1310,13 +1401,13 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     top: `${layout.y}%`,
                     width: `${layout.w}%`,
                     pointerEvents: 'auto',
-                    cursor: layoutEditMode && canArrangeObservatory ? 'grab' : 'default',
-                    zIndex: layoutEditMode && canArrangeObservatory ? 6 : isHovered ? 4 : 2,
+                    cursor: layoutEditMode && canEditActiveObservatory ? 'grab' : 'default',
+                    zIndex: layoutEditMode && canEditActiveObservatory ? 6 : isHovered ? 4 : 2,
                     touchAction: 'none',
                     transition: 'z-index 0.18s ease',
                 }}
             >
-                {layoutEditMode && canArrangeObservatory ? (
+                {layoutEditMode && canEditActiveObservatory ? (
                     <div
                         style={{
                             position: 'absolute',
@@ -1339,10 +1430,39 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 {React.isValidElement(children) ? React.cloneElement(children, { hovered: isHovered }) : children}
             </div>
         );
-    }, [activeObservatoryLayout, canArrangeObservatory, handleStartModuleDrag, hoveredInstrument, layoutEditMode]);
+    }, [activeObservatoryLayout, canEditActiveObservatory, handleStartModuleDrag, hoveredInstrument, layoutEditMode]);
 
     return (
         <div style={{ position: 'relative', width: '100%', minHeight: '100vh', background: '#000', overflow: 'hidden' }}>
+            <style>
+                {`
+                    @keyframes asterObservatoryModalOpen {
+                        from {
+                            opacity: 0;
+                            transform: translate3d(24vw, -24vh, 0) scale(0.18);
+                            border-radius: 30px;
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translate3d(0, 0, 0) scale(1);
+                            border-radius: 0;
+                        }
+                    }
+
+                    @keyframes asterObservatoryModalClose {
+                        from {
+                            opacity: 1;
+                            transform: translate3d(0, 0, 0) scale(1);
+                            border-radius: 0;
+                        }
+                        to {
+                            opacity: 0;
+                            transform: translate3d(24vw, -24vh, 0) scale(0.18);
+                            border-radius: 30px;
+                        }
+                    }
+                `}
+            </style>
             <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
                 <Stars radius={100} depth={50} count={2000} factor={4} saturation={0} fade speed={0.5} />
             </Canvas>
@@ -1354,8 +1474,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     height: pageViewportHeight,
                     padding: `${scalePx(18)} clamp(16px, 2vw, 34px) ${scalePx(24)}`,
                     display: 'grid',
-                    gridTemplateColumns: isLandscapeLayout ? 'minmax(0, 0.8fr) minmax(0, 1.2fr)' : '1fr',
-                    gap: scalePx(isLandscapeLayout ? 26 : 20),
+                    gridTemplateColumns: !isPortraitLayout && isLandscapeLayout ? 'minmax(0, 0.8fr) minmax(0, 1.2fr)' : '1fr',
+                    gap: scalePx(!isPortraitLayout && isLandscapeLayout ? 26 : 20),
                     alignItems: 'stretch',
                 }}
             >
@@ -1746,16 +1866,95 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     </div>
                 </div>
 
+                {isPortraitLayout && (!isObservatoryModalOpen || isObservatoryModalClosing) ? (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: 'clamp(16px, 2.4vw, 28px)',
+                            right: 'clamp(14px, 2.2vw, 24px)',
+                            zIndex: 24,
+                            width: 'clamp(142px, 28vw, 210px)',
+                            borderRadius: '24px',
+                            border: '1px solid rgba(255,255,255,0.14)',
+                            background: 'linear-gradient(180deg, rgba(12,15,24,0.88) 0%, rgba(5,8,14,0.72) 100%)',
+                            boxShadow: '0 24px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)',
+                            backdropFilter: 'blur(16px)',
+                            overflow: 'hidden',
+                        }}
+                    >
+                        <button
+                            type="button"
+                            onClick={handleOpenObservatoryModal}
+                            style={{
+                                display: 'block',
+                                width: '100%',
+                                padding: 0,
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'white',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                            }}
+                        >
+                            <div style={{ position: 'relative', height: 'clamp(96px, 18vw, 132px)', overflow: 'hidden' }}>
+                                <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
+                                    <ambientLight intensity={0.2} />
+                                    <pointLight position={[10, 5, 10]} intensity={1.4} />
+                                    <pointLight position={[-10, -5, -10]} intensity={0.45} />
+                                    <group scale={[1.33, 1.33, 1.33]}>
+                                        <DetailedStar star={star} detailLevel="hero" />
+                                    </group>
+                                </Canvas>
+                            </div>
+                            <div style={{ padding: '0 14px 14px', display: 'grid', gap: '10px' }}>
+                                <div>
+                                    <div style={{ color: '#ff8a4d', fontSize: '0.62rem', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>
+                                        Observatory
+                                    </div>
+                                    <div style={{ color: '#f6f3eb', fontSize: '0.9rem', fontWeight: 'bold', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {activeStar.common_name || activeStar.scientific_name}
+                                    </div>
+                                </div>
+                                <div
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: '999px',
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                        padding: '9px 12px',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 'bold',
+                                        letterSpacing: '0.04em',
+                                        boxShadow: '0 12px 26px rgba(255,77,0,0.28)',
+                                    }}
+                                >
+                                    View Star
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                ) : null}
+
+                {(!isPortraitLayout || isObservatoryModalOpen) ? (
                 <div
                     ref={observatoryPaneRef}
                     style={{
                         minWidth: 0,
-                        minHeight: isLandscapeLayout ? 0 : scalePx(760),
-                        height: '100%',
-                        position: 'relative',
+                        minHeight: isPortraitLayout ? 0 : isLandscapeLayout ? 0 : scalePx(760),
+                        height: isPortraitLayout ? '100vh' : '100%',
+                        position: isPortraitLayout ? 'fixed' : 'relative',
+                        inset: isPortraitLayout ? 0 : undefined,
+                        zIndex: isPortraitLayout ? 40 : undefined,
                         display: 'flex',
                         flexDirection: 'column',
                         overflow: 'hidden',
+                        background: isPortraitLayout ? 'rgba(0,0,0,0.96)' : undefined,
+                        transformOrigin: 'top right',
+                        animation: isPortraitLayout
+                            ? `${isObservatoryModalClosing ? 'asterObservatoryModalClose' : 'asterObservatoryModalOpen'} 320ms cubic-bezier(0.22, 0.78, 0.28, 1) forwards`
+                            : undefined,
                     }}
                 >
                     <div
@@ -1773,7 +1972,32 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             pointerEvents: 'auto',
                         }}
                     >
-                        <div />
+                        {isPortraitLayout ? (
+                            <button
+                                type="button"
+                                onClick={handleCloseObservatoryModal}
+                                style={{
+                                    justifySelf: 'start',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: scalePx(8),
+                                    marginLeft: scalePx(8),
+                                    padding: `${scalePx(10)} ${scalePx(16)}`,
+                                    borderRadius: '999px',
+                                    border: '1px solid rgba(255,255,255,0.16)',
+                                    background: 'rgba(9,13,22,0.7)',
+                                    color: 'white',
+                                    fontSize: scaleRem(0.86),
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    backdropFilter: 'blur(14px)',
+                                }}
+                            >
+                                <ArrowLeft size={15 * leftUiScale} /> Close
+                            </button>
+                        ) : (
+                            <div />
+                        )}
                         <button
                             onClick={onViewInGalaxy}
                             style={{
@@ -1811,8 +2035,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 display: 'flex',
                                 justifyContent: 'flex-end',
                                 gap: scalePx(10),
-                                pointerEvents: canArrangeObservatory ? 'auto' : 'none',
-                                opacity: canArrangeObservatory ? 1 : 0,
+                                pointerEvents: canEditActiveObservatory ? 'auto' : 'none',
+                                opacity: canEditActiveObservatory ? 1 : 0,
                             }}
                         >
                             <button
@@ -1861,27 +2085,29 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 pointerEvents: 'none',
                             }}
                         />
-                        <div
-                            style={{
-                                position: 'absolute',
-                                left: '50%',
-                                top: '50%',
-                                width: `${centeredStarDisplaySize}px`,
-                                height: `${centeredStarDisplaySize}px`,
-                                transform: 'translate(-50%, -50%)',
-                                zIndex: 3,
-                                pointerEvents: 'none',
-                            }}
-                        >
-                            <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
-                                <ambientLight intensity={0.2} />
-                                <pointLight position={[10, 5, 10]} intensity={1.5} />
-                                <pointLight position={[-10, -5, -10]} intensity={0.5} />
-                                <group scale={[0.392, 0.392, 0.392]}>
-                                    <DetailedStar star={star} detailLevel="hero" />
-                                </group>
-                            </Canvas>
-                        </div>
+                        {!isPortraitObservatoryOpen ? (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: `${activeStarLayout.x}%`,
+                                    top: `${activeStarLayout.y}%`,
+                                    width: `${centeredStarDisplaySize}px`,
+                                    height: `${centeredStarDisplaySize}px`,
+                                    transform: 'translate(-50%, -50%)',
+                                    zIndex: 3,
+                                    pointerEvents: 'none',
+                                }}
+                            >
+                                <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
+                                    <ambientLight intensity={0.2} />
+                                    <pointLight position={[10, 5, 10]} intensity={1.5} />
+                                    <pointLight position={[-10, -5, -10]} intensity={0.5} />
+                                    <group scale={[0.392, 0.392, 0.392]}>
+                                        <DetailedStar star={star} detailLevel="hero" />
+                                    </group>
+                                </Canvas>
+                            </div>
+                        ) : null}
                         <div
                             style={{
                                 position: 'absolute',
@@ -2031,8 +2257,33 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                     </div>
                     </div>
                 </div>
+                </div>
+                ) : null}
+
+                {isPortraitObservatoryOpen ? (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            left: '50vw',
+                            top: '50vh',
+                            width: `${centeredStarDisplaySize}px`,
+                            height: `${centeredStarDisplaySize}px`,
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 43,
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
+                            <ambientLight intensity={0.2} />
+                            <pointLight position={[10, 5, 10]} intensity={1.5} />
+                            <pointLight position={[-10, -5, -10]} intensity={0.5} />
+                            <group scale={[0.392, 0.392, 0.392]}>
+                                <DetailedStar star={star} detailLevel="hero" />
+                            </group>
+                        </Canvas>
+                    </div>
+                ) : null}
             </div>
-        </div>
         </div>
     );
 };

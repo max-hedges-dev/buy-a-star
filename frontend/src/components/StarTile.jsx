@@ -107,10 +107,10 @@ const StarTilePreview = ({ star }) => {
     );
 };
 
-const statusPill = (isClaimed) => ({
-    padding: '7px 12px',
+const statusPill = (isClaimed, scale = 1) => ({
+    padding: `${Math.round(7 * scale)}px ${Math.round(12 * scale)}px`,
     borderRadius: '999px',
-    fontSize: '0.75rem',
+    fontSize: `${(0.75 * scale).toFixed(3)}rem`,
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontWeight: 700,
@@ -124,7 +124,7 @@ const formatDistance = (distance) =>
         maximumFractionDigits: 1,
     });
 
-const StarTile = ({ star, onClick }) => {
+const StarTile = ({ star, onClick, scale = 1 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const isClaimed = star.is_bought;
     const displayName = star.common_name || star.display_name || star.scientific_name;
@@ -137,13 +137,13 @@ const StarTile = ({ star, onClick }) => {
             style={{
                 background: 'linear-gradient(180deg, rgba(20,20,30,0.86) 0%, rgba(15,15,24,0.94) 100%)',
                 border: `1px solid ${isHovered ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
-                borderRadius: '18px',
-                padding: '18px',
+                borderRadius: `${Math.round(18 * scale)}px`,
+                padding: `${Math.round(18 * scale)}px`,
                 cursor: 'default',
                 transition: 'all 0.28s ease',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '16px',
+                gap: `${Math.round(16 * scale)}px`,
                 position: 'relative',
                 overflow: 'hidden',
                 transform: isHovered ? 'translateY(-4px)' : 'none',
@@ -152,9 +152,9 @@ const StarTile = ({ star, onClick }) => {
         >
             <div
                 style={{
-                    height: '100px',
+                    height: `${Math.round(100 * scale)}px`,
                     background: 'rgba(0,0,0,0.45)',
-                    borderRadius: '12px',
+                    borderRadius: `${Math.round(12 * scale)}px`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -172,12 +172,12 @@ const StarTile = ({ star, onClick }) => {
                 <StarTilePreview star={star} />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: `${Math.round(14 * scale)}px` }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                     <h3
                         style={{
                             margin: 0,
-                            fontSize: '1.18rem',
+                            fontSize: `${(1.18 * scale).toFixed(3)}rem`,
                             color: 'white',
                             fontFamily: 'serif',
                             lineHeight: 1.1,
@@ -190,8 +190,8 @@ const StarTile = ({ star, onClick }) => {
                         <div
                             style={{
                                 color: '#8e8e9c',
-                                fontSize: '0.78rem',
-                                marginTop: '6px',
+                                fontSize: `${(0.78 * scale).toFixed(3)}rem`,
+                                marginTop: `${Math.round(6 * scale)}px`,
                                 lineHeight: 1.45,
                                 wordBreak: 'break-word',
                             }}
@@ -201,14 +201,14 @@ const StarTile = ({ star, onClick }) => {
                     )}
                 </div>
 
-                <div style={statusPill(isClaimed)}>{isClaimed ? 'Claimed' : 'Unclaimed'}</div>
+                <div style={statusPill(isClaimed, scale)}>{isClaimed ? 'Claimed' : 'Unclaimed'}</div>
             </div>
 
-                <div style={{ display: 'grid', gap: '7px', color: '#b6b6be' }}>
-                    <div style={{ fontSize: '0.95rem' }}>
+                <div style={{ display: 'grid', gap: `${Math.round(7 * scale)}px`, color: '#b6b6be' }}>
+                    <div style={{ fontSize: `${(0.95 * scale).toFixed(3)}rem` }}>
                         {star.category}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', color: '#9595a0', fontSize: '0.88rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: `${Math.round(16 * scale)}px`, color: '#9595a0', fontSize: `${(0.88 * scale).toFixed(3)}rem` }}>
                         <span>{formatDistance(star.distance_ly)} ly</span>
                         <span>{star.constellation || 'Unknown constellation'}</span>
                     </div>
@@ -218,10 +218,10 @@ const StarTile = ({ star, onClick }) => {
                 <div
                     style={{
                         background: 'rgba(255,255,255,0.035)',
-                        padding: '10px 12px',
-                        borderRadius: '10px',
+                        padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
+                        borderRadius: `${Math.round(10 * scale)}px`,
                         border: '1px solid rgba(255,255,255,0.06)',
-                        fontSize: '0.84rem',
+                        fontSize: `${(0.84 * scale).toFixed(3)}rem`,
                         color: '#b0b0b8',
                         lineHeight: 1.5,
                     }}
@@ -233,10 +233,10 @@ const StarTile = ({ star, onClick }) => {
                 <div
                     style={{
                         background: 'rgba(255,106,0,0.05)',
-                        padding: '10px 12px',
-                        borderRadius: '10px',
+                        padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
+                        borderRadius: `${Math.round(10 * scale)}px`,
                         border: '1px solid rgba(255,126,43,0.08)',
-                        fontSize: '0.84rem',
+                        fontSize: `${(0.84 * scale).toFixed(3)}rem`,
                         color: '#ffb287',
                         lineHeight: 1.5,
                     }}
@@ -249,22 +249,22 @@ const StarTile = ({ star, onClick }) => {
                 onClick={() => onClick(star)}
                 style={{
                     width: '100%',
-                    padding: '11px 14px',
+                    padding: `${Math.round(11 * scale)}px ${Math.round(14 * scale)}px`,
                     background: 'var(--primary)',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '10px',
+                    borderRadius: `${Math.round(10 * scale)}px`,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '8px',
+                    gap: `${Math.round(8 * scale)}px`,
                     fontWeight: 'bold',
                     transition: 'all 0.2s ease',
                     marginTop: 'auto',
                 }}
             >
-                <Eye size={18} /> View
+                <Eye size={Math.round(18 * scale)} /> View
             </button>
         </div>
     );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Star, Waypoints } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -8,6 +8,8 @@ const sectionWidth = {
     maxWidth: '1240px',
     margin: '0 auto',
 };
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const panelStyle = {
     background: 'linear-gradient(180deg, rgba(18,18,18,0.92) 0%, rgba(10,10,10,0.98) 100%)',
@@ -263,6 +265,35 @@ const CertificatePreview = () => (
 );
 
 const Features = () => {
+    const [viewportSize, setViewportSize] = useState(() => ({
+        width: typeof window !== 'undefined' ? window.innerWidth : 1440,
+        height: typeof window !== 'undefined' ? window.innerHeight : 900,
+    }));
+
+    useEffect(() => {
+        const handleResize = () => setViewportSize({
+            width: window.innerWidth,
+            height: window.innerHeight,
+        });
+
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const { width: viewportWidth, height: viewportHeight } = viewportSize;
+    const sectionScale = clamp(Math.min(viewportWidth / 1440, viewportHeight / 920), 0.72, 1.04);
+    const isCompact = viewportWidth < 920;
+    const sectionPaddingX = Math.round(clamp(40 * sectionScale, 18, 40));
+    const sectionPaddingTop = Math.round(clamp(120 * sectionScale, 70, 120));
+    const sectionPaddingBottom = Math.round(clamp(130 * sectionScale, 76, 130));
+    const panelPadding = Math.round(clamp(24 * sectionScale, 16, 24));
+    const cardMinWidth = Math.round(clamp(245 * sectionScale, 210, 260));
+    const stepMinWidth = Math.round(clamp(300 * sectionScale, 240, 330));
+    const featureGap = Math.round(clamp(24 * sectionScale, 16, 24));
+    const sectionGapLarge = Math.round(clamp(110 * sectionScale, 58, 110));
+    const certificateTextAlign = isCompact ? 'center' : 'left';
+
     const whyCards = [
         {
             title: 'Real Stars',
@@ -304,7 +335,7 @@ const Features = () => {
         <section
             style={{
                 position: 'relative',
-                padding: '120px 40px 130px',
+                padding: `${sectionPaddingTop}px ${sectionPaddingX}px ${sectionPaddingBottom}px`,
                 background: `
                     radial-gradient(circle at 50% 0%, rgba(255,101,24,0.12), transparent 28%),
                     linear-gradient(180deg, #050505 0%, #090909 100%)
@@ -318,7 +349,7 @@ const Features = () => {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.75 }}
-                    style={{ marginBottom: '72px' }}
+                    style={{ marginBottom: `${Math.round(clamp(72 * sectionScale, 44, 72))}px` }}
                 >
                     <SectionHeader
                         eyebrow="WHY ASTER ATLAS?"
@@ -330,8 +361,8 @@ const Features = () => {
                     <div
                         style={{
                             ...panelStyle,
-                            marginTop: '38px',
-                            padding: '24px',
+                            marginTop: `${Math.round(clamp(38 * sectionScale, 24, 38))}px`,
+                            padding: `${panelPadding}px`,
                             background: `
                                 radial-gradient(circle at top, rgba(255,118,44,0.08), transparent 34%),
                                 linear-gradient(180deg, rgba(18,18,18,0.92) 0%, rgba(10,10,10,0.98) 100%)
@@ -341,8 +372,8 @@ const Features = () => {
                         <div
                             style={{
                                 display: 'grid',
-                                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                                gap: '16px',
+                                gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${cardMinWidth}px), 1fr))`,
+                                gap: `${Math.round(clamp(16 * sectionScale, 12, 16))}px`,
                             }}
                         >
                             {whyCards.map((card) => (
@@ -357,13 +388,13 @@ const Features = () => {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.75 }}
-                    style={{ marginBottom: '110px' }}
+                    style={{ marginBottom: `${sectionGapLarge}px` }}
                 >
                     <div
                         style={{
                             width: '72px',
                             height: '1px',
-                            margin: '10px auto 68px',
+                            margin: `${Math.round(clamp(10 * sectionScale, 6, 10))}px auto ${Math.round(clamp(68 * sectionScale, 42, 68))}px`,
                             background: 'rgba(255,255,255,0.78)',
                             boxShadow: '0 0 14px rgba(255,255,255,0.12)',
                         }}
@@ -377,9 +408,9 @@ const Features = () => {
                     <div
                         style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                            gap: '24px',
-                            marginTop: '20px',
+                            gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${stepMinWidth}px), 1fr))`,
+                            gap: `${featureGap}px`,
+                            marginTop: `${Math.round(clamp(20 * sectionScale, 12, 20))}px`,
                         }}
                     >
                         {steps.map((step, index) => (
@@ -399,13 +430,13 @@ const Features = () => {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.75 }}
-                    style={{ marginBottom: '110px' }}
+                    style={{ marginBottom: `${sectionGapLarge}px` }}
                 >
                     <div
                         style={{
                             width: '72px',
                             height: '1px',
-                            margin: '0 auto 88px',
+                            margin: `0 auto ${Math.round(clamp(88 * sectionScale, 46, 88))}px`,
                             background: 'rgba(255,255,255,0.78)',
                             boxShadow: '0 0 14px rgba(255,255,255,0.12)',
                         }}
@@ -414,18 +445,20 @@ const Features = () => {
                     <div
                         style={{
                             display: 'grid',
-                            gridTemplateColumns: '0.9fr 1.1fr',
-                            gap: '48px',
+                            gridTemplateColumns: isCompact ? '1fr' : '0.9fr 1.1fr',
+                            gap: `${Math.round(clamp(48 * sectionScale, 26, 48))}px`,
                             alignItems: 'center',
+                            textAlign: certificateTextAlign,
                         }}
                     >
-                    <div>
+                    <div style={{ maxWidth: isCompact ? '720px' : 'none', margin: isCompact ? '0 auto' : 0 }}>
                         <SectionHeader
                             headline="IMMEDIATE PROOF OF OWNERSHIP"
                             body="After purchasing a star, you'll immediately receive a formal certificate of registration of celestial ownership."
+                            centered={isCompact}
                         />
 
-                        <div style={{ display: 'grid', gap: '14px', marginTop: '24px' }}>
+                        <div style={{ display: 'grid', gap: `${Math.round(clamp(14 * sectionScale, 10, 14))}px`, marginTop: `${Math.round(clamp(24 * sectionScale, 18, 24))}px`, justifyItems: isCompact ? 'center' : 'start' }}>
                             {[
                                 'Delivered digitally immediately after purchase.',
                                 'Displays the owner name the owned star.',
@@ -439,6 +472,8 @@ const Features = () => {
                                         alignItems: 'flex-start',
                                         color: '#ddd',
                                         lineHeight: 1.7,
+                                        textAlign: 'left',
+                                        maxWidth: isCompact ? '520px' : 'none',
                                     }}
                                 >
                                     <CheckCircle2 size={18} color="#ff7a1f" style={{ marginTop: '5px', flexShrink: 0 }} />
@@ -452,9 +487,10 @@ const Features = () => {
                         style={{
                             position: 'relative',
                             width: '100%',
-                            maxWidth: '1120px',
-                            padding: '18px',
-                            borderRadius: '34px',
+                            maxWidth: isCompact ? '760px' : '1120px',
+                            justifySelf: isCompact ? 'center' : 'stretch',
+                            padding: `${Math.round(clamp(18 * sectionScale, 10, 18))}px`,
+                            borderRadius: `${Math.round(clamp(34 * sectionScale, 22, 34))}px`,
                             background: 'linear-gradient(135deg, rgba(255,182,120,0.08) 0%, rgba(255,255,255,0.02) 34%, rgba(255,99,32,0.08) 100%)',
                             border: '1px solid rgba(255,190,120,0.16)',
                             boxShadow: '0 30px 120px rgba(0,0,0,0.45)',
@@ -467,7 +503,7 @@ const Features = () => {
                                 display: 'block',
                                 width: '100%',
                                 height: 'auto',
-                                borderRadius: '26px',
+                                borderRadius: `${Math.round(clamp(26 * sectionScale, 16, 26))}px`,
                                 border: '1px solid rgba(255,255,255,0.08)',
                             }}
                         />
@@ -483,7 +519,7 @@ const Features = () => {
                     style={{
                         ...panelStyle,
                         textAlign: 'center',
-                        padding: '56px 40px',
+                        padding: `${Math.round(clamp(56 * sectionScale, 34, 56))}px ${Math.round(clamp(40 * sectionScale, 20, 40))}px`,
                     }}
                 >
                     <h3 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.4rem)', lineHeight: 1.05, marginBottom: '18px' }}>
@@ -492,7 +528,7 @@ const Features = () => {
                     <p style={{ maxWidth: '760px', margin: '0 auto 30px', color: '#b7b7be', lineHeight: 1.85, fontSize: '1.08rem' }}>
                         Whether it be a gift for a loved one or a personal investment - Aster Atlas is the registry for you.
                     </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: `${Math.round(clamp(16 * sectionScale, 10, 16))}px`, flexWrap: 'wrap' }}>
                         <Link to="/buy" style={primaryButtonStyle}>
                             Register a Star
                         </Link>

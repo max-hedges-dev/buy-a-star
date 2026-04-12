@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import CertificatePreview from '../components/CertificatePreview';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
+import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOrder } from '../services/api';
 import {
     formatDate,
@@ -34,7 +35,15 @@ const OrderCertificatePage = () => {
     const [order, setOrder] = useState(null);
     const [status, setStatus] = useState('loading');
     const [error, setError] = useState('');
+    const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 960 });
     const spectralDisplay = useMemo(() => (order ? getSpectralDisplay(order.star) : null), [order]);
+    const pagePaddingX = px(isNarrow ? 18 : 24);
+    const heroPadding = `${px(34)}px ${px(36)}px`;
+    const cardPadding = `${px(28)}px ${px(30)}px`;
+    const actionStyle = {
+        width: isNarrow ? '100%' : 'fit-content',
+        minWidth: isNarrow ? 0 : 220,
+    };
 
     useEffect(() => {
         const loadOrder = async () => {
@@ -54,9 +63,9 @@ const OrderCertificatePage = () => {
     return (
         <div style={pageStyle}>
             <Navbar />
-            <main style={{ padding: '124px 24px 72px' }}>
-                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: 28 }}>
-                    <section className="glass-card" style={{ padding: '34px 36px' }}>
+            <main style={{ padding: `${px(124)}px ${pagePaddingX}px ${px(72)}px` }}>
+                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: px(28) }}>
+                    <section className="glass-card" style={{ padding: heroPadding }}>
                         <div style={{ width: 74, height: 1, marginBottom: 24, background: 'rgba(255,255,255,0.78)' }} />
                         <p className="eyebrow" style={{ marginBottom: 16 }}>Order Record</p>
 
@@ -83,7 +92,7 @@ const OrderCertificatePage = () => {
 
                         {status === 'ready' && order ? (
                             <>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1.12fr 0.88fr', gap: 28, alignItems: 'start' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.12fr 0.88fr', gap: px(28), alignItems: 'start' }}>
                                     <div>
                                         <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3.8rem)', marginBottom: 14 }}>
                                             Order record for {order.star.display_name}
@@ -92,10 +101,10 @@ const OrderCertificatePage = () => {
                                             This page combines the certificate preview, ownership details, and purchase record for registration {order.registration_number}.
                                         </p>
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                                            <Link to={getOwnedStarPath(order)} className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                            <Link to={getOwnedStarPath(order)} className="secondary-button" style={actionStyle}>
                                                 Open Ownership Page
                                             </Link>
-                                            <Link to={getPublicStarPath(order.star)} className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                            <Link to={getPublicStarPath(order.star)} className="secondary-button" style={actionStyle}>
                                                 View in Galaxy
                                             </Link>
                                         </div>
@@ -133,8 +142,8 @@ const OrderCertificatePage = () => {
                     </section>
 
                     {status === 'ready' && order ? (
-                        <section style={{ display: 'grid', gridTemplateColumns: '1.08fr 0.92fr', gap: 28 }}>
-                            <div className="glass-card" style={{ padding: '34px 36px' }}>
+                        <section style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.08fr 0.92fr', gap: px(28) }}>
+                            <div className="glass-card" style={{ padding: heroPadding }}>
                                 <p className="eyebrow" style={{ marginBottom: 16 }}>Certificate Preview</p>
                                 <h2 style={{ fontSize: 'clamp(1.9rem, 3vw, 3rem)', marginBottom: 14 }}>
                                     The certificate attached to this order
@@ -146,8 +155,8 @@ const OrderCertificatePage = () => {
                                 <CertificatePreview order={order} />
                             </div>
 
-                            <div style={{ display: 'grid', gap: 22 }}>
-                                <section className="glass-card" style={sectionCardStyle}>
+                            <div style={{ display: 'grid', gap: px(22) }}>
+                                <section className="glass-card" style={{ ...sectionCardStyle, padding: cardPadding }}>
                                     <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Details</p>
                                     <div className="profile-meta">
                                         <div>
@@ -169,7 +178,7 @@ const OrderCertificatePage = () => {
                                     </div>
                                 </section>
 
-                                <section className="glass-card" style={sectionCardStyle}>
+                                <section className="glass-card" style={{ ...sectionCardStyle, padding: cardPadding }}>
                                     <p className="eyebrow" style={{ marginBottom: 16 }}>Astronomy Details</p>
                                     <div className="profile-meta">
                                         <div>
@@ -197,7 +206,7 @@ const OrderCertificatePage = () => {
                                     </div>
                                 </section>
 
-                                <section className="glass-card" style={sectionCardStyle}>
+                                <section className="glass-card" style={{ ...sectionCardStyle, padding: cardPadding }}>
                                     <p className="eyebrow" style={{ marginBottom: 16 }}>Receipt</p>
                                     <div className="profile-meta">
                                         <div>

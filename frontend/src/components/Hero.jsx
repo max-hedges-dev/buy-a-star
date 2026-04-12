@@ -5,6 +5,8 @@ import { Link } from 'react-router-dom';
 import { motion, useMotionValue, useSpring } from 'framer-motion';
 import DetailedStar from './DetailedStar';
 
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
 const Hero = () => {
     const heroStar = useMemo(() => ({
         id: 'hero-orange-star',
@@ -32,23 +34,31 @@ const Hero = () => {
     }, []);
 
     const { width: viewportWidth, height: viewportHeight } = viewportSize;
+    const widthScale = viewportWidth / 1440;
+    const heightScale = viewportHeight / 920;
+    const heroScale = clamp(Math.min(widthScale, heightScale), 0.42, 1.08);
+    const smallWidthThreshold = 0.76;
+    const widthDrivenStarScale = widthScale < smallWidthThreshold
+        ? widthScale + ((smallWidthThreshold - widthScale) * 0.4)
+        : widthScale;
+    const heroStarScale = clamp(Math.min(widthDrivenStarScale, heightScale), 0.42, 1.08);
     const isTablet = viewportWidth < 1100;
     const isMobile = viewportWidth < 760;
-    const isShort = viewportHeight < 860;
-    const widthDrivenStar = isMobile
-        ? Math.min(320, viewportWidth * 0.76)
-        : isTablet
-            ? Math.min(400, viewportWidth * 0.44)
-            : Math.min(518, viewportWidth * 0.34);
-    const heightDrivenStar = isMobile
-        ? viewportHeight * 0.34
-        : isTablet
-            ? viewportHeight * 0.38
-            : viewportHeight * 0.46;
-    const heroStarSize = Math.max(220, Math.min(widthDrivenStar, heightDrivenStar));
-    const heroButtonMarginBottom = isMobile ? 112 : isTablet ? 120 : isShort ? 126 : 160;
-    const heroTextTop = isMobile ? '41%' : isTablet ? '43%' : isShort ? '44%' : '48%';
-    const heroGlowSize = isMobile ? '140vw' : isTablet ? '122vw' : '108vw';
+    const heroStarSize = clamp(520 * heroStarScale, 180, 562);
+    const heroStarBottomOffset = -heroStarSize * clamp(0.28 + (1 - heroStarScale) * 0.38, 0.28, 0.54);
+    const heroButtonMarginBottom = clamp(132 * heroScale, 58, 150);
+    const heroTextTop = `${clamp(48 - (1 - heroScale) * 13, 36, 48)}%`;
+    const heroGlowScale = clamp(1 + (heroStarScale - 1) * 0.18, 0.9, 1.04);
+    const heroGlowSize = `${clamp(108 * heroGlowScale, 96, 116)}vw`;
+    const heroCoronaSize = clamp(780 * heroGlowScale, 620, 820);
+    const heroCoronaBottomOffset = heroStarBottomOffset + (heroStarSize / 2) - (heroCoronaSize / 2);
+    const heroCoronaBlur = Math.round(clamp(34 * heroGlowScale, 30, 36));
+    const heroTitleScale = clamp(0.74 + heroScale * 0.26, 0.82, 1.08);
+    const heroTitleSize = `clamp(${(2.9 * heroTitleScale).toFixed(2)}rem, ${(6.1 * heroTitleScale).toFixed(2)}vw, ${(5.25 * heroTitleScale).toFixed(2)}rem)`;
+    const heroCopySize = `${clamp(1.12 * heroScale, 0.9, 1.12).toFixed(3)}rem`;
+    const heroEyebrowSize = `${clamp(0.86 * heroScale, 0.66, 0.86).toFixed(3)}rem`;
+    const heroButtonPadding = `${Math.round(clamp(16 * heroScale, 12, 16))}px ${Math.round(clamp(34 * heroScale, 22, 34))}px`;
+    const heroButtonFontSize = `${clamp(0.95 * heroScale, 0.74, 0.95).toFixed(3)}rem`;
 
     const handlePointerMove = (event) => {
         const { innerWidth, innerHeight } = window;
@@ -65,7 +75,7 @@ const Hero = () => {
     };
 
     const primaryButtonStyle = {
-        padding: '16px 34px',
+        padding: heroButtonPadding,
         background: 'linear-gradient(45deg, #ff4d00, #ff8800)',
         color: 'white',
         fontWeight: '700',
@@ -74,11 +84,11 @@ const Hero = () => {
         borderRadius: '999px',
         boxShadow: '0 0 24px rgba(255, 77, 0, 0.35)',
         border: '1px solid rgba(255,255,255,0.18)',
-        fontSize: '0.95rem',
+        fontSize: heroButtonFontSize,
     };
 
     const secondaryButtonStyle = {
-        padding: '16px 34px',
+        padding: heroButtonPadding,
         background: `
             radial-gradient(circle at 20% 30%, rgba(255,255,255,0.12) 0%, transparent 18%),
             radial-gradient(circle at 78% 70%, rgba(255,140,60,0.08) 0%, transparent 22%),
@@ -90,7 +100,7 @@ const Hero = () => {
         textTransform: 'uppercase',
         borderRadius: '999px',
         border: '1px solid rgba(255,255,255,0.12)',
-        fontSize: '0.95rem',
+        fontSize: heroButtonFontSize,
         backdropFilter: 'blur(14px)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -14px 30px rgba(0,0,0,0.28), 0 14px 28px rgba(0,0,0,0.24)',
         position: 'relative',
@@ -139,11 +149,11 @@ const Hero = () => {
                     transition={{ duration: 0.6 }}
                     style={{
                         color: '#ff9c63',
-                        fontSize: isMobile ? '0.74rem' : '0.86rem',
-                        letterSpacing: '0.22em',
+                        fontSize: heroEyebrowSize,
+                        letterSpacing: `${clamp(0.22 * heroScale, 0.14, 0.22)}em`,
                         textTransform: 'uppercase',
                         fontWeight: 700,
-                        marginBottom: '22px',
+                        marginBottom: `${Math.round(clamp(22 * heroScale, 14, 22))}px`,
                     }}
                 >
                     ASTER ATLAS CELESTIAL REGISTRY
@@ -154,10 +164,10 @@ const Hero = () => {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.7, delay: 0.08 }}
                     style={{
-                        fontSize: 'clamp(3rem, 6vw, 5.25rem)',
+                        fontSize: heroTitleSize,
                         fontWeight: '800',
                         lineHeight: 0.98,
-                        marginBottom: '24px',
+                        marginBottom: `${Math.round(clamp(24 * heroScale, 16, 24))}px`,
                         color: '#ffffff',
                     }}
                 >
@@ -169,17 +179,17 @@ const Hero = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.15, duration: 0.8 }}
                     style={{
-                        fontSize: isMobile ? '1rem' : isTablet ? '1.04rem' : '1.12rem',
+                        fontSize: heroCopySize,
                         color: '#b5b5bc',
-                        lineHeight: isMobile ? '1.72' : '1.9',
+                        lineHeight: isMobile ? '1.64' : isTablet ? '1.74' : '1.9',
                         maxWidth: '760px',
-                        margin: '0 auto 34px',
+                        margin: `0 auto ${Math.round(clamp(34 * heroScale, 18, 34))}px`,
                     }}
                 >
                     Choose a real catalogued star, record it in the Aster Atlas registry, and receive a digital certificate issued straight after purchase. Each registered star and its owner can be found forever inside the galaxy.
                 </motion.p>
 
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '20px', flexWrap: 'wrap', marginBottom: `${heroButtonMarginBottom}px` }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: `${Math.round(clamp(16 * heroScale, 10, 16))}px`, marginTop: `${Math.round(clamp(20 * heroScale, 10, 20))}px`, flexWrap: 'wrap', marginBottom: `${heroButtonMarginBottom}px`, position: 'relative', zIndex: 3 }}>
                     <Link to="/buy" style={primaryButtonStyle}>
                         Register a Star
                     </Link>
@@ -193,7 +203,27 @@ const Hero = () => {
                 style={{
                     position: 'absolute',
                     left: '50%',
-                    bottom: '-3vh',
+                    bottom: `${heroCoronaBottomOffset}px`,
+                    width: `${heroCoronaSize}px`,
+                    height: `${heroCoronaSize}px`,
+                    transform: 'translateX(-50%)',
+                    zIndex: 0,
+                    pointerEvents: 'none',
+                    mixBlendMode: 'screen',
+                    borderRadius: '50%',
+                    background: `
+                        radial-gradient(circle at 50% 50%, rgba(255,248,214,0.62) 0%, rgba(255,202,112,0.48) 13%, rgba(255,132,34,0.26) 31%, rgba(255,89,18,0.11) 50%, rgba(255,89,18,0) 72%)
+                    `,
+                    filter: `blur(${heroCoronaBlur}px)`,
+                    opacity: 0.74,
+                }}
+            />
+
+            <div
+                style={{
+                    position: 'absolute',
+                    left: '50%',
+                    bottom: `${heroStarBottomOffset}px`,
                     width: `${heroStarSize}px`,
                     height: `${heroStarSize}px`,
                     transform: 'translateX(-50%)',
@@ -202,21 +232,6 @@ const Hero = () => {
                     mixBlendMode: 'screen',
                 }}
             >
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        borderRadius: '50%',
-                        background: `
-                            radial-gradient(circle at 50% 50%, rgba(255,248,214,0.98) 0%, rgba(255,202,112,0.92) 12%, rgba(255,140,48,0.42) 28%, rgba(255,120,30,0.16) 44%, rgba(255,120,30,0) 68%)
-                        `,
-                        filter: 'blur(16px)',
-                        opacity: heroSceneVisible ? 0 : 1,
-                        transform: heroSceneVisible ? 'scale(1.08)' : 'scale(1)',
-                        transition: 'opacity 0.45s ease, transform 0.6s ease',
-                    }}
-                />
-
                 {showHeroScene ? (
                     <div
                         style={{

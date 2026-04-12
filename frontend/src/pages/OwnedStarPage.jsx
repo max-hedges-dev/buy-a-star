@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import CertificatePreview from '../components/CertificatePreview';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
+import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOrder, updateOwnedStarPrice } from '../services/api';
 import { downloadCertificate } from '../utils/certificateDownload';
 import {
@@ -76,6 +77,7 @@ const OwnedStarPage = () => {
     const [ownerPriceInput, setOwnerPriceInput] = useState('');
     const [isSavingPrice, setIsSavingPrice] = useState(false);
     const [priceMessage, setPriceMessage] = useState('');
+    const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 980 });
 
     useEffect(() => {
         const loadOrder = async () => {
@@ -101,6 +103,14 @@ const OwnedStarPage = () => {
         return `${window.location.origin}${getPublicStarPath(order.star)}`;
     }, [order]);
     const spectralDisplay = useMemo(() => (order ? getSpectralDisplay(order.star) : null), [order]);
+    const pagePaddingX = px(isNarrow ? 18 : 24);
+    const heroPadding = `${px(42)}px ${px(40)}px`;
+    const cardPadding = `${px(28)}px ${px(30)}px`;
+    const wideCardPadding = `${px(34)}px ${px(36)}px`;
+    const actionStyle = {
+        width: isNarrow ? '100%' : 'fit-content',
+        minWidth: isNarrow ? 0 : 220,
+    };
 
     const handleCopyLink = async () => {
         if (!shareLink) {
@@ -168,8 +178,8 @@ const OwnedStarPage = () => {
     return (
         <div style={pageStyle}>
             <Navbar />
-            <main style={{ padding: '124px 24px 80px' }}>
-                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: 26 }}>
+            <main style={{ padding: `${px(124)}px ${pagePaddingX}px ${px(80)}px` }}>
+                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: px(26) }}>
                     {status === 'loading' ? (
                         <section className="glass-card" style={{ padding: '40px' }}>
                             <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Page</p>
@@ -195,8 +205,8 @@ const OwnedStarPage = () => {
 
                     {status === 'ready' && order ? (
                         <>
-                            <section className="glass-card" style={{ padding: '42px 40px' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 0.95fr', gap: 28, alignItems: 'start' }}>
+                            <section className="glass-card" style={{ padding: heroPadding }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.35fr 0.95fr', gap: px(28), alignItems: 'start' }}>
                                     <div>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Page</p>
                                         <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.4rem)', lineHeight: 0.96, marginBottom: 16 }}>
@@ -210,7 +220,7 @@ const OwnedStarPage = () => {
                                             <Link to={getPublicStarPath(order.star)} style={actionButtonStyle}>
                                                 View in Galaxy
                                             </Link>
-                                            <button type="button" className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }} onClick={handleCopyLink}>
+                                            <button type="button" className="secondary-button" style={actionStyle} onClick={handleCopyLink}>
                                                 {copied ? 'Registry Link Copied' : 'Copy Registry Link'}
                                             </button>
                                         </div>
@@ -227,7 +237,7 @@ const OwnedStarPage = () => {
                                         </div>
                                     </div>
 
-                                    <aside style={{ ...sectionCardStyle, background: 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))' }}>
+                                    <aside style={{ ...sectionCardStyle, padding: cardPadding, background: 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))' }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Registry Record</p>
                                         <div style={{ display: 'grid', gap: 2 }}>
                                             <div style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: 4 }}>{order.registration_number}</div>
@@ -260,8 +270,8 @@ const OwnedStarPage = () => {
                                 </div>
                             </section>
 
-                            <section style={{ display: 'grid', gridTemplateColumns: '1.18fr 0.82fr', gap: 26 }}>
-                                <div className="glass-card" style={{ padding: '34px 36px' }}>
+                            <section style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.18fr 0.82fr', gap: px(26) }}>
+                                <div className="glass-card" style={{ padding: wideCardPadding }}>
                                     <p className="eyebrow" style={{ marginBottom: 16 }}>Certificate Access</p>
                                     <h2 style={{ fontSize: 'clamp(1.8rem, 3vw, 3rem)', marginBottom: 14 }}>
                                         Your certificate is part of the ownership record
@@ -274,7 +284,7 @@ const OwnedStarPage = () => {
                                         <button
                                             type="button"
                                             className="secondary-button"
-                                            style={{ width: 'fit-content', minWidth: 220 }}
+                                            style={actionStyle}
                                             onClick={handleDownloadCertificate}
                                         >
                                             {isDownloading ? 'Preparing Download...' : 'Download Certificate'}
@@ -284,8 +294,8 @@ const OwnedStarPage = () => {
                                     <CertificatePreview order={order} />
                                 </div>
 
-                                <div style={{ display: 'grid', gap: 22 }}>
-                                    <section className="glass-card" style={{ padding: '28px 30px' }}>
+                                <div style={{ display: 'grid', gap: px(22) }}>
+                                    <section className="glass-card" style={{ padding: cardPadding }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Astronomy Snapshot</p>
                                         <div style={{ display: 'grid', gap: 16 }}>
                                             <div>
@@ -309,7 +319,7 @@ const OwnedStarPage = () => {
                                         </div>
                                     </section>
 
-                                    <section className="glass-card" style={{ padding: '28px 30px' }}>
+                                    <section className="glass-card" style={{ padding: cardPadding }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Marketplace Price</p>
                                         <div style={{ display: 'grid', gap: 16 }}>
                                             <div>
@@ -355,7 +365,7 @@ const OwnedStarPage = () => {
                                         </div>
                                     </section>
 
-                                    <section className="glass-card" style={{ padding: '28px 30px' }}>
+                                    <section className="glass-card" style={{ padding: cardPadding }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Actions</p>
                                         <div style={{ display: 'grid', gap: 12 }}>
                                             <Link to="/account?section=orders" className="secondary-button">
@@ -367,7 +377,7 @@ const OwnedStarPage = () => {
                                         </div>
                                     </section>
 
-                                    <section className="glass-card" style={{ padding: '28px 30px' }}>
+                                    <section className="glass-card" style={{ padding: cardPadding }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Order Record</p>
                                         <div style={{ display: 'grid', gap: 10 }}>
                                             <div style={{ color: 'rgba(255,255,255,0.62)' }}>Receipt total</div>

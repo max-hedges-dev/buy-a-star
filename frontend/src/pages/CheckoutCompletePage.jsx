@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import CertificatePreview from '../components/CertificatePreview';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
+import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOrder, fetchCheckoutSessionStatus } from '../services/api';
 import {
     formatDate,
@@ -52,6 +53,14 @@ const CheckoutCompletePage = () => {
     const [checkoutData, setCheckoutData] = useState(null);
     const [order, setOrder] = useState(null);
     const [error, setError] = useState('');
+    const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 960 });
+    const pagePaddingX = px(isNarrow ? 18 : 24);
+    const heroPadding = `${px(42)}px ${px(40)}px`;
+    const cardPadding = `${px(28)}px ${px(30)}px`;
+    const actionStyle = {
+        width: isNarrow ? '100%' : 'fit-content',
+        minWidth: isNarrow ? 0 : 220,
+    };
 
     useEffect(() => {
         const loadStatus = async () => {
@@ -86,10 +95,10 @@ const CheckoutCompletePage = () => {
     return (
         <>
             <Navbar />
-            <section style={pageStyle}>
-                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: 26 }}>
+            <section style={{ ...pageStyle, padding: `calc(var(--nav-height) + ${px(48)}px) ${pagePaddingX}px ${px(110)}px` }}>
+                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: px(26) }}>
                     {status === 'loading' ? (
-                        <section className="glass-card" style={{ padding: '42px 40px', textAlign: 'center' }}>
+                        <section className="glass-card" style={{ padding: heroPadding, textAlign: 'center' }}>
                             <div style={{ width: '72px', height: '1px', margin: '0 auto 28px', background: 'rgba(255,255,255,0.78)' }} />
                             <div className="eyebrow" style={{ marginBottom: 18 }}>Ownership Confirmation</div>
                             <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.2rem)', marginBottom: 16 }}>
@@ -103,8 +112,8 @@ const CheckoutCompletePage = () => {
 
                     {status === 'success' && checkoutData ? (
                         <>
-                            <section className="glass-card" style={{ padding: '42px 40px' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.95fr', gap: 28, alignItems: 'start' }}>
+                            <section className="glass-card" style={{ padding: heroPadding }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.25fr 0.95fr', gap: px(28), alignItems: 'start' }}>
                                     <div>
                                         <div className="eyebrow" style={{ marginBottom: 18 }}>Ownership Confirmed</div>
                                         <h1 style={{ fontSize: 'clamp(2.6rem, 5.4vw, 4.8rem)', lineHeight: 0.94, marginBottom: 16 }}>
@@ -121,21 +130,21 @@ const CheckoutCompletePage = () => {
                                                 </Link>
                                             ) : null}
                                             {checkoutData.transaction_id ? (
-                                                <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                                <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={actionStyle}>
                                                     Open Certificate
                                                 </Link>
                                             ) : null}
-                                            <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                            <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button" style={actionStyle}>
                                                 View in Galaxy
                                             </Link>
                                         </div>
 
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                                            <Link to="/account?section=overview" className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                            <Link to="/account?section=overview" className="secondary-button" style={actionStyle}>
                                                 Go to My Account
                                             </Link>
                                             {checkoutData.transaction_id ? (
-                                                <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                                <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={actionStyle}>
                                                     View Receipt
                                                 </Link>
                                             ) : null}
@@ -165,8 +174,8 @@ const CheckoutCompletePage = () => {
                                 </div>
                             </section>
 
-                            <section style={{ display: 'grid', gridTemplateColumns: '1.08fr 0.92fr', gap: 26 }}>
-                                <div className="glass-card" style={{ padding: '34px 36px' }}>
+                            <section style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.08fr 0.92fr', gap: px(26) }}>
+                                <div className="glass-card" style={{ padding: `${px(34)}px ${px(36)}px` }}>
                                     <p className="eyebrow" style={{ marginBottom: 16 }}>Certificate Access</p>
                                     <h2 style={{ fontSize: 'clamp(1.9rem, 3vw, 3rem)', marginBottom: 14 }}>
                                         Your certificate is part of the ownership record
@@ -182,8 +191,8 @@ const CheckoutCompletePage = () => {
                                     )}
                                 </div>
 
-                                <div style={{ display: 'grid', gap: 22 }}>
-                                    <section className="glass-card" style={{ padding: '28px 30px' }}>
+                                <div style={{ display: 'grid', gap: px(22) }}>
+                                    <section className="glass-card" style={{ padding: cardPadding }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Purchased Record</p>
                                         <div className="status-grid">
                                             <div className="status-tile">
@@ -213,7 +222,7 @@ const CheckoutCompletePage = () => {
                                         </div>
                                     </section>
 
-                                    <section className="glass-card" style={{ padding: '28px 30px' }}>
+                                    <section className="glass-card" style={{ padding: cardPadding }}>
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Next Actions</p>
                                         <div style={{ display: 'grid', gap: 12 }}>
                                             {ownedStarPath ? (

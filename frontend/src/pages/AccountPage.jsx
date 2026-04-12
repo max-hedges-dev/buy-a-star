@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../hooks/useAuth';
+import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOverview } from '../services/api';
 import { downloadCertificate } from '../utils/certificateDownload';
 import {
@@ -135,6 +136,7 @@ const AccountPage = () => {
     const [status, setStatus] = useState('loading');
     const [error, setError] = useState('');
     const [overview, setOverview] = useState({ orders: [], stars: [] });
+    const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 920 });
 
     useEffect(() => {
         const loadOverview = async () => {
@@ -176,6 +178,13 @@ const AccountPage = () => {
     const latestOrder = orders[0] || null;
     const userName = user?.name || user?.email?.split('@')[0] || 'Aster Atlas collector';
     const [downloadingOrderId, setDownloadingOrderId] = useState(null);
+    const pagePaddingX = px(isNarrow ? 18 : 24);
+    const cardPadding = `${px(30)}px ${px(32)}px`;
+    const heroPadding = `${px(42)}px ${px(40)}px`;
+    const actionStyle = {
+        width: isNarrow ? '100%' : 'fit-content',
+        minWidth: isNarrow ? 0 : 220,
+    };
 
     const setSection = (sectionId) => {
         setSearchParams({ section: sectionId });
@@ -208,10 +217,10 @@ const AccountPage = () => {
         }
 
         return (
-            <section className="glass-card" style={{ padding: '30px 32px' }}>
+            <section className="glass-card" style={{ padding: cardPadding }}>
                 <div style={{ display: 'grid', gap: 18 }}>
                     {starRecords.map(({ star, order }) => (
-                        <article key={`${star.id}-${order?.id || 'star'}`} style={recordCardStyle}>
+                        <article key={`${star.id}-${order?.id || 'star'}`} style={{ ...recordCardStyle, padding: `${px(24)}px ${px(24)}px ${px(22)}px` }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
                                 <div>
                                     <p className="eyebrow" style={{ marginBottom: 10 }}>Owned Star</p>
@@ -220,7 +229,7 @@ const AccountPage = () => {
                                         Registered to {star.owner_name || 'Owner pending'} on {formatDate(star.purchase_date || order?.fulfilled_at || order?.created_at)}
                                     </p>
                                 </div>
-                                <div style={{ minWidth: 180, textAlign: 'right' }}>
+                                <div style={{ minWidth: isCompact ? 0 : 180, textAlign: isCompact ? 'left' : 'right' }}>
                                     <div style={{ color: 'rgba(255,255,255,0.62)', marginBottom: 8 }}>Registration number</div>
                                     <strong style={{ fontSize: '1.1rem' }}>{star.registration_number || order?.registration_number || 'Pending'}</strong>
                                 </div>
@@ -251,13 +260,13 @@ const AccountPage = () => {
                                     <button
                                         type="button"
                                         className="secondary-button"
-                                        style={{ width: 'fit-content', minWidth: 220 }}
+                                        style={actionStyle}
                                         onClick={() => handleDownloadCertificate(order)}
                                     >
                                         {downloadingOrderId === order.id ? 'Preparing Download...' : 'Download Certificate'}
                                     </button>
                                 ) : null}
-                                <Link to={getPublicStarPath(star)} className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                <Link to={getPublicStarPath(star)} className="secondary-button" style={actionStyle}>
                                     View in Galaxy
                                 </Link>
                             </div>
@@ -282,10 +291,10 @@ const AccountPage = () => {
         }
 
         return (
-            <section className="glass-card" style={{ padding: '30px 32px' }}>
+            <section className="glass-card" style={{ padding: cardPadding }}>
                 <div style={{ display: 'grid', gap: 18 }}>
                     {orders.map((order) => (
-                        <article key={order.id} style={recordCardStyle}>
+                        <article key={order.id} style={{ ...recordCardStyle, padding: `${px(24)}px ${px(24)}px ${px(22)}px` }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
                                 <div>
                                     <p className="eyebrow" style={{ marginBottom: 10 }}>Order #{order.id}</p>
@@ -294,7 +303,7 @@ const AccountPage = () => {
                                         {formatOrderStatus(order.status)} / {order.certificate_label}
                                     </p>
                                 </div>
-                                <div style={{ textAlign: 'right', minWidth: 180 }}>
+                                <div style={{ textAlign: isCompact ? 'left' : 'right', minWidth: isCompact ? 0 : 180 }}>
                                     <div style={{ color: 'rgba(255,255,255,0.62)', marginBottom: 8 }}>Total paid</div>
                                     <strong style={{ fontSize: '1.3rem' }}>{formatMoney(order.amount, order.currency)}</strong>
                                 </div>
@@ -320,7 +329,7 @@ const AccountPage = () => {
                                     Open Order Record
                                 </Link>
                                 {order.status === 'fulfilled' ? (
-                                    <Link to={getOwnedStarPath(order)} className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }}>
+                                    <Link to={getOwnedStarPath(order)} className="secondary-button" style={actionStyle}>
                                         Open Ownership Page
                                     </Link>
                                 ) : null}
@@ -346,10 +355,10 @@ const AccountPage = () => {
     return (
         <div style={pageStyle}>
             <Navbar />
-            <main style={{ padding: 'calc(var(--nav-height) + 42px) 24px 90px' }}>
-                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: 26 }}>
-                    <section className="glass-card" style={{ padding: '42px 40px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 28, alignItems: 'stretch' }}>
+            <main style={{ padding: `calc(var(--nav-height) + ${px(42)}px) ${pagePaddingX}px ${px(90)}px` }}>
+                <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: px(26) }}>
+                    <section className="glass-card" style={{ padding: heroPadding }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.2fr 0.8fr', gap: px(28), alignItems: 'stretch' }}>
                             <div style={leftColumnStyle}>
                                 <p className="eyebrow" style={{ marginBottom: 16 }}>Account</p>
                                 <h1 style={{ fontSize: 'clamp(2.5rem, 5vw, 4.6rem)', lineHeight: 0.95, marginBottom: 16 }}>
@@ -362,7 +371,7 @@ const AccountPage = () => {
                                 <div
                                     style={{
                                         display: 'grid',
-                                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                        gridTemplateColumns: isNarrow ? '1fr' : 'repeat(2, minmax(0, 1fr))',
                                         gap: 12,
                                         alignItems: 'stretch',
                                         marginTop: 'auto',
@@ -379,7 +388,7 @@ const AccountPage = () => {
                                 </div>
                             </div>
 
-                            <aside style={{ ...panelStyle, background: 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))' }}>
+                            <aside style={{ ...panelStyle, padding: cardPadding, background: 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
                                     <div className="avatar-fallback">{getUserInitials(userName)}</div>
                                     <div>

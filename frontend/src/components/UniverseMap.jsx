@@ -174,7 +174,7 @@ const GalaxyStarOverlay = ({ star, distSq }) => {
     );
 };
 
-const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, viewMode, onHoverChange, forceTooltipStar, macroFlyInMode }) => {
+const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, viewMode, onHoverChange, forceTooltipStar, macroFlyInMode, onReady }) => {
     const meshRef = useRef();
     const groupRef = useRef();
     const tempObject = useMemo(() => new THREE.Object3D(), []);
@@ -209,7 +209,9 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
             tempColor.set('#ffffff');
         });
         meshRef.current.instanceMatrix.needsUpdate = true;
-    }, [stars, tempColor, tempObject]);
+        const frameId = window.requestAnimationFrame(() => onReady?.());
+        return () => window.cancelAnimationFrame(frameId);
+    }, [onReady, stars, tempColor, tempObject]);
 
     const starMaterial = useMemo(() => new THREE.MeshBasicMaterial({
         color: 0xffffff,

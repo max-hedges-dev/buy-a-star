@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Eye } from 'lucide-react';
 import { getStarAppearance } from '../utils/starAppearance';
 
-const StarTilePreview = ({ star }) => {
+const StarTilePreview = React.memo(({ star }) => {
     const palette = useMemo(() => {
         const appearance = getStarAppearance(star);
         return {
@@ -105,7 +105,7 @@ const StarTilePreview = ({ star }) => {
             />
         </svg>
     );
-};
+});
 
 const statusPill = (isClaimed, scale = 1) => ({
     padding: `${Math.round(7 * scale)}px ${Math.round(12 * scale)}px`,
@@ -124,7 +124,7 @@ const formatDistance = (distance) =>
         maximumFractionDigits: 1,
     });
 
-const StarTile = ({ star, onClick, scale = 1 }) => {
+const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const isClaimed = star.is_bought;
     const displayName = star.common_name || star.display_name || star.scientific_name;
@@ -268,6 +268,6 @@ const StarTile = ({ star, onClick, scale = 1 }) => {
             </button>
         </div>
     );
-};
+});
 
 export default StarTile;

@@ -6,7 +6,6 @@ import Navbar from '../components/Navbar';
 import { useAuth } from '../hooks/useAuth';
 import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOverview } from '../services/api';
-import { downloadCertificate } from '../utils/certificateDownload';
 import {
     formatDate,
     formatMoney,
@@ -197,6 +196,7 @@ const AccountPage = () => {
 
         try {
             setDownloadingOrderId(order.id);
+            const { downloadCertificate } = await import('../utils/certificateDownload');
             await downloadCertificate(order);
         } finally {
             setDownloadingOrderId(null);

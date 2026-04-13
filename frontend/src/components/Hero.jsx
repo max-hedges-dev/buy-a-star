@@ -190,10 +190,16 @@ const Hero = () => {
                 </motion.p>
 
                 <div style={{ display: 'flex', justifyContent: 'center', gap: `${Math.round(clamp(16 * heroScale, 10, 16))}px`, marginTop: `${Math.round(clamp(20 * heroScale, 10, 20))}px`, flexWrap: 'wrap', marginBottom: `${heroButtonMarginBottom}px`, position: 'relative', zIndex: 3 }}>
-                    <Link to="/buy" style={primaryButtonStyle}>
+                    <Link
+                        to="/buy"
+                        style={primaryButtonStyle}
+                    >
                         Register a Star
                     </Link>
-                    <Link to="/search" style={secondaryButtonStyle}>
+                    <Link
+                        to="/search"
+                        style={secondaryButtonStyle}
+                    >
                         Explore the Galaxy
                     </Link>
                 </div>

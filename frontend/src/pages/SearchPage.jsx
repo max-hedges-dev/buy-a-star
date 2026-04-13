@@ -1,22 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import { fetchStars } from '../services/api';
+import { fetchStarBySlug, fetchStars } from '../services/api';
 import { Search } from 'lucide-react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Stars } from '@react-three/drei';
-import UniverseMap from '../components/UniverseMap';
-import StarViewer from '../components/StarViewer';
-import GalaxyBackdropSphere from '../components/GalaxyBackdropSphere';
-import GalaxyBackground from '../components/GalaxyBackground';
 import BuyAStarGrid from '../components/BuyAStarGrid';
-import * as THREE from 'three';
 
-// Default camera position and constants
-const DEFAULT_CAM_POS = new THREE.Vector3(0, 800, 2400);
-const DEFAULT_TARGET = new THREE.Vector3(0, 0, 0);
-const MIN_DIST = 5;
-const MAX_DIST = 4200;
+const loadStarViewer = () => import('../components/StarViewer');
+const StarViewer = lazy(loadStarViewer);
+const GalaxyMapLayer = lazy(() => import('../components/GalaxyMapLayer'));
 const IDLE_TIMEOUT = 10000; // 10 seconds
 
 const VIEW_MODE = {
@@ -38,273 +29,66 @@ const slugifyStarName = (value) => (
 
 const getStarSlug = (star) => slugifyStarName(star.common_name || star.display_name || star.scientific_name);
 
-// --- IDLE CONTROLLER ---
-// When idle: slowly spins galaxy, returns camera AND galaxy position to default
-const IdleController = ({ galaxyRef, lastInteractionRef, isHoveringStar, viewMode }) => {
-    const { camera } = useThree();
-    const isIdle = useRef(true);
-
-    // Store default quaternion once
-    const defaultQuat = React.useMemo(() => {
-        const cam = new THREE.PerspectiveCamera();
-        cam.position.copy(DEFAULT_CAM_POS);
-        cam.lookAt(DEFAULT_TARGET);
-        return cam.quaternion.clone();
-    }, []);
-
-    useFrame((state, delta) => {
-        if (viewMode !== VIEW_MODE.MAP) return;
-        if (!galaxyRef.current) return;
-
-        if (isHoveringStar) {
-            lastInteractionRef.current = Date.now();
-            isIdle.current = false;
-            return;
-        }
-
-        const timeSince = Date.now() - lastInteractionRef.current;
-        isIdle.current = timeSince > IDLE_TIMEOUT;
-
-        if (isIdle.current) {
-            // 1. Slowly spin galaxy
-            galaxyRef.current.rotation.y += delta * 0.08;
-
-            // 2. Lerp tilt (rotation.x) back to 0
-            galaxyRef.current.rotation.x *= 0.97;
-
-            // 3. Lerp galaxy position back to origin (undo drags)
-            galaxyRef.current.position.lerp(DEFAULT_TARGET, 0.03);
-
-            // 3. Return camera to default position and angle
-            camera.position.lerp(DEFAULT_CAM_POS, 0.02);
-            camera.quaternion.slerp(defaultQuat, 0.02);
-        }
-    });
-
-    return null;
-};
-
-// --- GALAXY DRAGGER ---
-// Left-click drag: horizontal = spin (Y rotation), vertical = tilt (X rotation)
-const GalaxyDragger = ({ galaxyRef, lastInteractionRef, viewMode }) => {
-    const { gl, camera } = useThree();
-
-    useEffect(() => {
-        if (viewMode !== VIEW_MODE.MAP) return;
-        const canvas = gl.domElement;
-        let isDragging = false;
-        let lastX = 0;
-        let lastY = 0;
-
-        const onDown = (e) => {
-            if (e.button !== 0) return;
-            isDragging = true;
-            lastX = e.clientX;
-            lastY = e.clientY;
-            lastInteractionRef.current = Date.now();
-            canvas.style.cursor = 'grabbing';
-        };
-
-        const onMove = (e) => {
-            if (!isDragging || !galaxyRef.current) return;
-            const dx = e.clientX - lastX;
-            const dy = e.clientY - lastY;
-
-            // Camera sits at (0, 800, 2400) — its natural elevation above the plane is ~18°
-            const cameraElevation = Math.atan2(camera.position.y, camera.position.z); // ~0.32 rad
-            // Effective viewing angle = camera elevation + galaxy tilt. When ≈0, we're edge-on.
-            const effectiveAngle = Math.abs(cameraElevation + (galaxyRef.current ? galaxyRef.current.rotation.x : 0));
-            // Scale from 0 (edge-on) to ~0.32 (top-down). Squared for 3x more dramatic falloff
-            const ratio = THREE.MathUtils.clamp(effectiveAngle / 0.35, 0, 1);
-            const sensitivityScale = Math.max(ratio * ratio, 0.02);
-
-            // Horizontal drag = spin around Y
-            galaxyRef.current.rotation.y += dx * 0.004 * sensitivityScale;
-
-            // Vertical drag = tilt around X (clamped to ±60°)
-            const newTilt = galaxyRef.current.rotation.x + dy * 0.003 * sensitivityScale;
-            galaxyRef.current.rotation.x = THREE.MathUtils.clamp(newTilt, -Math.PI / 3, Math.PI / 3);
-
-            lastX = e.clientX;
-            lastY = e.clientY;
-            lastInteractionRef.current = Date.now();
-        };
-
-        const onUp = () => {
-            isDragging = false;
-            canvas.style.cursor = 'grab';
-        };
-
-        canvas.style.cursor = 'grab';
-        canvas.addEventListener('pointerdown', onDown);
-        window.addEventListener('pointermove', onMove);
-        window.addEventListener('pointerup', onUp);
-        return () => {
-            canvas.removeEventListener('pointerdown', onDown);
-            window.removeEventListener('pointermove', onMove);
-            window.removeEventListener('pointerup', onUp);
-            canvas.style.cursor = '';
-        };
-    }, [gl, galaxyRef, viewMode, lastInteractionRef, camera]);
-
-    return null;
-};
-
-// --- ZOOM TO POINTER ---
-// Re-architected for ultra-smooth damped interpolation and linear velocity scaling
-const ZoomToPointer = ({ galaxyRef, lastInteractionRef, viewMode }) => {
-    const { camera, gl, raycaster, pointer } = useThree();
-    
-    // Persistent smoothing targets
-    const targetPos = useRef(null);
-    const targetQuat = useRef(null);
-    const lastWheelTime = useRef(0);
-    const zoomPlane = useRef(new THREE.Plane());
-    const planeNormal = useRef(new THREE.Vector3());
-    const planePoint = useRef(new THREE.Vector3());
-    const zoomAnchor = useRef(new THREE.Vector3());
-    const galaxyQuat = useRef(new THREE.Quaternion());
-    const anchorDir = useRef(new THREE.Vector3());
-    const planeOffset = useRef(new THREE.Vector3());
-
-    // Store default quaternion
-    const defaultQuat = React.useMemo(() => {
-        const cam = new THREE.PerspectiveCamera();
-        cam.position.copy(DEFAULT_CAM_POS);
-        cam.lookAt(DEFAULT_TARGET);
-        return cam.quaternion.clone();
-    }, []);
-
-    useFrame((state, delta) => {
-        if (viewMode !== VIEW_MODE.MAP) return;
-        
-        // Initialize targets on first frame
-        if (!targetPos.current) {
-            targetPos.current = state.camera.position.clone();
-            targetQuat.current = state.camera.quaternion.clone();
-        }
-
-        // Only hijack the camera physics if the user physically spun the scroll wheel recently
-        if (Date.now() - lastWheelTime.current < 400) {
-            // Smoothly damp the true camera towards the scroll targets (10 units/s)
-            state.camera.position.lerp(targetPos.current, 10 * delta);
-            state.camera.quaternion.slerp(targetQuat.current, 10 * delta);
-        } else {
-            // Keep the scroll targets synchronized to the camera's true position 
-            // so that cinematic programmatic fly-ins from UniverseMap are respected!
-            targetPos.current.copy(state.camera.position);
-            targetQuat.current.copy(state.camera.quaternion);
-        }
-    });
-
-    useEffect(() => {
-        if (viewMode !== VIEW_MODE.MAP) return;
-
-        const canvas = gl.domElement;
-        const handleWheel = (e) => {
-            e.preventDefault();
-            lastInteractionRef.current = Date.now();
-            lastWheelTime.current = Date.now();
-            
-            // Guarantee target vectors are bound before mathematical manipulation
-            if (!targetPos.current) return;
-
-            const zoomingIn = e.deltaY < 0;
-            let planeDistance = Math.max(targetPos.current.y, 1);
-            let planeSide = 1;
-
-            if (galaxyRef.current) {
-                galaxyRef.current.updateWorldMatrix(true, false);
-                galaxyRef.current.getWorldPosition(planePoint.current);
-                planeNormal.current
-                    .set(0, 1, 0)
-                    .applyQuaternion(galaxyRef.current.getWorldQuaternion(galaxyQuat.current))
-                    .normalize();
-                zoomPlane.current.setFromNormalAndCoplanarPoint(planeNormal.current, planePoint.current);
-
-                const signedPlaneDistance = zoomPlane.current.distanceToPoint(targetPos.current);
-                planeSide = Math.sign(signedPlaneDistance) || 1;
-                planeDistance = Math.max(Math.abs(signedPlaneDistance), 1);
-            }
-            
-            // Linear velocity curve — scales with height but has a reasonable minimum.
-            // Near the floor, use a much gentler speed to allow fine downward approach.
-            const moveSpeed = Math.max(planeDistance * 0.15, 5); 
-
-            if (zoomingIn) {
-                // Zoom IN: Compute NDC from the wheel event position for accurate ray direction
-                const rect = canvas.getBoundingClientRect();
-                const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-                const mouseNDC = new THREE.Vector2(ndcX, ndcY);
-                
-                raycaster.setFromCamera(mouseNDC, camera);
-                const rayDir = raycaster.ray.direction.clone().normalize();
-
-                let anchoredZoom = false;
-                if (galaxyRef.current) {
-                    // Move straight toward the true cursor anchor on the rotated galaxy plane.
-                    if (raycaster.ray.intersectPlane(zoomPlane.current, zoomAnchor.current)) {
-                        anchorDir.current.copy(zoomAnchor.current).sub(targetPos.current);
-                        const distanceToAnchor = anchorDir.current.length();
-
-                        if (distanceToAnchor > MIN_DIST) {
-                            const step = Math.min(moveSpeed, distanceToAnchor - MIN_DIST);
-                            targetPos.current.addScaledVector(anchorDir.current.normalize(), step);
-                            anchoredZoom = true;
-                        }
-                    }
+const GalaxyLoadingIndicator = ({ label = 'Loading galaxy...' }) => (
+    <div
+        style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 210,
+            display: 'grid',
+            placeItems: 'center',
+            pointerEvents: 'none',
+            background: 'radial-gradient(circle at 50% 50%, rgba(255,94,24,0.08), rgba(0,0,0,0) 34%)',
+        }}
+    >
+        <style>
+            {`
+                @keyframes galaxyLoadingSpin {
+                    to { transform: rotate(360deg); }
                 }
 
-                if (!anchoredZoom) {
-                    targetPos.current.addScaledVector(rayDir, moveSpeed);
+                @keyframes galaxyLoadingPulse {
+                    0%, 100% { opacity: 0.68; }
+                    50% { opacity: 1; }
                 }
-
-                // Stay just above the galaxy plane even when the galaxy is tilted in world space.
-                if (galaxyRef.current) {
-                    const nextPlaneDistance = zoomPlane.current.distanceToPoint(targetPos.current);
-                    if (nextPlaneDistance * planeSide < 0.5) {
-                        planeOffset.current.copy(planeNormal.current).multiplyScalar((planeSide * 0.5) - nextPlaneDistance);
-                        targetPos.current.add(planeOffset.current);
-                    }
-                } else {
-                    targetPos.current.y = Math.max(targetPos.current.y, 0.5);
-                }
-            } else {
-                // Zoom OUT: Pull straight backwards out of the camera's local focal rotation
-                const fwd = new THREE.Vector3();
-                camera.getWorldDirection(fwd);
-                targetPos.current.addScaledVector(fwd, -moveSpeed);
-
-                // Auto-Leveling constraint slowly pulls camera back to standard cinematic wide-view
-                if (planeDistance > 50) {
-                    const blendFactor = Math.min((planeDistance - 50) / 1000, 0.15); // Faster 15% angular recovery
-                    targetPos.current.lerp(DEFAULT_CAM_POS, blendFactor);
-                    targetQuat.current.slerp(defaultQuat, blendFactor);
-
-                    // Revert global rotation drags concurrently
-                    if (galaxyRef.current) {
-                        galaxyRef.current.rotation.x *= (1 - blendFactor);
-                        galaxyRef.current.position.lerp(DEFAULT_TARGET, blendFactor);
-                    }
-                }
-            }
-
-            // Outer Bounds Limit Enforcement
-            if (targetPos.current.length() > MAX_DIST) {
-                targetPos.current.copy(DEFAULT_CAM_POS);
-                targetQuat.current.copy(defaultQuat);
-            }
-        };
-
-        canvas.addEventListener('wheel', handleWheel, { passive: false });
-        return () => canvas.removeEventListener('wheel', handleWheel);
-    }, [camera, gl, viewMode, raycaster, pointer, galaxyRef, lastInteractionRef, defaultQuat]);
-
-    return null;
-};
-
-const CAMERA_SETTINGS = { position: [0, 800, 2400], fov: 60, far: 100000 };
+            `}
+        </style>
+        <div
+            style={{
+                display: 'grid',
+                justifyItems: 'center',
+                gap: '18px',
+                color: 'white',
+                textAlign: 'center',
+                textTransform: 'uppercase',
+                letterSpacing: '0.2em',
+                fontWeight: 800,
+            }}
+        >
+            <div
+                style={{
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    borderTopColor: '#ff6a00',
+                    borderRightColor: 'rgba(255,160,92,0.7)',
+                    boxShadow: '0 0 32px rgba(255,94,24,0.2), inset 0 0 18px rgba(255,255,255,0.04)',
+                    animation: 'galaxyLoadingSpin 0.9s linear infinite',
+                }}
+            />
+            <div
+                style={{
+                    fontSize: 'clamp(1.1rem, 2vw, 1.65rem)',
+                    animation: 'galaxyLoadingPulse 1.6s ease-in-out infinite',
+                    textShadow: '0 0 24px rgba(255,94,24,0.22)',
+                }}
+            >
+                {label}
+            </div>
+        </div>
+    </div>
+);
 
 const SearchPage = () => {
     const location = useLocation();
@@ -314,18 +98,20 @@ const SearchPage = () => {
     const starSlug = location.pathname.startsWith(`${baseRoute}/`)
         ? location.pathname.slice(baseRoute.length + 1).split('/')[0]
         : '';
+    const preserveTarget = Boolean(location.state?.preserveTarget);
 
     // Data State
     const [stars, setStars] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!starSlug);
     const [error, setError] = useState(null);
 
     // View State
-    const [viewMode, setViewMode] = useState(isBuyRoute ? VIEW_MODE.GRID : VIEW_MODE.MAP);
+    const [viewMode, setViewMode] = useState(starSlug ? VIEW_MODE.DISPLAY : (isBuyRoute ? VIEW_MODE.GRID : VIEW_MODE.MAP));
     const [previousViewMode, setPreviousViewMode] = useState(null); // Tracks where we came from
     const [selectedStar, setSelectedStar] = useState(null); // The star currently in focus/display
     const [targetStar, setTargetStar] = useState(null);     // The star map is zooming towards
     const [targetZoomScale, setTargetZoomScale] = useState(1);
+    const [starRouteLoading, setStarRouteLoading] = useState(Boolean(starSlug));
 
     // UI State
     const [searchTerm, setSearchTerm] = useState("");
@@ -333,27 +119,106 @@ const SearchPage = () => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [forceTooltipStar, setForceTooltipStar] = useState(null);
     const [macroFlyInMode, setMacroFlyInMode] = useState(false);
+    const [galaxyBackdropReady, setGalaxyBackdropReady] = useState(false);
+    const [galaxyMapReady, setGalaxyMapReady] = useState(false);
 
     // Idle State
     const [isHoveringStar, setIsHoveringStar] = useState(false);
-    const controlsRef = useRef();
     const galaxyGroupRef = useRef();
     const lastInteractionRef = useRef(Date.now());
+    const backgroundCatalogueRequestedRef = useRef(false);
     const pendingSlugNavigationRef = useRef(null);
     const handledPreserveTargetKeyRef = useRef(null);
     const forceIdleNow = useCallback(() => {
         lastInteractionRef.current = Date.now() - IDLE_TIMEOUT - 1;
     }, []);
+    const hasCatalogue = stars.length > 0;
+    const isPlainGridRoute = baseRoute === '/buy' && !starSlug && !preserveTarget;
+    const canRenderGalaxyScene = hasCatalogue && !loading && !error;
+    const wantsGalaxyScene = !isPlainGridRoute && (
+        viewMode === VIEW_MODE.MAP ||
+        viewMode === VIEW_MODE.TRANSITION ||
+        Boolean(targetStar)
+    );
+    const shouldMountMapLayer = canRenderGalaxyScene && wantsGalaxyScene;
+    const shouldShowMapLayer = canRenderGalaxyScene && (
+        viewMode === VIEW_MODE.MAP ||
+        (viewMode === VIEW_MODE.TRANSITION && Boolean(targetStar))
+    );
+    const galaxySceneReady = shouldShowMapLayer && galaxyBackdropReady && galaxyMapReady;
+    const shouldShowFullScreenLoader = !isPlainGridRoute && !selectedStar && (
+        loading ||
+        starRouteLoading ||
+        (shouldShowMapLayer && !galaxySceneReady)
+    );
 
-    useEffect(() => {
-        loadStars();
+    const handleGalaxyBackdropReady = useCallback(() => {
+        setGalaxyBackdropReady(true);
     }, []);
 
+    const handleGalaxyMapReady = useCallback(() => {
+        setGalaxyMapReady(true);
+    }, []);
+
+    const loadStars = useCallback(async (term = "") => {
+        setGalaxyBackdropReady(false);
+        setGalaxyMapReady(false);
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await fetchStars({ search: term, limit: 20000 });
+            setStars(data);
+        } catch (error) {
+            console.error(error);
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    // Catalogue routes must always hydrate themselves. Direct star-detail routes
+    // can stay fast, then warm the catalogue in the background for "View in Galaxy".
     useEffect(() => {
-        if (baseRoute === '/search' && !starSlug && !location.state?.preserveTarget) {
+        if (starSlug && !preserveTarget) {
+            return;
+        }
+
+        loadStars();
+    }, [baseRoute, loadStars, preserveTarget, starSlug]);
+
+    useEffect(() => {
+        if (!starSlug || preserveTarget || !selectedStar || stars.length || backgroundCatalogueRequestedRef.current) {
+            return undefined;
+        }
+
+        backgroundCatalogueRequestedRef.current = true;
+        if ('requestIdleCallback' in window) {
+            const idleId = window.requestIdleCallback(() => loadStars());
+            return () => window.cancelIdleCallback(idleId);
+        }
+
+        const timeoutId = window.setTimeout(() => loadStars(), 1500);
+        return () => window.clearTimeout(timeoutId);
+    }, [loadStars, preserveTarget, selectedStar, stars.length, starSlug]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        if (isPlainGridRoute) return undefined;
+
+        if ('requestIdleCallback' in window) {
+            const idleId = window.requestIdleCallback(loadStarViewer);
+            return () => window.cancelIdleCallback(idleId);
+        }
+
+        const timeoutId = window.setTimeout(loadStarViewer, 1200);
+        return () => window.clearTimeout(timeoutId);
+    }, [isPlainGridRoute]);
+
+    useEffect(() => {
+        if (baseRoute === '/search' && !starSlug && !preserveTarget) {
             forceIdleNow();
         }
-    }, [baseRoute, starSlug, location.state, forceIdleNow]);
+    }, [baseRoute, starSlug, preserveTarget, forceIdleNow]);
 
     // Sync view mode with navbar navigation
     const prevLocationRef = useRef(location.pathname);
@@ -362,7 +227,8 @@ const SearchPage = () => {
             prevLocationRef.current = location.pathname;
             
             // Allow programmatic navigation (e.g. View in Galaxy) to safely manage its own state
-            if (location.state?.preserveTarget) return;
+            if (preserveTarget) return;
+            if (pendingSlugNavigationRef.current === starSlug) return;
 
             if (baseRoute === '/buy' && !starSlug) {
                 setViewMode(VIEW_MODE.GRID);
@@ -375,12 +241,65 @@ const SearchPage = () => {
                 setTargetStar(null);
                 setTargetZoomScale(1);
                 forceIdleNow();
+            } else if (starSlug) {
+                setViewMode(VIEW_MODE.DISPLAY);
+                setTargetStar(null);
+                setTargetZoomScale(1);
+                if (!selectedStar || getStarSlug(selectedStar) !== starSlug) {
+                    setSelectedStar(null);
+                }
             }
         }
-    }, [location.pathname, location.state, forceIdleNow, baseRoute, starSlug]);
+    }, [location.pathname, preserveTarget, forceIdleNow, baseRoute, starSlug, selectedStar]);
 
     useEffect(() => {
-        if (loading || !stars.length || !starSlug || location.state?.preserveTarget) {
+        if (!starSlug || preserveTarget) {
+            setStarRouteLoading(false);
+            return undefined;
+        }
+
+        if (pendingSlugNavigationRef.current === starSlug) {
+            setStarRouteLoading(false);
+            return undefined;
+        }
+
+        if (selectedStar && getStarSlug(selectedStar) === starSlug) {
+            setStarRouteLoading(false);
+            return undefined;
+        }
+
+        let isActive = true;
+        setStarRouteLoading(true);
+        setViewMode(VIEW_MODE.DISPLAY);
+
+        fetchStarBySlug(starSlug)
+            .then((star) => {
+                if (!isActive) return;
+                setPreviousViewMode(baseRoute === '/buy' ? VIEW_MODE.GRID : VIEW_MODE.MAP);
+                setSelectedStar(star);
+                setTargetStar(null);
+                setTargetZoomScale(1);
+                setViewMode(VIEW_MODE.DISPLAY);
+            })
+            .catch((requestError) => {
+                console.error(requestError);
+                if (!isActive) return;
+                setError(requestError.message);
+                navigate(baseRoute, { replace: true });
+            })
+            .finally(() => {
+                if (isActive) {
+                    setStarRouteLoading(false);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [starSlug, preserveTarget, selectedStar, navigate, baseRoute]);
+
+    useEffect(() => {
+        if (loading || !stars.length || !starSlug || preserveTarget) {
             return;
         }
 
@@ -403,7 +322,7 @@ const SearchPage = () => {
         setTargetStar(null);
         setTargetZoomScale(1);
         setViewMode(VIEW_MODE.DISPLAY);
-    }, [loading, stars, starSlug, location.state, navigate, baseRoute, selectedStar]);
+    }, [loading, stars, starSlug, preserveTarget, navigate, baseRoute, selectedStar]);
 
     useEffect(() => {
         if (
@@ -450,20 +369,6 @@ const SearchPage = () => {
         return () => window.clearTimeout(timeoutId);
     }, [location.key, location.state, loading, stars]);
 
-    const loadStars = async (term = "") => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await fetchStars({ search: term, limit: 20000 });
-            setStars(data);
-        } catch (error) {
-            console.error(error);
-            setError(error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     // --- Search Logic ---
     const handleSearchChange = (e) => {
         const value = e.target.value;
@@ -496,7 +401,7 @@ const SearchPage = () => {
     };
 
     // --- Transition Logic ---
-    const triggerTransitionToStar = (star) => {
+    const triggerTransitionToStar = useCallback((star) => {
         const nextStarSlug = getStarSlug(star);
         const starPath = `${baseRoute}/${nextStarSlug}`;
         setPreviousViewMode(viewMode);
@@ -536,23 +441,25 @@ const SearchPage = () => {
             }, 1000); // 1s blur in
 
         }, 2800); // 2.8s zoom time before blur covers the remaining frames
-    };
+    }, [baseRoute, navigate, viewMode]);
 
     const handleBackToMap = () => {
         pendingSlugNavigationRef.current = null;
         if (previousViewMode === VIEW_MODE.GRID) {
-            setViewMode(VIEW_MODE.GRID);
             setSelectedStar(null);
             setTargetStar(null);
             setTargetZoomScale(1);
+            setStarRouteLoading(false);
+            setViewMode(VIEW_MODE.GRID);
             navigate('/buy');
             return;
         }
 
-        setViewMode(VIEW_MODE.MAP);
         setSelectedStar(null);
         setTargetStar(null);
         setTargetZoomScale(1);
+        setStarRouteLoading(false);
+        setViewMode(VIEW_MODE.MAP);
         navigate('/search');
         lastInteractionRef.current = Infinity; // Disable idle spin until user interacts
     };
@@ -577,67 +484,35 @@ const SearchPage = () => {
             <Navbar />
 
             {/* --- MAP LAYER --- */}
+            {shouldMountMapLayer && (
             <div style={{
                 position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                 zIndex: 1,
                 // Hide Map if showing Display OR if Transitioning BACK to Map (blurring display)
-                visibility: (viewMode === VIEW_MODE.DISPLAY || (viewMode === VIEW_MODE.TRANSITION && !targetStar)) ? 'hidden' : 'visible'
+                visibility: shouldShowMapLayer ? 'visible' : 'hidden',
+                opacity: galaxySceneReady ? 1 : 0,
+                transition: 'opacity 0.32s ease',
+                pointerEvents: galaxySceneReady ? 'auto' : 'none',
             }}>
-                {/* 
-                    Far plane set to 100000 to prevent stars popping out 
-                    Camera position set to allow good initial view of galaxy
-                    Default Position: [0, 800, 2400] approx max zoom (radius ~2500)
-                */}
-                <Canvas camera={CAMERA_SETTINGS}>
-                    <color attach="background" args={['#050505']} />
-                    <ambientLight intensity={0.5} />
-
-                    <IdleController
-                        galaxyRef={galaxyGroupRef}
-                        lastInteractionRef={lastInteractionRef}
+                <Suspense fallback={<GalaxyLoadingIndicator />}>
+                    <GalaxyMapLayer
+                        canRenderGalaxyScene={canRenderGalaxyScene}
+                        forceTooltipStar={forceTooltipStar}
+                        galaxyGroupRef={galaxyGroupRef}
+                        handleGalaxyBackdropReady={handleGalaxyBackdropReady}
+                        handleGalaxyMapReady={handleGalaxyMapReady}
                         isHoveringStar={isHoveringStar}
-                        viewMode={viewMode}
-                    />
-
-                    <GalaxyDragger
-                        galaxyRef={galaxyGroupRef}
                         lastInteractionRef={lastInteractionRef}
+                        macroFlyInMode={macroFlyInMode}
+                        onSelectStar={triggerTransitionToStar}
+                        setIsHoveringStar={setIsHoveringStar}
+                        shouldShowMapLayer={shouldShowMapLayer}
+                        stars={stars}
+                        targetStar={targetStar}
+                        targetZoomScale={targetZoomScale}
                         viewMode={viewMode}
                     />
-
-                    <ZoomToPointer
-                        galaxyRef={galaxyGroupRef}
-                        lastInteractionRef={lastInteractionRef}
-                        viewMode={viewMode}
-                    />
-
-                    {/* Galaxy group — all scene content rotates together */}
-                    <group ref={galaxyGroupRef}>
-                        <GalaxyBackdropSphere />
-                        <GalaxyBackground count={400} />
-
-                        {!loading && stars.length > 0 && (
-                            <UniverseMap
-                                stars={stars}
-                                viewMode={viewMode}
-                                onSelectStar={triggerTransitionToStar}
-                                targetStar={targetStar}
-                                targetZoomScale={targetZoomScale}
-                                onHoverChange={setIsHoveringStar}
-                                forceTooltipStar={forceTooltipStar}
-                                macroFlyInMode={macroFlyInMode}
-                            />
-                        )}
-                    </group>
-
-                    <OrbitControls
-                        ref={controlsRef}
-                        enablePan={false}
-                        enableZoom={false}
-                        enableRotate={false}
-                        enabled={false}
-                    />
-                </Canvas>
+                </Suspense>
 
                 {/* Search UI (Only on Map) */}
                 <div style={{
@@ -693,9 +568,10 @@ const SearchPage = () => {
                     )}
                 </div>
             </div>
+            )}
 
             {/* --- DISPLAY LAYER --- */}
-            {selectedStar && (
+            {selectedStar && viewMode !== VIEW_MODE.GRID && viewMode !== VIEW_MODE.MAP && (
                 <div style={{
                     position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                     zIndex: 200,
@@ -705,18 +581,20 @@ const SearchPage = () => {
                     transition: isBuyRoute ? 'none' : 'opacity 0.2s ease-in',
                     background: isBuyRoute ? 'black' : 'transparent' // Solid background for grid transition
                 }}>
-                    <StarViewer
-                        star={selectedStar}
-                        onBack={handleBackToMap}
-                        onSuccess={() => { loadStars(); alert("Star Purchased!"); }}
-                        onViewInGalaxy={handleViewInGalaxy}
-                    />
+                    <Suspense fallback={null}>
+                        <StarViewer
+                            star={selectedStar}
+                            onBack={handleBackToMap}
+                            onSuccess={() => { loadStars(); alert("Star Purchased!"); }}
+                            onViewInGalaxy={handleViewInGalaxy}
+                        />
+                    </Suspense>
                 </div>
             )}
 
             {/* --- GRID LAYER (Marketplace) --- */}
             <div style={{
-                display: viewMode === VIEW_MODE.GRID ? 'block' : 'none',
+                display: viewMode === VIEW_MODE.GRID && !starSlug ? 'block' : 'none',
                 position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5
             }}>
                 <BuyAStarGrid
@@ -740,7 +618,9 @@ const SearchPage = () => {
 
             {/* Modals & Loading */}
             {error && <div style={{ position: 'absolute', bottom: 20, left: 20, color: 'red', zIndex: 200 }}>{error}</div>}
-            {loading && <div style={{ position: 'absolute', bottom: 20, left: 20, color: 'white', zIndex: 200 }}>Loading...</div>}
+            {shouldShowFullScreenLoader && (
+                <GalaxyLoadingIndicator label={starSlug ? 'Loading star...' : 'Loading galaxy...'} />
+            )}
         </div>
     );
 };

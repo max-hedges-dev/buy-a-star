@@ -147,7 +147,12 @@ const Navbar = () => {
                     }}
                 >
                     {navLinks.map((link) => (
-                        <Link key={link.to} to={link.to}>{link.label}</Link>
+                        <Link
+                            key={link.to}
+                            to={link.to}
+                        >
+                            {link.label}
+                        </Link>
                     ))}
                 </div>
 
@@ -262,7 +267,9 @@ const Navbar = () => {
                         {navLinks.map((link) => (
                             <Link
                                 key={link.to}
-                                onClick={() => setIsMenuOpen(false)}
+                                onClick={() => {
+                                    setIsMenuOpen(false);
+                                }}
                                 to={link.to}
                                 style={{
                                     padding: '16px 18px',

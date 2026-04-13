@@ -6,7 +6,6 @@ import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOrder, updateOwnedStarPrice } from '../services/api';
-import { downloadCertificate } from '../utils/certificateDownload';
 import {
     formatDate,
     formatMoney,
@@ -133,6 +132,7 @@ const OwnedStarPage = () => {
 
         try {
             setIsDownloading(true);
+            const { downloadCertificate } = await import('../utils/certificateDownload');
             await downloadCertificate(order);
         } finally {
             setIsDownloading(false);

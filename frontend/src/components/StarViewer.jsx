@@ -1875,6 +1875,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             right: 'clamp(14px, 2.2vw, 24px)',
                             zIndex: 24,
                             width: 'clamp(142px, 28vw, 210px)',
+                            maxWidth: 'calc(100vw - 28px)',
+                            boxSizing: 'border-box',
                             borderRadius: '24px',
                             border: '1px solid rgba(255,255,255,0.14)',
                             background: 'linear-gradient(180deg, rgba(12,15,24,0.88) 0%, rgba(5,8,14,0.72) 100%)',
@@ -1895,6 +1897,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 color: 'white',
                                 cursor: 'pointer',
                                 textAlign: 'left',
+                                overflow: 'hidden',
+                                boxSizing: 'border-box',
                             }}
                         >
                             <div style={{ position: 'relative', height: 'clamp(96px, 18vw, 132px)', overflow: 'hidden' }}>
@@ -1907,12 +1911,12 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                     </group>
                                 </Canvas>
                             </div>
-                            <div style={{ padding: '0 14px 14px', display: 'grid', gap: '10px' }}>
-                                <div>
+                            <div style={{ padding: '0 14px 14px', display: 'grid', gap: '10px', minWidth: 0, boxSizing: 'border-box' }}>
+                                <div style={{ minWidth: 0 }}>
                                     <div style={{ color: '#ff8a4d', fontSize: '0.62rem', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>
                                         Observatory
                                     </div>
-                                    <div style={{ color: '#f6f3eb', fontSize: '0.9rem', fontWeight: 'bold', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    <div style={{ color: '#f6f3eb', fontSize: 'clamp(0.72rem, 2.4vw, 0.9rem)', fontWeight: 'bold', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                                         {activeStar.common_name || activeStar.scientific_name}
                                     </div>
                                 </div>
@@ -1921,6 +1925,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
+                                        width: '100%',
+                                        maxWidth: '100%',
+                                        boxSizing: 'border-box',
                                         borderRadius: '999px',
                                         background: 'var(--primary)',
                                         color: 'white',
@@ -1929,6 +1936,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         fontWeight: 'bold',
                                         letterSpacing: '0.04em',
                                         boxShadow: '0 12px 26px rgba(255,77,0,0.28)',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
                                     }}
                                 >
                                     View Star

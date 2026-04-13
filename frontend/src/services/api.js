@@ -64,7 +64,7 @@ export async function fetchStars({ skip = 0, limit = 100, search = "", isBought 
     });
     const cacheKey = getStarsCacheKey(params);
     const cachedData = readStarsCache(cacheKey);
-    if (cachedData) {
+    if (cachedData?.length > 0) {
         return cachedData;
     }
 
@@ -75,6 +75,10 @@ export async function fetchStars({ skip = 0, limit = 100, search = "", isBought 
 
 export async function fetchStarById(id) {
     return apiRequest(`${STARS_URL}${id}`);
+}
+
+export async function fetchStarBySlug(slug) {
+    return apiRequest(`${STARS_URL}slug/${encodeURIComponent(slug)}`);
 }
 
 export async function createCheckoutSession({

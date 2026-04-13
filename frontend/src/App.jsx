@@ -1,17 +1,22 @@
-import React, { useLayoutEffect } from 'react';
+import React, { Suspense, lazy, useLayoutEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import LandingPage from './pages/LandingPage';
-import SearchPage from './pages/SearchPage';
-import AboutPage from './pages/AboutPage';
-import FaqPage from './pages/FaqPage';
-import AuthPage from './pages/AuthPage';
-import AccountPage from './pages/AccountPage';
-import OrderCertificatePage from './pages/OrderCertificatePage';
-import OwnedStarPage from './pages/OwnedStarPage';
-import PrivacyPage from './pages/PrivacyPage';
-import TermsPage from './pages/TermsPage';
-import CheckoutCompletePage from './pages/CheckoutCompletePage';
 import ProtectedRoute from './components/ProtectedRoute';
+
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const SearchPage = lazy(() => import('./pages/SearchPage'));
+const AboutPage = lazy(() => import('./pages/AboutPage'));
+const FaqPage = lazy(() => import('./pages/FaqPage'));
+const AuthPage = lazy(() => import('./pages/AuthPage'));
+const AccountPage = lazy(() => import('./pages/AccountPage'));
+const OrderCertificatePage = lazy(() => import('./pages/OrderCertificatePage'));
+const OwnedStarPage = lazy(() => import('./pages/OwnedStarPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+const CheckoutCompletePage = lazy(() => import('./pages/CheckoutCompletePage'));
+
+const RouteFallback = () => (
+    <div style={{ minHeight: '100vh', background: '#000' }} />
+);
 
 const ScrollToTop = () => {
   const location = useLocation();
@@ -27,48 +32,50 @@ function App() {
   return (
         <Router>
             <ScrollToTop />
-            <Routes>
-                <Route path="/" element={<LandingPage />} />
-                <Route path="/auth" element={<AuthPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route
-                    path="/account"
-                    element={(
-                        <ProtectedRoute>
-                            <AccountPage />
-                        </ProtectedRoute>
-                    )}
-                />
-                <Route path="/faq" element={<FaqPage />} />
-                <Route path="/privacy" element={<PrivacyPage />} />
-                <Route path="/terms" element={<TermsPage />} />
-                <Route
-                    path="/account/orders/:transactionId"
-                    element={(
-                        <ProtectedRoute>
-                            <OrderCertificatePage />
-                        </ProtectedRoute>
-                    )}
-                />
-                <Route
-                    path="/checkout/complete"
-                    element={(
-                        <ProtectedRoute>
-                            <CheckoutCompletePage />
-                        </ProtectedRoute>
-                    )}
-                />
-                <Route
-                    path="/account/stars/:transactionId/:starSlug"
-                    element={(
-                        <ProtectedRoute>
-                            <OwnedStarPage />
-                        </ProtectedRoute>
-                    )}
-                />
-                <Route path="/search/*" element={<SearchPage />} />
-                <Route path="/buy/*" element={<SearchPage />} />
-            </Routes>
+            <Suspense fallback={<RouteFallback />}>
+                <Routes>
+                    <Route path="/" element={<LandingPage />} />
+                    <Route path="/auth" element={<AuthPage />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route
+                        path="/account"
+                        element={(
+                            <ProtectedRoute>
+                                <AccountPage />
+                            </ProtectedRoute>
+                        )}
+                    />
+                    <Route path="/faq" element={<FaqPage />} />
+                    <Route path="/privacy" element={<PrivacyPage />} />
+                    <Route path="/terms" element={<TermsPage />} />
+                    <Route
+                        path="/account/orders/:transactionId"
+                        element={(
+                            <ProtectedRoute>
+                                <OrderCertificatePage />
+                            </ProtectedRoute>
+                        )}
+                    />
+                    <Route
+                        path="/checkout/complete"
+                        element={(
+                            <ProtectedRoute>
+                                <CheckoutCompletePage />
+                            </ProtectedRoute>
+                        )}
+                    />
+                    <Route
+                        path="/account/stars/:transactionId/:starSlug"
+                        element={(
+                            <ProtectedRoute>
+                                <OwnedStarPage />
+                            </ProtectedRoute>
+                        )}
+                    />
+                    <Route path="/search/*" element={<SearchPage />} />
+                    <Route path="/buy/*" element={<SearchPage />} />
+                </Routes>
+            </Suspense>
         </Router>
   );
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -93,36 +94,36 @@ def serialize_star(star: Star) -> dict:
     }
 
 
-@router.get("")
-@router.get("/", response_model=list[StarListRead])
-async def read_stars(
-    db: AsyncSession = Depends(get_db),
-    skip: int = 0,
-    limit: int = 100,
-    search: Optional[str] = None,
-    is_bought: Optional[bool] = None,
-):
-    query = select(Star)
-    if search:
-        query = query.filter(Star.common_name.ilike(f"%{search}%") | Star.scientific_name.ilike(f"%{search}%"))
-    if is_bought is not None:
-        query = query.filter(Star.is_bought == is_bought)
-    query = query.offset(skip).limit(limit)
-    result = await db.execute(query)
-    stars = result.scalars().all()
-    return [StarListRead(**serialize_star(star)) for star in stars]
+def slugify_star_name(value: str | None) -> str:
+    normalized = (value or "").lower().strip().replace("'", "").replace("’", "").replace(".", "")
+    return re.sub(r"(^-+|-+$)", "", re.sub(r"[^a-z0-9]+", "-", normalized))
 
 
-@router.get("/{star_id}", response_model=StarDetailRead)
-async def read_star(star_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Star).filter(Star.id == star_id))
-    star = result.scalars().first()
-    if star is None:
-        raise HTTPException(status_code=404, detail="Star not found")
+def get_star_slug(star: Star) -> str:
+    return slugify_star_name(star.common_name or star.display_name or star.scientific_name)
 
+
+def get_star_slug_candidates(star: Star) -> set[str]:
+    values = {
+        star.common_name,
+        star.display_name,
+        star.scientific_name,
+        star.catalog_id,
+        star.canonical_id,
+        star.source_id,
+        star.gaia_source_id,
+    }
+
+    if star.source_catalog and star.source_id:
+        values.add(f"{star.source_catalog} {star.source_id}")
+
+    return {slugify_star_name(value) for value in values if value}
+
+
+async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetailRead:
     history_result = await db.execute(
         select(StarValuationHistory)
-        .where(StarValuationHistory.star_id == star_id)
+        .where(StarValuationHistory.star_id == star.id)
         .order_by(StarValuationHistory.valuation_date.asc())
     )
     history = [
@@ -154,3 +155,44 @@ async def read_star(star_id: int, db: AsyncSession = Depends(get_db)):
         classprob_dsc_combmod_binarystar=star.classprob_dsc_combmod_binarystar,
         valuation_history=history,
     )
+
+
+@router.get("")
+@router.get("/", response_model=list[StarListRead])
+async def read_stars(
+    db: AsyncSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    is_bought: Optional[bool] = None,
+):
+    query = select(Star)
+    if search:
+        query = query.filter(Star.common_name.ilike(f"%{search}%") | Star.scientific_name.ilike(f"%{search}%"))
+    if is_bought is not None:
+        query = query.filter(Star.is_bought == is_bought)
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
+    stars = result.scalars().all()
+    return [StarListRead(**serialize_star(star)) for star in stars]
+
+
+@router.get("/slug/{star_slug}", response_model=StarDetailRead)
+async def read_star_by_slug(star_slug: str, db: AsyncSession = Depends(get_db)):
+    normalized_slug = slugify_star_name(star_slug)
+    result = await db.execute(select(Star))
+    for star in result.scalars().all():
+        if normalized_slug in get_star_slug_candidates(star):
+            return await build_star_detail_response(star, db)
+
+    raise HTTPException(status_code=404, detail="Star not found")
+
+
+@router.get("/{star_id}", response_model=StarDetailRead)
+async def read_star(star_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Star).filter(Star.id == star_id))
+    star = result.scalars().first()
+    if star is None:
+        raise HTTPException(status_code=404, detail="Star not found")
+
+    return await build_star_detail_response(star, db)

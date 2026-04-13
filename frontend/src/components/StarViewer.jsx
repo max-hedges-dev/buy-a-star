@@ -24,17 +24,17 @@ const OBSERVATORY_STAR_STORAGE_KEY = 'aster-atlas-observatory-star-v3';
 const PORTRAIT_MODAL_LAYOUT_STORAGE_KEY = 'aster-atlas-portrait-observatory-layout-v1';
 
 const DEFAULT_OBSERVATORY_LAYOUT = {
-    luminosity: { x: 73, y: 3, w: 25 },
-    colorIndex: { x: 13, y: 24, w: 19 },
-    brightness: { x: 10, y: 36, w: 22 },
-    structure: { x: 73, y: 51, w: 24 },
-    distance: { x: 6, y: 67, w: 37 },
-    spectral: { x: 68, y: 73, w: 30 },
-    sky: { x: 72, y: 84, w: 24 },
-    age: { x: 17, y: 86, w: 44 },
+    luminosity: { x: 58.33906709080848, y: 6.604467782439489, w: 25 },
+    colorIndex: { x: 9.008640277418875, y: 6.775370620039024, w: 19 },
+    brightness: { x: -7.61635047890375, y: 30.899018090559807, w: 22 },
+    structure: { x: 88.440343323451, y: 27.60312752456954, w: 24 },
+    distance: { x: -11.780185315675183, y: 66.47198157391507, w: 37 },
+    spectral: { x: 79.64559787963336, y: 67.28651475178394, w: 30 },
+    sky: { x: 62.586934266805876, y: 84.01409555412454, w: 24 },
+    age: { x: 8.708767406889518, y: 90.26137105670475, w: 44 },
 };
 
-const DEFAULT_STAR_LAYOUT = { x: 55, y: 48 };
+const DEFAULT_STAR_LAYOUT = { x: 49.40831495923624, y: 51.24214362086634 };
 const RESPONSIVE_STAR_LAYOUT = { x: 54, y: 44 };
 const CENTERED_STAR_LAYOUT = { x: 50, y: 50 };
 const RESPONSIVE_OBSERVATORY_LAYOUT = {
@@ -49,14 +49,14 @@ const RESPONSIVE_OBSERVATORY_LAYOUT = {
 };
 
 const PORTRAIT_MODAL_OBSERVATORY_LAYOUT = {
-    luminosity: { x: 62, y: 8, w: 30 },
-    colorIndex: { x: 6, y: 14, w: 27 },
-    brightness: { x: 6, y: 34, w: 29 },
-    structure: { x: 65, y: 36, w: 31 },
-    distance: { x: 6, y: 61, w: 37 },
-    spectral: { x: 61, y: 64, w: 34 },
-    age: { x: 16, y: 82, w: 52 },
-    sky: { x: 67, y: 78, w: 28 },
+    luminosity: { x: 65.34950545533519, y: -6.632800052589477, w: 30 },
+    colorIndex: { x: 8.964837280886005, y: -5.036846047422556, w: 27 },
+    brightness: { x: -2.767976565417732, y: 24.720987918404216, w: 29 },
+    structure: { x: 77.24235341905597, y: 24.615078609396125, w: 31 },
+    distance: { x: -7.150652659090182, y: 65.10517217376498, w: 37 },
+    spectral: { x: 72.97175480255889, y: 64.13165247120703, w: 34 },
+    age: { x: -0.1683212108562051, y: 91.16154710933846, w: 52 },
+    sky: { x: 64.84032914730666, y: 86.98791492117088, w: 28 },
 };
 
 const OBSERVATORY_MODULE_HEIGHTS = {

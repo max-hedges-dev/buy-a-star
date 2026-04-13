@@ -179,15 +179,20 @@ const SearchPage = () => {
     // Catalogue routes must always hydrate themselves. Direct star-detail routes
     // can stay fast, then warm the catalogue in the background for "View in Galaxy".
     useEffect(() => {
+        if (isPlainGridRoute) {
+            setLoading(false);
+            return;
+        }
+
         if (starSlug && !preserveTarget) {
             return;
         }
 
         loadStars();
-    }, [baseRoute, loadStars, preserveTarget, starSlug]);
+    }, [isPlainGridRoute, loadStars, preserveTarget, starSlug]);
 
     useEffect(() => {
-        if (!starSlug || preserveTarget || !selectedStar || stars.length || backgroundCatalogueRequestedRef.current) {
+        if (isBuyRoute || !starSlug || preserveTarget || !selectedStar || stars.length || backgroundCatalogueRequestedRef.current) {
             return undefined;
         }
 
@@ -199,7 +204,7 @@ const SearchPage = () => {
 
         const timeoutId = window.setTimeout(() => loadStars(), 1500);
         return () => window.clearTimeout(timeoutId);
-    }, [loadStars, preserveTarget, selectedStar, stars.length, starSlug]);
+    }, [isBuyRoute, loadStars, preserveTarget, selectedStar, stars.length, starSlug]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return undefined;
@@ -585,7 +590,10 @@ const SearchPage = () => {
                         <StarViewer
                             star={selectedStar}
                             onBack={handleBackToMap}
-                            onSuccess={() => { loadStars(); alert("Star Purchased!"); }}
+                            onSuccess={() => {
+                                if (!isBuyRoute) loadStars();
+                                alert("Star Purchased!");
+                            }}
                             onViewInGalaxy={handleViewInGalaxy}
                         />
                     </Suspense>
@@ -598,9 +606,6 @@ const SearchPage = () => {
                 position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5
             }}>
                 <BuyAStarGrid
-                    stars={stars}
-                    loading={loading}
-                    error={error}
                     onSelectStar={triggerTransitionToStar}
                 />
             </div>

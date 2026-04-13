@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StarValuationHistoryPointRead(BaseModel):
@@ -80,6 +80,21 @@ class StarListRead(StarBase):
     x: float
     y: float
     z: float
+
+
+class StarCatalogueFacetsRead(BaseModel):
+    constellations: list[str] = Field(default_factory=list)
+    star_types: list[str] = Field(default_factory=list)
+    max_distance_ly: float = 0
+
+
+class StarCatalogueRead(BaseModel):
+    items: list[StarListRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    facets: StarCatalogueFacetsRead
 
 
 class StarDetailRead(StarListRead):

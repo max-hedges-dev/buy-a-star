@@ -12,7 +12,7 @@ const readStarsCache = (cacheKey) => {
         if (!rawValue) return null;
 
         const parsedValue = JSON.parse(rawValue);
-        if (!parsedValue.timestamp || !Array.isArray(parsedValue.data)) return null;
+        if (!parsedValue.timestamp || parsedValue.data === undefined) return null;
 
         const isExpired = Date.now() - parsedValue.timestamp > STARS_CACHE_TTL_MS;
         if (isExpired) {
@@ -64,11 +64,46 @@ export async function fetchStars({ skip = 0, limit = 100, search = "", isBought 
     });
     const cacheKey = getStarsCacheKey(params);
     const cachedData = readStarsCache(cacheKey);
-    if (cachedData?.length > 0) {
+    if (cachedData !== null) {
         return cachedData;
     }
 
     const data = await apiRequest(`${STARS_URL}?${params}`);
+    writeStarsCache(cacheKey, data);
+    return data;
+}
+
+export async function fetchStarCatalogue({
+    page = 1,
+    pageSize = 24,
+    search = "",
+    status = "unclaimed",
+    colour = "all",
+    constellation = "all",
+    starType = "all",
+    maxDistanceLy = undefined,
+    sortBy = "alphabetical",
+} = {}) {
+    const params = new URLSearchParams({
+        page: page.toString(),
+        page_size: pageSize.toString(),
+        status,
+        colour,
+        constellation,
+        star_type: starType,
+        sort_by: sortBy,
+        ...(search && { search }),
+        ...(Number.isFinite(maxDistanceLy) && maxDistanceLy > 0
+            ? { max_distance_ly: maxDistanceLy.toString() }
+            : {}),
+    });
+    const cacheKey = getStarsCacheKey(new URLSearchParams(`catalogue=1&${params.toString()}`));
+    const cachedData = readStarsCache(cacheKey);
+    if (cachedData !== null) {
+        return cachedData;
+    }
+
+    const data = await apiRequest(`${STARS_URL}catalogue?${params}`);
     writeStarsCache(cacheKey, data);
     return data;
 }

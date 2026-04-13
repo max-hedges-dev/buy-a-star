@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import math
 import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.star import Star
 from app.models.star_valuation_history import StarValuationHistory
 from app.core.config import settings
-from app.schemas.star import StarDetailRead, StarListRead, StarValuationHistoryPointRead
+from app.schemas.star import (
+    StarCatalogueFacetsRead,
+    StarCatalogueRead,
+    StarDetailRead,
+    StarListRead,
+    StarValuationHistoryPointRead,
+)
 
 
 router = APIRouter()
@@ -120,6 +127,123 @@ def get_star_slug_candidates(star: Star) -> set[str]:
     return {slugify_star_name(value) for value in values if value}
 
 
+def _name_sort_expression():
+    return func.lower(func.coalesce(Star.common_name, Star.display_name, Star.scientific_name, ""))
+
+
+def _apply_search(query, search: str | None):
+    if not search:
+        return query
+
+    search_pattern = f"%{search.strip()}%"
+    return query.where(
+        or_(
+            Star.common_name.ilike(search_pattern),
+            Star.display_name.ilike(search_pattern),
+            Star.scientific_name.ilike(search_pattern),
+            Star.constellation.ilike(search_pattern),
+        )
+    )
+
+
+def _apply_colour_filter(query, colour: str | None):
+    if not colour or colour == "all":
+        return query
+
+    normalized = colour.strip().lower()
+    category = func.lower(func.coalesce(Star.category, ""))
+    colour_conditions = {
+        "blue": and_(category.like("%blue%"), ~category.like("%blue-white%")),
+        "blue-white": category.like("%blue-white%"),
+        "white": and_(
+            category.like("%white%"),
+            ~category.like("%blue-white%"),
+            ~category.like("%yellow-white%"),
+        ),
+        "yellow-white": category.like("%yellow-white%"),
+        "yellow": and_(category.like("%yellow%"), ~category.like("%yellow-white%")),
+        "orange": category.like("%orange%"),
+        "red": category.like("%red%"),
+    }
+
+    condition = colour_conditions.get(normalized)
+    if condition is None:
+        return query
+
+    return query.where(condition)
+
+
+def _apply_catalogue_filters(
+    query,
+    *,
+    search: str | None,
+    status: str | None,
+    colour: str | None,
+    constellation: str | None,
+    star_type: str | None,
+    max_distance_ly: float | None,
+):
+    query = _apply_search(query, search)
+
+    if status == "claimed":
+        query = query.where(Star.is_bought.is_(True))
+    elif status == "unclaimed":
+        query = query.where(Star.is_bought.is_(False))
+
+    query = _apply_colour_filter(query, colour)
+
+    if constellation and constellation != "all":
+        query = query.where(Star.constellation == constellation)
+
+    if star_type and star_type != "all":
+        query = query.where(Star.category == star_type)
+
+    if max_distance_ly is not None and max_distance_ly > 0:
+        query = query.where(Star.distance_ly <= max_distance_ly)
+
+    return query
+
+
+def _apply_catalogue_sort(query, sort_by: str | None):
+    name_sort = _name_sort_expression()
+    sort_key = sort_by or "alphabetical"
+
+    if sort_key == "distance-near":
+        return query.order_by(Star.distance_ly.asc(), name_sort.asc())
+    if sort_key == "distance-far":
+        return query.order_by(Star.distance_ly.desc(), name_sort.asc())
+    if sort_key == "brightness":
+        return query.order_by(Star.apparent_magnitude.asc().nullslast(), name_sort.asc())
+    if sort_key == "predicted-price":
+        return query.order_by(Star.model_value.desc().nullslast(), name_sort.asc())
+    if sort_key == "claimed-first":
+        return query.order_by(Star.is_bought.desc(), name_sort.asc())
+
+    return query.order_by(name_sort.asc())
+
+
+async def _build_catalogue_facets(db: AsyncSession) -> StarCatalogueFacetsRead:
+    constellations_result = await db.execute(
+        select(Star.constellation)
+        .where(Star.constellation.is_not(None))
+        .distinct()
+        .order_by(Star.constellation.asc())
+    )
+    star_types_result = await db.execute(
+        select(Star.category)
+        .where(Star.category.is_not(None))
+        .distinct()
+        .order_by(Star.category.asc())
+    )
+    max_distance_result = await db.execute(select(func.max(Star.distance_ly)))
+
+    return StarCatalogueFacetsRead(
+        constellations=[value for value in constellations_result.scalars().all() if value],
+        star_types=[value for value in star_types_result.scalars().all() if value],
+        max_distance_ly=float(max_distance_result.scalar() or 0),
+    )
+
+
 async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetailRead:
     history_result = await db.execute(
         select(StarValuationHistory)
@@ -157,7 +281,7 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
     )
 
 
-@router.get("")
+@router.get("", response_model=list[StarListRead])
 @router.get("/", response_model=list[StarListRead])
 async def read_stars(
     db: AsyncSession = Depends(get_db),
@@ -175,6 +299,57 @@ async def read_stars(
     result = await db.execute(query)
     stars = result.scalars().all()
     return [StarListRead(**serialize_star(star)) for star in stars]
+
+
+@router.get("/catalogue", response_model=StarCatalogueRead)
+async def read_star_catalogue(
+    db: AsyncSession = Depends(get_db),
+    page: int = 1,
+    page_size: int = 24,
+    search: Optional[str] = None,
+    status: Optional[str] = "unclaimed",
+    colour: Optional[str] = "all",
+    constellation: Optional[str] = "all",
+    star_type: Optional[str] = "all",
+    max_distance_ly: Optional[float] = None,
+    sort_by: Optional[str] = "alphabetical",
+):
+    safe_page_size = min(max(page_size, 1), 96)
+    safe_page = max(page, 1)
+
+    filtered_query = _apply_catalogue_filters(
+        select(Star),
+        search=search,
+        status=status,
+        colour=colour,
+        constellation=constellation,
+        star_type=star_type,
+        max_distance_ly=max_distance_ly,
+    )
+
+    total_result = await db.execute(
+        select(func.count()).select_from(filtered_query.order_by(None).subquery())
+    )
+    total = int(total_result.scalar() or 0)
+    total_pages = max(1, math.ceil(total / safe_page_size))
+    bounded_page = min(safe_page, total_pages)
+
+    items_query = (
+        _apply_catalogue_sort(filtered_query, sort_by)
+        .offset((bounded_page - 1) * safe_page_size)
+        .limit(safe_page_size)
+    )
+    items_result = await db.execute(items_query)
+    stars = items_result.scalars().all()
+
+    return StarCatalogueRead(
+        items=[StarListRead(**serialize_star(star)) for star in stars],
+        total=total,
+        page=bounded_page,
+        page_size=safe_page_size,
+        total_pages=total_pages,
+        facets=await _build_catalogue_facets(db),
+    )
 
 
 @router.get("/slug/{star_slug}", response_model=StarDetailRead)

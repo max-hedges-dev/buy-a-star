@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import StarTile from './StarTile';
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
-import { getColorFamily } from '../utils/starAppearance';
+import { fetchStarCatalogue } from '../services/api';
 
 const LIMIT = 24;
 const CONTENT_TOP_OFFSET = 100;
@@ -90,14 +90,46 @@ const LoadingTile = () => (
     </div>
 );
 
-const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
+const getCatalogueErrorMessage = (error) => {
+    const message = error?.message ?? error?.payload?.detail ?? error?.payload?.message ?? error;
+
+    if (typeof message === 'string') {
+        return message;
+    }
+
+    if (Array.isArray(message)) {
+        const firstMessage = message.find((item) => item?.msg)?.msg;
+        if (firstMessage) {
+            return firstMessage;
+        }
+    }
+
+    return 'Unable to load stars right now.';
+};
+
+const BuyAStarGrid = ({ onSelectStar }) => {
     const [page, setPage] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('unclaimed');
     const [colorFilter, setColorFilter] = useState('all');
     const [constellationFilter, setConstellationFilter] = useState('all');
     const [typeFilter, setTypeFilter] = useState('all');
     const [sortBy, setSortBy] = useState('alphabetical');
+    const [catalogue, setCatalogue] = useState({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: LIMIT,
+        total_pages: 1,
+        facets: {
+            constellations: [],
+            star_types: [],
+            max_distance_ly: 0,
+        },
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [filterTopOffset, setFilterTopOffset] = useState(CONTENT_TOP_OFFSET);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [viewportSize, setViewportSize] = useState(() => ({
@@ -105,8 +137,17 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
         height: typeof window !== 'undefined' ? window.innerHeight : 900,
     }));
     const gridStartRef = useRef(null);
-    const maxDistanceCap = useMemo(() => Math.ceil(Math.max(...stars.map((star) => star.distance_ly || 0), 0)), [stars]);
     const [maxDistance, setMaxDistance] = useState(0);
+    const pagedStars = catalogue.items || [];
+    const totalStars = catalogue.total || 0;
+    const totalPages = Math.max(1, catalogue.total_pages || 1);
+    const constellations = catalogue.facets?.constellations || [];
+    const starTypes = catalogue.facets?.star_types || [];
+    const maxDistanceCap = Math.ceil(catalogue.facets?.max_distance_ly || 0);
+    const distanceSliderValue = maxDistance > 0
+        ? Math.min(maxDistance, maxDistanceCap || maxDistance)
+        : (maxDistanceCap || 1);
+    const isAnyDistance = maxDistanceCap === 0 || maxDistance === 0 || maxDistance >= maxDistanceCap;
 
     const measureFilterTop = useCallback(() => {
         if (!gridStartRef.current) return;
@@ -115,15 +156,6 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
             setFilterTopOffset(nextTop);
         }
     }, []);
-
-    useEffect(() => {
-        if (maxDistanceCap > 0) {
-            setMaxDistance((current) => {
-                if (current === 0 || current > maxDistanceCap) return maxDistanceCap;
-                return current;
-            });
-        }
-    }, [maxDistanceCap]);
 
     useEffect(() => {
         const handleResize = () => setViewportSize({
@@ -136,68 +168,66 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const constellations = useMemo(
-        () => [...new Set(stars.map((star) => star.constellation).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-        [stars]
-    );
-
-    const starTypes = useMemo(
-        () => [...new Set(stars.map((star) => star.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-        [stars]
-    );
-
-    const filteredStars = useMemo(() => {
-        const normalizedSearch = searchTerm.trim().toLowerCase();
-
-        const filtered = stars.filter((star) => {
-            const starName = (star.common_name || star.display_name || star.scientific_name || '').toLowerCase();
-            const secondaryName = (star.scientific_name || '').toLowerCase();
-            const searchableConstellation = (star.constellation || '').toLowerCase();
-            const matchesSearch =
-                !normalizedSearch ||
-                starName.includes(normalizedSearch) ||
-                secondaryName.includes(normalizedSearch) ||
-                searchableConstellation.includes(normalizedSearch);
-
-            const matchesStatus =
-                statusFilter === 'all' ||
-                (statusFilter === 'claimed' && star.is_bought) ||
-                (statusFilter === 'unclaimed' && !star.is_bought);
-
-            const matchesColor = colorFilter === 'all' || getColorFamily(star) === colorFilter;
-            const matchesConstellation = constellationFilter === 'all' || star.constellation === constellationFilter;
-            const matchesType = typeFilter === 'all' || star.category === typeFilter;
-            const matchesDistance = maxDistanceCap === 0 || star.distance_ly <= maxDistance;
-
-            return matchesSearch && matchesStatus && matchesColor && matchesConstellation && matchesType && matchesDistance;
-        });
-
-        filtered.sort((a, b) => {
-            const aName = (a.common_name || a.display_name || a.scientific_name || '').toLowerCase();
-            const bName = (b.common_name || b.display_name || b.scientific_name || '').toLowerCase();
-
-            if (sortBy === 'alphabetical') return aName.localeCompare(bName);
-            if (sortBy === 'distance-near') return a.distance_ly - b.distance_ly;
-            if (sortBy === 'distance-far') return b.distance_ly - a.distance_ly;
-            if (sortBy === 'brightness') return (a.apparent_magnitude ?? 999) - (b.apparent_magnitude ?? 999);
-            if (sortBy === 'predicted-price') return (b.model_value ?? Number.NEGATIVE_INFINITY) - (a.model_value ?? Number.NEGATIVE_INFINITY) || aName.localeCompare(bName);
-            if (sortBy === 'claimed-first') return Number(b.is_bought) - Number(a.is_bought) || aName.localeCompare(bName);
-            return 0;
-        });
-
-        return filtered;
-    }, [stars, searchTerm, statusFilter, colorFilter, constellationFilter, typeFilter, sortBy, maxDistance, maxDistanceCap]);
-
-    const pagedStars = useMemo(() => {
-        const start = page * LIMIT;
-        return filteredStars.slice(start, start + LIMIT);
-    }, [filteredStars, page]);
-
-    const totalPages = Math.max(1, Math.ceil(filteredStars.length / LIMIT));
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+        }, 180);
+        return () => window.clearTimeout(timeoutId);
+    }, [searchTerm]);
 
     useEffect(() => {
         setPage(0);
     }, [searchTerm, statusFilter, colorFilter, constellationFilter, typeFilter, sortBy, maxDistance]);
+
+    useEffect(() => {
+        let isActive = true;
+        setLoading(true);
+        setError(null);
+
+        const cappedDistance = maxDistanceCap > 0 && maxDistance > 0 && maxDistance < maxDistanceCap
+            ? maxDistance
+            : undefined;
+
+        fetchStarCatalogue({
+            page: page + 1,
+            pageSize: LIMIT,
+            search: debouncedSearchTerm,
+            status: statusFilter,
+            colour: colorFilter,
+            constellation: constellationFilter,
+            starType: typeFilter,
+            maxDistanceLy: cappedDistance,
+            sortBy,
+        })
+            .then((nextCatalogue) => {
+                if (!isActive) return;
+                setCatalogue(nextCatalogue);
+            })
+            .catch((catalogueError) => {
+                console.error(catalogueError);
+                if (!isActive) return;
+                setError(getCatalogueErrorMessage(catalogueError));
+            })
+            .finally(() => {
+                if (isActive) {
+                    setLoading(false);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [
+        colorFilter,
+        constellationFilter,
+        debouncedSearchTerm,
+        maxDistance,
+        maxDistanceCap,
+        page,
+        sortBy,
+        statusFilter,
+        typeFilter,
+    ]);
 
     useEffect(() => {
         if (page > totalPages - 1) {
@@ -221,7 +251,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
             window.removeEventListener('resize', handleResize);
             if (observer) observer.disconnect();
         };
-    }, [measureFilterTop, loading, page, filteredStars.length]);
+    }, [measureFilterTop, loading, page, totalStars]);
 
     const resetFilters = () => {
         setSearchTerm('');
@@ -230,7 +260,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
         setConstellationFilter('all');
         setTypeFilter('all');
         setSortBy('alphabetical');
-        setMaxDistance(maxDistanceCap);
+        setMaxDistance(0);
     };
 
     const { width: viewportWidth, height: viewportHeight } = viewportSize;
@@ -385,7 +415,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
                             min={0}
                             max={maxDistanceCap || 1}
                             step={100}
-                            value={Math.min(maxDistance, maxDistanceCap || 1)}
+                            value={distanceSliderValue}
                             onChange={(event) => setMaxDistance(Number(event.target.value))}
                             style={sliderStyle}
                         />
@@ -402,7 +432,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
                         >
                             <span>0 ly</span>
                             <span style={{ color: '#ffffff', fontWeight: 600 }}>
-                                {maxDistance >= maxDistanceCap ? 'Any distance' : `${maxDistance.toLocaleString()} ly max`}
+                                {isAnyDistance ? 'Any distance' : `${maxDistance.toLocaleString()} ly max`}
                             </span>
                         </div>
                     </div>
@@ -466,7 +496,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
                         >
                             <div>
                                 <div style={{ color: '#ffffff', fontSize: `${clamp(1.15 * pageScale, 0.98, 1.15).toFixed(3)}rem`, fontWeight: 700, marginBottom: '6px' }}>
-                                    {loading ? 'Loading stars...' : `${filteredStars.length.toLocaleString()} stars`}
+                                    {loading ? 'Loading stars...' : `${totalStars.toLocaleString()} stars`}
                                 </div>
                                 <div style={{ color: '#8f8f98', fontSize: `${clamp(0.95 * pageScale, 0.82, 0.95).toFixed(3)}rem` }}>
                                     Filtered by status, color, constellation, distance, and type.
@@ -517,7 +547,7 @@ const BuyAStarGrid = ({ stars = [], loading, error, onSelectStar }) => {
                             </div>
                         ) : error ? (
                             <div style={{ color: '#ff6b6b', textAlign: 'center', padding: '40px' }}>{error}</div>
-                        ) : filteredStars.length === 0 ? (
+                        ) : totalStars === 0 ? (
                             <div
                                 style={{
                                     color: '#888',

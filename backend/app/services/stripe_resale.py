@@ -67,6 +67,16 @@ def _ensure_test_mode() -> None:
         )
 
 
+def _raise_seller_stripe_error(exc: stripe.error.StripeError) -> None:
+    message = getattr(exc, "user_message", None) or str(exc)
+    if "signed up for Connect" in message:
+        message = (
+            "Stripe Connect is not enabled for this Stripe test account yet. "
+            "Open Stripe Dashboard, complete the Connect platform setup, then try seller onboarding again."
+        )
+    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message) from exc
+
+
 def _seller_status(user: User) -> SellerStatusRead:
     due = user.stripe_seller_requirements_due or []
     if not isinstance(due, list):
@@ -111,26 +121,32 @@ async def create_seller_onboarding_link(db: AsyncSession, user: User) -> tuple[s
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Stripe is not configured.")
 
     if not user.connected_account_id:
-        account = await _run_stripe_call(
-            stripe.Account.create,
-            type="express",
-            email=user.email,
-            capabilities={"transfers": {"requested": True}},
-            settings={"payouts": {"schedule": {"interval": "manual"}}},
-            metadata={"aster_user_id": str(user.id), "aster_test_mode": "true"},
-        )
+        try:
+            account = await _run_stripe_call(
+                stripe.Account.create,
+                type="express",
+                email=user.email,
+                capabilities={"transfers": {"requested": True}},
+                settings={"payouts": {"schedule": {"interval": "manual"}}},
+                metadata={"aster_user_id": str(user.id), "aster_test_mode": "true"},
+            )
+        except stripe.error.StripeError as exc:
+            _raise_seller_stripe_error(exc)
         user.connected_account_id = _stripe_value(account, "id")
         user.stripe_seller_onboarding_status = "required"
         await db.flush()
 
     origin = _frontend_origin().rstrip("/")
-    account_link = await _run_stripe_call(
-        stripe.AccountLink.create,
-        account=user.connected_account_id,
-        refresh_url=f"{origin}/account?section=balance&seller_onboarding=refresh",
-        return_url=f"{origin}/account?section=balance&seller_onboarding=return",
-        type="account_onboarding",
-    )
+    try:
+        account_link = await _run_stripe_call(
+            stripe.AccountLink.create,
+            account=user.connected_account_id,
+            refresh_url=f"{origin}/account?section=balance&seller_onboarding=refresh",
+            return_url=f"{origin}/account?section=balance&seller_onboarding=return",
+            type="account_onboarding",
+        )
+    except stripe.error.StripeError as exc:
+        _raise_seller_stripe_error(exc)
     seller = await sync_seller_account_status(user)
     await db.commit()
     return _stripe_value(account_link, "url"), seller
@@ -141,7 +157,10 @@ async def create_seller_dashboard_link(user: User) -> str:
     if not user.connected_account_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete seller onboarding first.")
 
-    login_link = await _run_stripe_call(stripe.Account.create_login_link, user.connected_account_id)
+    try:
+        login_link = await _run_stripe_call(stripe.Account.create_login_link, user.connected_account_id)
+    except stripe.error.StripeError as exc:
+        _raise_seller_stripe_error(exc)
     return _stripe_value(login_link, "url")
 
 

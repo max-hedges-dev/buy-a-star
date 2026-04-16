@@ -36,6 +36,7 @@ LEDGER_WITHDRAWN = "withdrawn"
 LEDGER_FAILED = "failed"
 LEDGER_REFUNDED = "refunded"
 LEDGER_RECORDED = "recorded"
+LEDGER_SPENDABLE_DEBIT_TYPES = {"refund", "withdrawal"}
 
 
 def _money(value: Decimal | float | int) -> Decimal:
@@ -493,6 +494,20 @@ async def mark_available_ledger_entries(db: AsyncSession, user_id: int) -> None:
     await db.flush()
 
 
+def _balance_totals(entries: list[SellerBalanceLedger]) -> tuple[Decimal, Decimal]:
+    pending = Decimal("0.00")
+    available = Decimal("0.00")
+    for entry in entries:
+        amount = _money(entry.amount)
+        if entry.entry_type == "sale_proceeds" and entry.status == LEDGER_PENDING and amount > 0:
+            pending += amount
+        elif entry.entry_type == "sale_proceeds" and entry.status == LEDGER_AVAILABLE:
+            available += amount
+        elif entry.entry_type in LEDGER_SPENDABLE_DEBIT_TYPES and entry.status != LEDGER_FAILED:
+            available += amount
+    return max(pending, Decimal("0.00")), max(available, Decimal("0.00"))
+
+
 def _ledger_read(entry: SellerBalanceLedger) -> SellerLedgerEntryRead:
     return SellerLedgerEntryRead(
         id=entry.id,
@@ -516,16 +531,11 @@ async def read_seller_balance(db: AsyncSession, user: User) -> SellerBalanceRead
         .order_by(SellerBalanceLedger.created_at.desc(), SellerBalanceLedger.id.desc())
     )
     entries = result.scalars().all()
-    pending = sum(_money(entry.amount) for entry in entries if entry.status == LEDGER_PENDING and entry.amount > 0)
-    available = sum(
-        _money(entry.amount)
-        for entry in entries
-        if entry.status == LEDGER_AVAILABLE
-    )
+    pending, available = _balance_totals(entries)
     await db.commit()
     return SellerBalanceRead(
         pending_balance=float(pending),
-        available_balance=float(max(available, Decimal("0"))),
+        available_balance=float(available),
         currency="gbp",
         entries=[_ledger_read(entry) for entry in entries],
         seller=_seller_status(user),
@@ -544,8 +554,15 @@ async def create_withdrawal(db: AsyncSession, user: User, amount: float, currenc
     if withdrawal <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Withdrawal amount must be greater than zero.")
 
-    balance = await read_seller_balance(db, user)
-    if withdrawal > _money(balance.available_balance):
+    await mark_available_ledger_entries(db, user.id)
+    ledger_result = await db.execute(
+        select(SellerBalanceLedger)
+        .where(SellerBalanceLedger.user_id == user.id)
+        .with_for_update()
+    )
+    locked_entries = ledger_result.scalars().all()
+    _, available_balance = _balance_totals(locked_entries)
+    if withdrawal > available_balance:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough available Aster Balance.")
 
     stripe_balance = await _run_stripe_call(stripe.Balance.retrieve, stripe_account=user.connected_account_id)

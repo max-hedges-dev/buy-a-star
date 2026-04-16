@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_current_user
 from app.db.session import get_db
 from app.models.star import Star
+from app.models.resale import ResaleListing
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.account import (
@@ -25,7 +26,19 @@ def _star_display_name(star: Star) -> str:
     return star.common_name or star.display_name or star.scientific_name
 
 
-def _star_summary(star: Star, transaction: Transaction) -> AccountStarSummary:
+def _listing_payload(listing: ResaleListing | None) -> dict | None:
+    if listing is None:
+        return None
+    return {
+        "id": listing.id,
+        "price": float(listing.price),
+        "currency": listing.currency,
+        "status": listing.status,
+        "created_at": listing.created_at.isoformat() if listing.created_at else None,
+    }
+
+
+def _star_summary(star: Star, transaction: Transaction, active_listing: ResaleListing | None = None) -> AccountStarSummary:
     return AccountStarSummary(
         id=star.id,
         display_name=_star_display_name(star),
@@ -39,6 +52,8 @@ def _star_summary(star: Star, transaction: Transaction) -> AccountStarSummary:
         registration_number=transaction.registration_number,
         ask_price=float(star.ask_price) if star.ask_price is not None else None,
         model_value=float(star.model_value) if star.model_value is not None else None,
+        is_current_owner=star.current_owner_user_id == transaction.user_id,
+        active_resale_listing=_listing_payload(active_listing),
     )
 
 
@@ -55,6 +70,7 @@ def _order_summary(transaction: Transaction, star: Star) -> AccountOrderSummary:
         certificate_label=certificate_label(transaction.certificate_type),
         shipping_required=transaction.shipping_required,
         shipping_amount=float(transaction.shipping_amount or 0),
+        transaction_type=transaction.transaction_type,
         created_at=transaction.created_at,
         fulfilled_at=transaction.fulfilled_at,
         star=_star_summary(star, transaction),
@@ -75,11 +91,28 @@ async def read_account_overview(
     rows = result.all()
 
     orders = [_order_summary(transaction, star) for transaction, star in rows]
-    stars = [
-        _star_summary(star, transaction)
-        for transaction, star in rows
-        if transaction.status == "fulfilled"
-    ]
+    owned_result = await db.execute(
+        select(Star, Transaction, ResaleListing)
+        .join(Transaction, Transaction.star_id == Star.id)
+        .outerjoin(
+            ResaleListing,
+            (ResaleListing.star_id == Star.id)
+            & (ResaleListing.status.in_(["active", "checkout_pending"])),
+        )
+        .where(
+            Star.current_owner_user_id == current_user.id,
+            Transaction.user_id == current_user.id,
+            Transaction.status == "fulfilled",
+        )
+        .order_by(Transaction.fulfilled_at.desc().nullslast(), Transaction.id.desc())
+    )
+    seen_star_ids = set()
+    stars = []
+    for star, transaction, listing in owned_result.all():
+        if star.id in seen_star_ids:
+            continue
+        seen_star_ids.add(star.id)
+        stars.append(_star_summary(star, transaction, listing))
 
     return AccountOverviewResponse(orders=orders, stars=stars)
 
@@ -91,8 +124,13 @@ async def read_account_order(
     db: AsyncSession = Depends(get_db),
 ) -> AccountOrderDetail:
     result = await db.execute(
-        select(Transaction, Star)
+        select(Transaction, Star, ResaleListing)
         .join(Star, Star.id == Transaction.star_id)
+        .outerjoin(
+            ResaleListing,
+            (ResaleListing.star_id == Star.id)
+            & (ResaleListing.status.in_(["active", "checkout_pending"])),
+        )
         .where(Transaction.id == transaction_id, Transaction.user_id == current_user.id)
     )
     row = result.first()
@@ -100,8 +138,10 @@ async def read_account_order(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
 
-    transaction, star = row
+    transaction, star, listing = row
     summary = _order_summary(transaction, star)
+    summary.star.active_resale_listing = _listing_payload(listing)
+    summary.star.is_current_owner = star.current_owner_user_id == current_user.id
 
     return AccountOrderDetail(
         **summary.model_dump(),
@@ -123,6 +163,7 @@ async def update_owned_star_price(
             Star.id == star_id,
             Transaction.user_id == current_user.id,
             Transaction.status == "fulfilled",
+            Star.current_owner_user_id == current_user.id,
         )
         .order_by(Transaction.fulfilled_at.desc().nullslast(), Transaction.id.desc())
     )

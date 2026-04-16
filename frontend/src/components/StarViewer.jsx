@@ -4,7 +4,7 @@ import { Stars } from '@react-three/drei';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
 import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2, Truck } from 'lucide-react';
-import { createCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../services/api';
+import { createCheckoutSession, createResaleCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 import StarValueChart from './StarValueChart';
@@ -816,7 +816,7 @@ const ObservatoryBackdrop = ({ starLayout, hoveredInstrument }) => {
 const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { isAuthenticated, isLoadingUser } = useAuth();
+    const { isAuthenticated, isLoadingUser, user } = useAuth();
     const [viewportSize, setViewportSize] = useState(() => ({
         width: typeof window !== 'undefined' ? window.innerWidth : 1720,
         height: typeof window !== 'undefined' ? window.innerHeight : 980,
@@ -833,6 +833,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [isResaleCheckoutOpen, setIsResaleCheckoutOpen] = useState(false);
     const [starDetail, setStarDetail] = useState(star);
     const [starDetailStatus, setStarDetailStatus] = useState('idle');
     const [layoutEditMode, setLayoutEditMode] = useState(false);
@@ -1320,6 +1321,42 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         setIsCheckoutOpen(false);
     }, []);
 
+    const handleResalePurchase = () => {
+        if (!isAuthenticated) {
+            navigate(`/auth?next=${encodeURIComponent(location.pathname)}`);
+            return;
+        }
+        setError(null);
+        setIsResaleCheckoutOpen(true);
+    };
+
+    const createResaleStripeSession = useCallback(async () => {
+        const listingId = activeStar.active_resale_listing?.id;
+        if (!listingId) {
+            throw new Error('This resale listing is no longer available.');
+        }
+        setProcessing(true);
+        try {
+            return await createResaleCheckoutSession(listingId);
+        } finally {
+            setProcessing(false);
+        }
+    }, [activeStar.active_resale_listing?.id]);
+
+    const handleResaleCheckoutComplete = useCallback((sessionId) => {
+        if (!sessionId) {
+            setError('Stripe returned without a resale checkout session identifier.');
+            return;
+        }
+
+        navigate(`/resale/complete?session_id=${encodeURIComponent(sessionId)}`);
+    }, [navigate]);
+
+    const handleResaleCheckoutError = useCallback((message) => {
+        setError(message);
+        setIsResaleCheckoutOpen(false);
+    }, []);
+
     const handleOpenObservatoryModal = useCallback(() => {
         if (modalCloseTimeoutRef.current) {
             window.clearTimeout(modalCloseTimeoutRef.current);
@@ -1587,6 +1624,97 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 </div>
                             </div>
                         )}
+
+                        {activeStar.is_bought && activeStar.active_resale_listing ? (
+                            <div
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(255,126,43,0.16), rgba(18,18,24,0.9))',
+                                    border: '1px solid rgba(255,126,43,0.26)',
+                                    borderRadius: scalePx(22),
+                                    padding: scalePx(24),
+                                    marginBottom: scalePx(24),
+                                    color: 'white',
+                                }}
+                            >
+                                <div style={{ color: '#ffb08a', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px', fontWeight: 'bold' }}>
+                                    Listed for Resale
+                                </div>
+                                <div style={{ fontSize: '1.85rem', fontFamily: 'serif', marginBottom: '10px' }}>
+                                    {formatMoney(activeStar.active_resale_listing.price, activeStar.active_resale_listing.currency)}
+                                </div>
+                                <p style={{ color: '#f0c2af', lineHeight: 1.65, fontSize: '0.97rem', marginBottom: '18px' }}>
+                                    Buy this registered star from its current owner. The ownership record transfers only after Stripe confirms the resale payment.
+                                </p>
+
+                                {error ? (
+                                    <div style={{ color: '#ffb3a3', marginBottom: '15px', padding: '10px', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>
+                                        {error}
+                                    </div>
+                                ) : null}
+
+                                {user?.id === activeStar.active_resale_listing.seller_user_id ? (
+                                    <p style={{ color: '#b7c6b8', lineHeight: 1.6 }}>
+                                        This is your active listing. Manage it from your ownership page.
+                                    </p>
+                                ) : !isResaleCheckoutOpen ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleResalePurchase}
+                                        disabled={processing || isLoadingUser}
+                                        style={{
+                                            width: '100%',
+                                            padding: '18px',
+                                            background: 'var(--primary)',
+                                            color: 'white',
+                                            fontSize: '1.05rem',
+                                            fontWeight: 'bold',
+                                            textTransform: 'uppercase',
+                                            borderRadius: '12px',
+                                            border: 'none',
+                                            cursor: processing || isLoadingUser ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            opacity: processing || isLoadingUser ? 0.7 : 1,
+                                            boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
+                                        }}
+                                    >
+                                        {processing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
+                                        {processing ? 'Starting Stripe Checkout...' : isAuthenticated ? 'Buy Resale Star' : 'Sign In To Buy'}
+                                    </button>
+                                ) : (
+                                    <div style={{ display: 'grid', gap: '18px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <div>
+                                                <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Secure resale payment</div>
+                                                <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete this peer-to-peer transfer using Stripe test checkout.</div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsResaleCheckoutOpen(false)}
+                                                style={{
+                                                    padding: '10px 16px',
+                                                    borderRadius: '999px',
+                                                    background: 'rgba(255,255,255,0.06)',
+                                                    border: '1px solid rgba(255,255,255,0.1)',
+                                                    color: 'white',
+                                                }}
+                                            >
+                                                Close
+                                            </button>
+                                        </div>
+                                        <div style={{ background: '#ffffff', borderRadius: '18px', overflow: 'hidden', padding: '8px' }}>
+                                            <EmbeddedStripeCheckout
+                                                createSession={createResaleStripeSession}
+                                                onComplete={handleResaleCheckoutComplete}
+                                                onError={handleResaleCheckoutError}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : null}
 
                         <div
                             style={{

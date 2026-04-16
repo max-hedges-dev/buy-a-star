@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.star import Star
+from app.models.resale import ResaleListing
 from app.models.star_valuation_history import StarValuationHistory
 from app.core.config import settings
 from app.schemas.star import (
@@ -101,6 +102,7 @@ def serialize_star(star: Star) -> dict:
         "variable_max": star.variable_max,
         "valuation_scores": star.valuation_scores,
         "valuation_debug": star.valuation_debug,
+        "current_owner_user_id": star.current_owner_user_id,
         "x": star.x,
         "y": star.y,
         "z": star.z,
@@ -299,6 +301,23 @@ async def _build_catalogue_facets(db: AsyncSession, status: str | None) -> StarC
 
 
 async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetailRead:
+    active_listing_result = await db.execute(
+        select(ResaleListing)
+        .where(ResaleListing.star_id == star.id, ResaleListing.status == "active")
+        .order_by(ResaleListing.created_at.desc(), ResaleListing.id.desc())
+    )
+    active_listing = active_listing_result.scalars().first()
+    listing_payload = None
+    if active_listing:
+        listing_payload = {
+            "id": active_listing.id,
+            "price": float(active_listing.price),
+            "currency": active_listing.currency,
+            "seller_user_id": active_listing.seller_user_id,
+            "status": active_listing.status,
+            "created_at": active_listing.created_at,
+        }
+
     history_result = await db.execute(
         select(StarValuationHistory)
         .where(StarValuationHistory.star_id == star.id)
@@ -318,6 +337,7 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
 
     return StarDetailRead(
         **serialize_star(star),
+        active_resale_listing=listing_payload,
         phot_g_mean_mag=star.phot_g_mean_mag,
         parallax=star.parallax,
         lum_flame=star.lum_flame,

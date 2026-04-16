@@ -13,6 +13,7 @@ const OwnedStarPage = lazy(() => import('./pages/OwnedStarPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const CheckoutCompletePage = lazy(() => import('./pages/CheckoutCompletePage'));
+const ResaleCheckoutCompletePage = lazy(() => import('./pages/ResaleCheckoutCompletePage'));
 
 const RouteFallback = () => (
     <div style={{ minHeight: '100vh', background: '#000' }} />
@@ -61,6 +62,14 @@ function App() {
                         element={(
                             <ProtectedRoute>
                                 <CheckoutCompletePage />
+                            </ProtectedRoute>
+                        )}
+                    />
+                    <Route
+                        path="/resale/complete"
+                        element={(
+                            <ProtectedRoute>
+                                <ResaleCheckoutCompletePage />
                             </ProtectedRoute>
                         )}
                     />

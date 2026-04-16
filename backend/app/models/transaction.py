@@ -19,6 +19,7 @@ class Transaction(Base):
     shipping_name = Column(String, nullable=True)
     shipping_phone = Column(String, nullable=True)
     shipping_address = Column(JSON, nullable=True)
+    transaction_type = Column(String, nullable=False, default="primary")
     status = Column(String, nullable=False, default="pending")
     registration_number = Column(String, unique=True, index=True, nullable=True)
     stripe_checkout_session_id = Column(String, unique=True, index=True, nullable=True)

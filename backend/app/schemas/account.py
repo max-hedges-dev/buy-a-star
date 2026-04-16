@@ -16,6 +16,8 @@ class AccountStarSummary(BaseModel):
     registration_number: str | None = None
     ask_price: float | None = None
     model_value: float | None = None
+    is_current_owner: bool = True
+    active_resale_listing: dict | None = None
 
 
 class AccountStarPriceUpdateRequest(BaseModel):
@@ -40,6 +42,7 @@ class AccountOrderSummary(BaseModel):
     certificate_label: str
     shipping_required: bool
     shipping_amount: float
+    transaction_type: str = "primary"
     created_at: datetime | None = None
     fulfilled_at: datetime | None = None
     star: AccountStarSummary

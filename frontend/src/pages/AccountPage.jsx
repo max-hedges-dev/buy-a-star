@@ -5,7 +5,13 @@ import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../hooks/useAuth';
 import useResponsiveScale from '../hooks/useResponsiveScale';
-import { fetchAccountOverview } from '../services/api';
+import {
+    createSellerDashboardLink,
+    createSellerOnboardingLink,
+    fetchAccountOverview,
+    fetchSellerBalance,
+    withdrawSellerBalance,
+} from '../services/api';
 import {
     formatDate,
     formatMoney,
@@ -30,6 +36,12 @@ const SECTION_CONFIG = [
         label: 'Orders',
         title: 'Orders and receipts',
         description: 'Payment records, order status, and certificate types.',
+    },
+    {
+        id: 'balance',
+        label: 'Aster Balance',
+        title: 'Seller balance',
+        description: 'Resale proceeds, pending funds, and withdrawals.',
     },
 ];
 
@@ -135,6 +147,10 @@ const AccountPage = () => {
     const [status, setStatus] = useState('loading');
     const [error, setError] = useState('');
     const [overview, setOverview] = useState({ orders: [], stars: [] });
+    const [balance, setBalance] = useState(null);
+    const [balanceMessage, setBalanceMessage] = useState('');
+    const [withdrawAmount, setWithdrawAmount] = useState('');
+    const [isBalanceBusy, setIsBalanceBusy] = useState(false);
     const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 920 });
 
     useEffect(() => {
@@ -142,6 +158,9 @@ const AccountPage = () => {
             try {
                 const response = await fetchAccountOverview();
                 setOverview(response);
+                fetchSellerBalance()
+                    .then(setBalance)
+                    .catch(() => setBalance(null));
                 setStatus('ready');
             } catch (requestError) {
                 setError(requestError.message);
@@ -200,6 +219,56 @@ const AccountPage = () => {
             await downloadCertificate(order);
         } finally {
             setDownloadingOrderId(null);
+        }
+    };
+
+    const refreshBalance = async () => {
+        const response = await fetchSellerBalance();
+        setBalance(response);
+        return response;
+    };
+
+    const handleSellerOnboarding = async () => {
+        try {
+            setIsBalanceBusy(true);
+            const response = await createSellerOnboardingLink();
+            window.location.href = response.url;
+        } catch (requestError) {
+            setBalanceMessage(requestError.message || 'We could not start seller onboarding.');
+        } finally {
+            setIsBalanceBusy(false);
+        }
+    };
+
+    const handleOpenSellerDashboard = async () => {
+        try {
+            setIsBalanceBusy(true);
+            const response = await createSellerDashboardLink();
+            window.location.href = response.url;
+        } catch (requestError) {
+            setBalanceMessage(requestError.message || 'We could not open Stripe Express.');
+        } finally {
+            setIsBalanceBusy(false);
+        }
+    };
+
+    const handleWithdraw = async () => {
+        const amount = Number(withdrawAmount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setBalanceMessage('Enter a valid withdrawal amount.');
+            return;
+        }
+
+        try {
+            setIsBalanceBusy(true);
+            const response = await withdrawSellerBalance({ amount, currency: 'gbp' });
+            setBalanceMessage(`Withdrawal ${response.status}: ${formatMoney(response.amount, response.currency)}.`);
+            setWithdrawAmount('');
+            await refreshBalance();
+        } catch (requestError) {
+            setBalanceMessage(requestError.message || 'We could not create that withdrawal.');
+        } finally {
+            setIsBalanceBusy(false);
         }
     };
 
@@ -341,12 +410,114 @@ const AccountPage = () => {
         );
     };
 
+    const renderBalanceSection = () => {
+        const entries = balance?.entries || [];
+        const seller = balance?.seller;
+        return (
+            <section className="glass-card" style={{ padding: cardPadding }}>
+                <div style={{ display: 'grid', gap: 22 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                        <div>
+                            <p className="eyebrow" style={{ marginBottom: 10 }}>Aster Balance</p>
+                            <h2 style={{ fontSize: 'clamp(1.9rem, 3vw, 3rem)', marginBottom: 10 }}>Seller proceeds</h2>
+                            <p className="muted-copy" style={{ maxWidth: 760 }}>
+                                Resale proceeds are tracked here while Stripe Connect handles the real payout rails.
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                            <button type="button" className="secondary-button" style={actionStyle} onClick={handleSellerOnboarding} disabled={isBalanceBusy}>
+                                {seller?.connected_account_id ? 'Update Payout Details' : 'Set Up Seller Account'}
+                            </button>
+                            {seller?.connected_account_id ? (
+                                <button type="button" className="secondary-button" style={actionStyle} onClick={handleOpenSellerDashboard} disabled={isBalanceBusy}>
+                                    Stripe Express
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+
+                    <div className="status-grid">
+                        <div style={summaryTileStyle}>
+                            <div className="eyebrow" style={{ marginBottom: 8 }}>Pending</div>
+                            <strong style={{ fontSize: '1.5rem' }}>{formatMoney(balance?.pending_balance || 0, balance?.currency || 'gbp')}</strong>
+                            <p className="muted-copy" style={{ marginTop: 8 }}>Funds not yet available for payout.</p>
+                        </div>
+                        <div style={summaryTileStyle}>
+                            <div className="eyebrow" style={{ marginBottom: 8 }}>Available</div>
+                            <strong style={{ fontSize: '1.5rem' }}>{formatMoney(balance?.available_balance || 0, balance?.currency || 'gbp')}</strong>
+                            <p className="muted-copy" style={{ marginTop: 8 }}>Eligible for manual withdrawal.</p>
+                        </div>
+                        <div style={summaryTileStyle}>
+                            <div className="eyebrow" style={{ marginBottom: 8 }}>Seller Status</div>
+                            <strong>{seller?.onboarding_status || 'Not started'}</strong>
+                            <p className="muted-copy" style={{ marginTop: 8 }}>
+                                {seller?.can_withdraw ? 'Payouts enabled.' : 'Onboarding or Stripe availability is still pending.'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style={{ ...recordCardStyle, padding: `${px(24)}px` }}>
+                        <div>
+                            <p className="eyebrow" style={{ marginBottom: 10 }}>Withdraw</p>
+                            <p className="muted-copy">Withdrawals are sent through Stripe Connect to the payout destination on your seller account.</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={withdrawAmount}
+                                onChange={(event) => {
+                                    setWithdrawAmount(event.target.value);
+                                    setBalanceMessage('');
+                                }}
+                                placeholder="Amount"
+                                style={{
+                                    flex: '1 1 180px',
+                                    minWidth: 0,
+                                    padding: '13px 14px',
+                                    borderRadius: 16,
+                                    border: '1px solid rgba(255,255,255,0.12)',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    color: 'white',
+                                }}
+                            />
+                            <button type="button" className="secondary-button" style={actionStyle} onClick={handleWithdraw} disabled={isBalanceBusy}>
+                                {isBalanceBusy ? 'Working...' : 'Withdraw'}
+                            </button>
+                        </div>
+                        {balanceMessage ? <div className="status-banner">{balanceMessage}</div> : null}
+                    </div>
+
+                    <div style={{ display: 'grid', gap: 12 }}>
+                        {entries.length ? entries.map((entry) => (
+                            <article key={entry.id} style={recordCardStyle}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                                    <div>
+                                        <p className="eyebrow" style={{ marginBottom: 8 }}>{entry.entry_type.replaceAll('_', ' ')}</p>
+                                        <strong>{entry.status.replaceAll('_', ' ')}</strong>
+                                        {entry.available_at ? <p className="muted-copy">Available {formatDate(entry.available_at)}</p> : null}
+                                    </div>
+                                    <strong style={{ fontSize: '1.2rem' }}>{formatMoney(entry.amount, entry.currency)}</strong>
+                                </div>
+                            </article>
+                        )) : (
+                            <div className="status-banner">No resale balance activity yet.</div>
+                        )}
+                    </div>
+                </div>
+            </section>
+        );
+    };
+
     const renderActiveSection = () => {
         switch (activeSection) {
         case 'stars':
             return renderStarsSection();
         case 'orders':
             return renderOrdersSection();
+        case 'balance':
+            return renderBalanceSection();
         default:
             return renderStarsSection();
         }

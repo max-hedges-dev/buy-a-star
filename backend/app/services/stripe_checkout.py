@@ -188,6 +188,7 @@ async def create_embedded_checkout_session(
             quote.shipping_price.amount_minor_units if option.shipping_required else 0,
             quote.currency,
         ),
+        transaction_type="primary",
         status=CHECKOUT_STATUS_CREATED,
         accepted_terms_at=now,
         accepted_privacy_at=now,
@@ -366,6 +367,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
 
     now = datetime.now(timezone.utc)
     star.is_bought = True
+    star.current_owner_user_id = transaction.user_id
     star.owner_name = transaction.owner_name
     star.purchase_date = now
 

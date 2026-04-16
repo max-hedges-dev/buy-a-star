@@ -5,7 +5,14 @@ import CertificatePreview from '../components/CertificatePreview';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import useResponsiveScale from '../hooks/useResponsiveScale';
-import { fetchAccountOrder, updateOwnedStarPrice } from '../services/api';
+import {
+    cancelResaleListing,
+    createResaleListing,
+    createSellerOnboardingLink,
+    fetchAccountOrder,
+    fetchSellerStatus,
+    updateOwnedStarPrice,
+} from '../services/api';
 import {
     formatDate,
     formatMoney,
@@ -76,6 +83,10 @@ const OwnedStarPage = () => {
     const [ownerPriceInput, setOwnerPriceInput] = useState('');
     const [isSavingPrice, setIsSavingPrice] = useState(false);
     const [priceMessage, setPriceMessage] = useState('');
+    const [sellerStatus, setSellerStatus] = useState(null);
+    const [listingPriceInput, setListingPriceInput] = useState('');
+    const [listingMessage, setListingMessage] = useState('');
+    const [isListingBusy, setIsListingBusy] = useState(false);
     const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 980 });
 
     useEffect(() => {
@@ -84,7 +95,17 @@ const OwnedStarPage = () => {
                 const response = await fetchAccountOrder(transactionId);
                 setOrder(response);
                 setOwnerPriceInput(response.star.ask_price ? response.star.ask_price.toFixed(2) : '');
+                setListingPriceInput(
+                    response.star.active_resale_listing?.price
+                        ? response.star.active_resale_listing.price.toFixed(2)
+                        : response.star.model_value
+                            ? response.star.model_value.toFixed(2)
+                            : ''
+                );
                 setStatus('ready');
+                fetchSellerStatus()
+                    .then(setSellerStatus)
+                    .catch(() => setSellerStatus(null));
             } catch (requestError) {
                 setError(requestError.message);
                 setStatus('error');
@@ -172,6 +193,69 @@ const OwnedStarPage = () => {
             setPriceMessage(requestError.message || 'We could not update the owner price.');
         } finally {
             setIsSavingPrice(false);
+        }
+    };
+
+    const handleSellerOnboarding = async () => {
+        try {
+            setIsListingBusy(true);
+            const response = await createSellerOnboardingLink();
+            window.location.href = response.url;
+        } catch (requestError) {
+            setListingMessage(requestError.message || 'We could not start seller onboarding.');
+        } finally {
+            setIsListingBusy(false);
+        }
+    };
+
+    const handleCreateListing = async () => {
+        if (!order) return;
+        const parsedValue = Number(listingPriceInput);
+        if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+            setListingMessage('Enter a valid resale price.');
+            return;
+        }
+
+        try {
+            setIsListingBusy(true);
+            setListingMessage('');
+            const listing = await createResaleListing({
+                starId: order.star.id,
+                price: parsedValue,
+                currency: 'gbp',
+            });
+            setOrder((currentOrder) => currentOrder ? {
+                ...currentOrder,
+                star: {
+                    ...currentOrder.star,
+                    active_resale_listing: listing,
+                },
+            } : currentOrder);
+            setListingMessage('Your resale listing is live.');
+        } catch (requestError) {
+            setListingMessage(requestError.message || 'We could not create that listing.');
+        } finally {
+            setIsListingBusy(false);
+        }
+    };
+
+    const handleCancelListing = async () => {
+        if (!order?.star.active_resale_listing) return;
+        try {
+            setIsListingBusy(true);
+            await cancelResaleListing(order.star.active_resale_listing.id);
+            setOrder((currentOrder) => currentOrder ? {
+                ...currentOrder,
+                star: {
+                    ...currentOrder.star,
+                    active_resale_listing: null,
+                },
+            } : currentOrder);
+            setListingMessage('Your listing has been cancelled.');
+        } catch (requestError) {
+            setListingMessage(requestError.message || 'We could not cancel that listing.');
+        } finally {
+            setIsListingBusy(false);
         }
     };
 
@@ -360,6 +444,82 @@ const OwnedStarPage = () => {
                                                 </div>
                                                 {priceMessage ? (
                                                     <div style={{ color: 'rgba(255,255,255,0.72)', marginTop: 8 }}>{priceMessage}</div>
+                                                ) : null}
+                                            </div>
+
+                                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 18 }}>
+                                                <div style={{ color: 'rgba(255,255,255,0.58)', marginBottom: 8 }}>Resale listing</div>
+                                                {!order.star.is_current_owner ? (
+                                                    <p className="muted-copy">You no longer own this star, so it cannot be listed from this account.</p>
+                                                ) : order.star.active_resale_listing ? (
+                                                    <div style={{ display: 'grid', gap: 12 }}>
+                                                        <div style={{ color: '#ffb287', fontWeight: 700 }}>
+                                                            {order.star.active_resale_listing.status === 'checkout_pending'
+                                                                ? `Checkout pending at ${formatSterling(order.star.active_resale_listing.price)}`
+                                                                : `Listed at ${formatSterling(order.star.active_resale_listing.price)}`}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="secondary-button"
+                                                            onClick={handleCancelListing}
+                                                            disabled={isListingBusy || order.star.active_resale_listing.status === 'checkout_pending'}
+                                                        >
+                                                            {order.star.active_resale_listing.status === 'checkout_pending'
+                                                                ? 'Checkout In Progress'
+                                                                : isListingBusy ? 'Cancelling...' : 'Cancel Listing'}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ display: 'grid', gap: 12 }}>
+                                                        {sellerStatus?.can_receive_resale_payments ? (
+                                                            <>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    step="0.01"
+                                                                    value={listingPriceInput}
+                                                                    onChange={(event) => {
+                                                                        setListingPriceInput(event.target.value);
+                                                                        setListingMessage('');
+                                                                    }}
+                                                                    placeholder="Set resale price"
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        padding: '13px 14px',
+                                                                        borderRadius: 16,
+                                                                        border: '1px solid rgba(255,255,255,0.12)',
+                                                                        background: 'rgba(255,255,255,0.04)',
+                                                                        color: 'white',
+                                                                    }}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    className="secondary-button"
+                                                                    onClick={handleCreateListing}
+                                                                    disabled={isListingBusy}
+                                                                >
+                                                                    {isListingBusy ? 'Listing...' : 'Sell This Star'}
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <p className="muted-copy">
+                                                                    Complete Stripe seller onboarding before listing a star for resale or withdrawing proceeds.
+                                                                </p>
+                                                                <button
+                                                                    type="button"
+                                                                    className="secondary-button"
+                                                                    onClick={handleSellerOnboarding}
+                                                                    disabled={isListingBusy}
+                                                                >
+                                                                    {isListingBusy ? 'Opening Stripe...' : 'Complete Seller Onboarding'}
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {listingMessage ? (
+                                                    <div style={{ color: 'rgba(255,255,255,0.72)', marginTop: 10 }}>{listingMessage}</div>
                                                 ) : null}
                                             </div>
                                         </div>

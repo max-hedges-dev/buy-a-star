@@ -180,3 +180,60 @@ export async function updateOwnedStarPrice(starId, askPrice) {
         },
     });
 }
+
+export async function fetchSellerStatus() {
+    return apiRequest('/resale/seller/status');
+}
+
+export async function createSellerOnboardingLink() {
+    return apiRequest('/resale/seller/onboarding-link', {
+        method: 'POST',
+    });
+}
+
+export async function createSellerDashboardLink() {
+    return apiRequest('/resale/seller/dashboard-link', {
+        method: 'POST',
+    });
+}
+
+export async function createResaleListing({ starId, price, currency = 'gbp' }) {
+    return apiRequest('/resale/listings', {
+        method: 'POST',
+        body: {
+            star_id: starId,
+            price,
+            currency,
+        },
+    });
+}
+
+export async function cancelResaleListing(listingId) {
+    return apiRequest(`/resale/listings/${listingId}`, {
+        method: 'DELETE',
+    });
+}
+
+export async function createResaleCheckoutSession(listingId) {
+    return apiRequest(`/resale/listings/${listingId}/checkout`, {
+        method: 'POST',
+    });
+}
+
+export async function fetchResaleCheckoutSessionStatus(sessionId) {
+    return apiRequest(`/resale/session-status?session_id=${encodeURIComponent(sessionId)}`);
+}
+
+export async function fetchSellerBalance() {
+    return apiRequest('/resale/balance');
+}
+
+export async function withdrawSellerBalance({ amount, currency = 'gbp' }) {
+    return apiRequest('/resale/withdraw', {
+        method: 'POST',
+        body: {
+            amount,
+            currency,
+        },
+    });
+}

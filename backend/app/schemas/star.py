@@ -13,6 +13,15 @@ class StarValuationHistoryPointRead(BaseModel):
     metals_change_ratio: Optional[float] = None
 
 
+class StarResaleListingRead(BaseModel):
+    id: int
+    price: float
+    currency: str
+    seller_user_id: int
+    status: str
+    created_at: Optional[datetime] = None
+
+
 class StarBase(BaseModel):
     scientific_name: str
     common_name: Optional[str] = None
@@ -73,6 +82,8 @@ class StarBase(BaseModel):
     variable_max: Optional[float] = None
     valuation_scores: Optional[dict[str, Any]] = None
     valuation_debug: Optional[dict[str, Any]] = None
+    current_owner_user_id: Optional[int] = None
+    active_resale_listing: Optional[StarResaleListingRead] = None
 
 
 class StarListRead(StarBase):

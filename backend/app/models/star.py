@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Numeric, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, Numeric, DateTime, JSON, ForeignKey
 from app.db.base_class import Base
 
 class Star(Base):
@@ -84,5 +84,6 @@ class Star(Base):
     last_sale_price = Column(Numeric(10, 2), nullable=True)
     last_sale_at = Column(DateTime(timezone=True), nullable=True)
     is_bought = Column(Boolean, default=False)
+    current_owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     owner_name = Column(String, nullable=True)
     purchase_date = Column(DateTime(timezone=True), nullable=True)

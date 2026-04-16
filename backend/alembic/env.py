@@ -22,7 +22,7 @@ if config.config_file_name is not None:
 from app.core.config import settings
 from app.db.base_class import Base
 # Import models to register them with Base.metadata
-from app.models import AuthSession, Star, Transaction, User
+from app.models import AuthSession, ResaleListing, ResaleSale, SellerBalanceLedger, Star, Transaction, User
 # target_metadata = None
 target_metadata = Base.metadata
 # Asyncpg URL is not compatible with default Alembic env.py which uses blocking Engine

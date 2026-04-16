@@ -1,7 +1,7 @@
 import { apiRequest } from './http';
 
 const STARS_URL = '/stars/';
-const STARS_CACHE_PREFIX = 'aster-atlas-stars-cache:';
+const STARS_CACHE_PREFIX = 'aster-atlas-stars-cache:v2:';
 const STARS_CACHE_TTL_MS = 60 * 1000;
 
 const getStarsCacheKey = (params) => `${STARS_CACHE_PREFIX}${params.toString()}`;
@@ -81,7 +81,10 @@ export async function fetchStarCatalogue({
     colour = "all",
     constellation = "all",
     starType = "all",
+    minDistanceLy = undefined,
     maxDistanceLy = undefined,
+    minPrice = undefined,
+    maxPrice = undefined,
     sortBy = "alphabetical",
 } = {}) {
     const params = new URLSearchParams({
@@ -93,8 +96,17 @@ export async function fetchStarCatalogue({
         star_type: starType,
         sort_by: sortBy,
         ...(search && { search }),
+        ...(Number.isFinite(minDistanceLy) && minDistanceLy > 0
+            ? { min_distance_ly: minDistanceLy.toString() }
+            : {}),
         ...(Number.isFinite(maxDistanceLy) && maxDistanceLy > 0
             ? { max_distance_ly: maxDistanceLy.toString() }
+            : {}),
+        ...(Number.isFinite(minPrice) && minPrice > 0
+            ? { min_price: minPrice.toString() }
+            : {}),
+        ...(Number.isFinite(maxPrice) && maxPrice > 0
+            ? { max_price: maxPrice.toString() }
             : {}),
     });
     const cacheKey = getStarsCacheKey(new URLSearchParams(`catalogue=1&${params.toString()}`));

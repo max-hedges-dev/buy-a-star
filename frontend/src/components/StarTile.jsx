@@ -124,6 +124,19 @@ const formatDistance = (distance) =>
         maximumFractionDigits: 1,
     });
 
+const formatPrice = (price) => {
+    const numericPrice = Number(price);
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+        return 'Predicted price unavailable';
+    }
+
+    return `Predicted ${new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'GBP',
+        maximumFractionDigits: numericPrice < 100 ? 2 : 0,
+    }).format(numericPrice)}`;
+};
+
 const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const isClaimed = star.is_bought;
@@ -211,6 +224,9 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: `${Math.round(16 * scale)}px`, color: '#9595a0', fontSize: `${(0.88 * scale).toFixed(3)}rem` }}>
                         <span>{formatDistance(star.distance_ly)} ly</span>
                         <span>{star.constellation || 'Unknown constellation'}</span>
+                    </div>
+                    <div style={{ color: '#ffb287', fontSize: `${(0.9 * scale).toFixed(3)}rem`, fontWeight: 700 }}>
+                        {formatPrice(star.model_value)}
                     </div>
                 </div>
 

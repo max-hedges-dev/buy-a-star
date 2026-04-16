@@ -75,6 +75,14 @@ const Navbar = () => {
         background: 'rgba(255,255,255,0.06)',
         border: '1px solid rgba(255,255,255,0.08)',
         color: 'white',
+        cursor: 'pointer',
+        pointerEvents: 'auto',
+    };
+    const navLinkStyle = {
+        color: 'white',
+        cursor: 'pointer',
+        pointerEvents: 'auto',
+        textDecoration: 'none',
     };
 
     useEffect(() => {
@@ -100,6 +108,7 @@ const Navbar = () => {
                     right: 0,
                     width: '100%',
                     zIndex: 50,
+                    pointerEvents: 'auto',
                     transition: 'background 0.25s ease, border-color 0.25s ease',
                 }}
             >
@@ -113,6 +122,8 @@ const Navbar = () => {
                         width: `${resolvedLogoWidth}px`,
                         height: `${resolvedLogoHeight}px`,
                         overflow: useSymbolLogo ? 'visible' : 'hidden',
+                        cursor: 'pointer',
+                        pointerEvents: 'auto',
                     }}
                 >
                     <img
@@ -150,24 +161,31 @@ const Navbar = () => {
                         <Link
                             key={link.to}
                             to={link.to}
+                            style={navLinkStyle}
                         >
                             {link.label}
                         </Link>
                     ))}
                 </div>
 
-                <div style={{ display: 'flex', gap: `${authGap}px`, zIndex: 1, alignItems: 'center', marginLeft: 'auto' }}>
-                    {!showCenterLinks ? (
-                        <button
-                            aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-                            onClick={() => setIsMenuOpen((open) => !open)}
-                            style={navActionButtonStyle}
-                            type="button"
-                        >
-                            {isMenuOpen ? <X size={actionIconSize} /> : <Menu size={actionIconSize} />}
-                        </button>
-                    ) : null}
+                {!showCenterLinks ? (
+                    <button
+                        aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                        onClick={() => setIsMenuOpen((open) => !open)}
+                        style={{
+                            ...navActionButtonStyle,
+                            position: 'absolute',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            zIndex: 2,
+                        }}
+                        type="button"
+                    >
+                        {isMenuOpen ? <X size={actionIconSize} /> : <Menu size={actionIconSize} />}
+                    </button>
+                ) : null}
 
+                <div style={{ display: 'flex', gap: `${authGap}px`, zIndex: 1, alignItems: 'center', marginLeft: 'auto' }}>
                     {!isLoadingUser && isAuthenticated ? (
                         <>
                             <div className="nav-action-tooltip">
@@ -192,6 +210,8 @@ const Navbar = () => {
                                     border: '1px solid rgba(255,255,255,0.08)',
                                     color: 'white',
                                     fontSize: actionFontSize,
+                                    cursor: 'pointer',
+                                    pointerEvents: 'auto',
                                 }}
                                 type="button"
                             >
@@ -210,6 +230,8 @@ const Navbar = () => {
                                 background: 'rgba(255,255,255,0.05)',
                                 border: '1px solid rgba(255,255,255,0.08)',
                                 fontSize: actionFontSize,
+                                cursor: 'pointer',
+                                pointerEvents: 'auto',
                             }}
                         >
                             Sign In
@@ -281,6 +303,8 @@ const Navbar = () => {
                                     fontWeight: 800,
                                     letterSpacing: '0.08em',
                                     textTransform: 'uppercase',
+                                    cursor: 'pointer',
+                                    textDecoration: 'none',
                                 }}
                             >
                                 {link.label}

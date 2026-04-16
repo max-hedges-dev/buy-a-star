@@ -31,8 +31,14 @@ def _float(value: Decimal | float | int | None) -> float | None:
     return float(value)
 
 
+def _configured_registration_price(star: Star) -> float:
+    if star.common_name and star.common_name.strip():
+        return settings.STRIPE_NAMED_STAR_PRICE_GBP / 100
+    return settings.STRIPE_UNNAMED_STAR_PRICE_GBP / 100
+
+
 def serialize_star(star: Star) -> dict:
-    first_purchase_price = float(settings.STAR_ISSUE_PRICE)
+    first_purchase_price = _configured_registration_price(star)
     current_price = _float(star.ask_price) or first_purchase_price
     return {
         "id": star.id,
@@ -131,6 +137,10 @@ def _name_sort_expression():
     return func.lower(func.coalesce(Star.common_name, Star.display_name, Star.scientific_name, ""))
 
 
+def _predicted_price_expression():
+    return Star.model_value
+
+
 def _apply_search(query, search: str | None):
     if not search:
         return query
@@ -181,7 +191,10 @@ def _apply_catalogue_filters(
     colour: str | None,
     constellation: str | None,
     star_type: str | None,
+    min_distance_ly: float | None,
     max_distance_ly: float | None,
+    min_price: float | None,
+    max_price: float | None,
 ):
     query = _apply_search(query, search)
 
@@ -198,8 +211,18 @@ def _apply_catalogue_filters(
     if star_type and star_type != "all":
         query = query.where(Star.category == star_type)
 
+    if min_distance_ly is not None and min_distance_ly > 0:
+        query = query.where(Star.distance_ly >= min_distance_ly)
+
     if max_distance_ly is not None and max_distance_ly > 0:
         query = query.where(Star.distance_ly <= max_distance_ly)
+
+    predicted_price = _predicted_price_expression()
+    if min_price is not None and min_price > 0:
+        query = query.where(predicted_price >= min_price)
+
+    if max_price is not None and max_price > 0:
+        query = query.where(predicted_price <= max_price)
 
     return query
 
@@ -212,8 +235,18 @@ def _apply_catalogue_sort(query, sort_by: str | None):
         return query.order_by(Star.distance_ly.asc(), name_sort.asc())
     if sort_key == "distance-far":
         return query.order_by(Star.distance_ly.desc(), name_sort.asc())
-    if sort_key == "brightness":
+    if sort_key in {"brightness", "apparent-brightest"}:
         return query.order_by(Star.apparent_magnitude.asc().nullslast(), name_sort.asc())
+    if sort_key == "apparent-dimmest":
+        return query.order_by(Star.apparent_magnitude.desc().nullslast(), name_sort.asc())
+    if sort_key == "absolute-brightest":
+        return query.order_by(Star.absolute_magnitude.asc().nullslast(), name_sort.asc())
+    if sort_key == "absolute-dimmest":
+        return query.order_by(Star.absolute_magnitude.desc().nullslast(), name_sort.asc())
+    if sort_key == "price-low":
+        return query.order_by(_predicted_price_expression().asc().nullslast(), name_sort.asc())
+    if sort_key == "price-high":
+        return query.order_by(_predicted_price_expression().desc().nullslast(), name_sort.asc())
     if sort_key == "predicted-price":
         return query.order_by(Star.model_value.desc().nullslast(), name_sort.asc())
     if sort_key == "claimed-first":
@@ -222,25 +255,46 @@ def _apply_catalogue_sort(query, sort_by: str | None):
     return query.order_by(name_sort.asc())
 
 
-async def _build_catalogue_facets(db: AsyncSession) -> StarCatalogueFacetsRead:
+def _catalogue_status_conditions(status: str | None):
+    if status == "claimed":
+        return [Star.is_bought.is_(True)]
+    if status == "unclaimed":
+        return [Star.is_bought.is_(False)]
+    return []
+
+
+async def _build_catalogue_facets(db: AsyncSession, status: str | None) -> StarCatalogueFacetsRead:
+    status_conditions = _catalogue_status_conditions(status)
     constellations_result = await db.execute(
         select(Star.constellation)
         .where(Star.constellation.is_not(None))
+        .where(*status_conditions)
         .distinct()
         .order_by(Star.constellation.asc())
     )
     star_types_result = await db.execute(
         select(Star.category)
         .where(Star.category.is_not(None))
+        .where(*status_conditions)
         .distinct()
         .order_by(Star.category.asc())
     )
-    max_distance_result = await db.execute(select(func.max(Star.distance_ly)))
+    distance_bounds_result = await db.execute(
+        select(func.min(Star.distance_ly), func.max(Star.distance_ly)).where(*status_conditions)
+    )
+    price_bounds_result = await db.execute(
+        select(func.min(_predicted_price_expression()), func.max(_predicted_price_expression())).where(*status_conditions)
+    )
+    min_distance, max_distance = distance_bounds_result.one()
+    min_price, max_price = price_bounds_result.one()
 
     return StarCatalogueFacetsRead(
         constellations=[value for value in constellations_result.scalars().all() if value],
         star_types=[value for value in star_types_result.scalars().all() if value],
-        max_distance_ly=float(max_distance_result.scalar() or 0),
+        min_distance_ly=float(min_distance or 0),
+        max_distance_ly=float(max_distance or 0),
+        min_price=float(min_price or 0),
+        max_price=float(max_price or 0),
     )
 
 
@@ -311,7 +365,10 @@ async def read_star_catalogue(
     colour: Optional[str] = "all",
     constellation: Optional[str] = "all",
     star_type: Optional[str] = "all",
+    min_distance_ly: Optional[float] = None,
     max_distance_ly: Optional[float] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
     sort_by: Optional[str] = "alphabetical",
 ):
     safe_page_size = min(max(page_size, 1), 96)
@@ -324,7 +381,10 @@ async def read_star_catalogue(
         colour=colour,
         constellation=constellation,
         star_type=star_type,
+        min_distance_ly=min_distance_ly,
         max_distance_ly=max_distance_ly,
+        min_price=min_price,
+        max_price=max_price,
     )
 
     total_result = await db.execute(
@@ -348,7 +408,7 @@ async def read_star_catalogue(
         page=bounded_page,
         page_size=safe_page_size,
         total_pages=total_pages,
-        facets=await _build_catalogue_facets(db),
+        facets=await _build_catalogue_facets(db, status),
     )
 
 

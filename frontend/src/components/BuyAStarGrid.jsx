@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import StarTile from './StarTile';
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
 import { fetchStarCatalogue } from '../services/api';
@@ -15,15 +15,6 @@ const filterSectionTitle = {
     fontWeight: 700,
     fontSize: '0.74rem',
     marginBottom: '12px',
-};
-
-const radioLabelStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    color: '#d8d8de',
-    fontSize: '0.96rem',
-    cursor: 'pointer',
 };
 
 const selectStyle = {
@@ -62,10 +53,152 @@ const optionStyle = {
     color: '#d7d7de',
 };
 
-const sliderStyle = {
-    width: '100%',
-    accentColor: '#ff6a00',
-    cursor: 'pointer',
+const formatRangeNumber = (value, suffix = '') => (
+    `${Math.round(value).toLocaleString()}${suffix}`
+);
+
+const formatCurrency = (value) => (
+    new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'GBP',
+        maximumFractionDigits: value < 100 ? 2 : 0,
+    }).format(value)
+);
+
+const RangeFilter = ({
+    title,
+    min,
+    max,
+    values,
+    onChange,
+    step = 1,
+    formatValue = (value) => value.toLocaleString(),
+}) => {
+    const safeMin = Number.isFinite(min) ? min : 0;
+    const safeMax = Number.isFinite(max) && max > safeMin ? max : safeMin;
+    const isDisabled = safeMax <= safeMin;
+    const currentMin = clamp(Number.isFinite(values.min) ? values.min : safeMin, safeMin, safeMax);
+    const currentMax = clamp(Number.isFinite(values.max) ? values.max : safeMax, safeMin, safeMax);
+    const rangeSpan = safeMax - safeMin || 1;
+    const trackStart = ((currentMin - safeMin) / rangeSpan) * 100;
+    const trackEnd = ((currentMax - safeMin) / rangeSpan) * 100;
+
+    const updateMin = (nextValue) => {
+        onChange({
+            min: Math.min(Number(nextValue), currentMax),
+            max: currentMax,
+        });
+    };
+
+    const updateMax = (nextValue) => {
+        onChange({
+            min: currentMin,
+            max: Math.max(Number(nextValue), currentMin),
+        });
+    };
+
+    return (
+        <div>
+            <div style={filterSectionTitle}>{title}</div>
+            <div
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '14px',
+                    padding: '14px 14px 16px',
+                    display: 'grid',
+                    gap: '14px',
+                }}
+            >
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        color: '#ffffff',
+                        fontSize: '0.9rem',
+                        fontWeight: 700,
+                    }}
+                >
+                    <span>{formatValue(currentMin)}</span>
+                    <span>{formatValue(currentMax)}</span>
+                </div>
+
+                <div style={{ position: 'relative', height: '28px' }}>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: '50%',
+                            height: '4px',
+                            transform: 'translateY(-50%)',
+                            borderRadius: '999px',
+                            background: 'rgba(255,255,255,0.1)',
+                        }}
+                    />
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: `${trackStart}%`,
+                            right: `${100 - trackEnd}%`,
+                            top: '50%',
+                            height: '4px',
+                            transform: 'translateY(-50%)',
+                            borderRadius: '999px',
+                            background: 'linear-gradient(90deg, #ff4d00, #ff9c63)',
+                        }}
+                    />
+                    <input
+                        className="catalogue-range-input"
+                        type="range"
+                        min={safeMin}
+                        max={safeMax}
+                        step={step}
+                        value={currentMin}
+                        disabled={isDisabled}
+                        onChange={(event) => updateMin(event.target.value)}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            margin: 0,
+                        }}
+                        aria-label={`${title} minimum`}
+                    />
+                    <input
+                        className="catalogue-range-input"
+                        type="range"
+                        min={safeMin}
+                        max={safeMax}
+                        step={step}
+                        value={currentMax}
+                        disabled={isDisabled}
+                        onChange={(event) => updateMax(event.target.value)}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            margin: 0,
+                        }}
+                        aria-label={`${title} maximum`}
+                    />
+                </div>
+
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '16px',
+                        color: '#a4a4ad',
+                        fontSize: '0.82rem',
+                    }}
+                >
+                    <span>{formatValue(safeMin)}</span>
+                    <span>{formatValue(safeMax)}</span>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const LoadingTile = () => (
@@ -111,11 +244,12 @@ const BuyAStarGrid = ({ onSelectStar }) => {
     const [page, setPage] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('unclaimed');
     const [colorFilter, setColorFilter] = useState('all');
     const [constellationFilter, setConstellationFilter] = useState('all');
     const [typeFilter, setTypeFilter] = useState('all');
     const [sortBy, setSortBy] = useState('alphabetical');
+    const [distanceRange, setDistanceRange] = useState({ min: null, max: null });
+    const [priceRange, setPriceRange] = useState({ min: null, max: null });
     const [catalogue, setCatalogue] = useState({
         items: [],
         total: 0,
@@ -125,7 +259,10 @@ const BuyAStarGrid = ({ onSelectStar }) => {
         facets: {
             constellations: [],
             star_types: [],
+            min_distance_ly: 0,
             max_distance_ly: 0,
+            min_price: 0,
+            max_price: 0,
         },
     });
     const [loading, setLoading] = useState(true);
@@ -137,17 +274,23 @@ const BuyAStarGrid = ({ onSelectStar }) => {
         height: typeof window !== 'undefined' ? window.innerHeight : 900,
     }));
     const gridStartRef = useRef(null);
-    const [maxDistance, setMaxDistance] = useState(0);
     const pagedStars = catalogue.items || [];
     const totalStars = catalogue.total || 0;
     const totalPages = Math.max(1, catalogue.total_pages || 1);
     const constellations = catalogue.facets?.constellations || [];
     const starTypes = catalogue.facets?.star_types || [];
+    const minDistanceCap = Math.floor(catalogue.facets?.min_distance_ly || 0);
     const maxDistanceCap = Math.ceil(catalogue.facets?.max_distance_ly || 0);
-    const distanceSliderValue = maxDistance > 0
-        ? Math.min(maxDistance, maxDistanceCap || maxDistance)
-        : (maxDistanceCap || 1);
-    const isAnyDistance = maxDistanceCap === 0 || maxDistance === 0 || maxDistance >= maxDistanceCap;
+    const minPriceCap = Number(catalogue.facets?.min_price || 0);
+    const maxPriceCap = Number(catalogue.facets?.max_price || 0);
+    const activeMinDistance = Number.isFinite(distanceRange.min) ? distanceRange.min : minDistanceCap;
+    const activeMaxDistance = Number.isFinite(distanceRange.max) ? distanceRange.max : maxDistanceCap;
+    const activeMinPrice = Number.isFinite(priceRange.min) ? priceRange.min : minPriceCap;
+    const activeMaxPrice = Number.isFinite(priceRange.max) ? priceRange.max : maxPriceCap;
+    const minDistanceParam = activeMinDistance > minDistanceCap ? activeMinDistance : undefined;
+    const maxDistanceParam = maxDistanceCap > 0 && activeMaxDistance < maxDistanceCap ? activeMaxDistance : undefined;
+    const minPriceParam = activeMinPrice > minPriceCap ? activeMinPrice : undefined;
+    const maxPriceParam = maxPriceCap > 0 && activeMaxPrice < maxPriceCap ? activeMaxPrice : undefined;
 
     const measureFilterTop = useCallback(() => {
         if (!gridStartRef.current) return;
@@ -177,26 +320,35 @@ const BuyAStarGrid = ({ onSelectStar }) => {
 
     useEffect(() => {
         setPage(0);
-    }, [searchTerm, statusFilter, colorFilter, constellationFilter, typeFilter, sortBy, maxDistance]);
+    }, [
+        searchTerm,
+        colorFilter,
+        constellationFilter,
+        typeFilter,
+        sortBy,
+        distanceRange.min,
+        distanceRange.max,
+        priceRange.min,
+        priceRange.max,
+    ]);
 
     useEffect(() => {
         let isActive = true;
         setLoading(true);
         setError(null);
 
-        const cappedDistance = maxDistanceCap > 0 && maxDistance > 0 && maxDistance < maxDistanceCap
-            ? maxDistance
-            : undefined;
-
         fetchStarCatalogue({
             page: page + 1,
             pageSize: LIMIT,
             search: debouncedSearchTerm,
-            status: statusFilter,
+            status: 'unclaimed',
             colour: colorFilter,
             constellation: constellationFilter,
             starType: typeFilter,
-            maxDistanceLy: cappedDistance,
+            minDistanceLy: minDistanceParam,
+            maxDistanceLy: maxDistanceParam,
+            minPrice: minPriceParam,
+            maxPrice: maxPriceParam,
             sortBy,
         })
             .then((nextCatalogue) => {
@@ -221,11 +373,12 @@ const BuyAStarGrid = ({ onSelectStar }) => {
         colorFilter,
         constellationFilter,
         debouncedSearchTerm,
-        maxDistance,
-        maxDistanceCap,
+        maxDistanceParam,
+        maxPriceParam,
+        minDistanceParam,
+        minPriceParam,
         page,
         sortBy,
-        statusFilter,
         typeFilter,
     ]);
 
@@ -255,12 +408,12 @@ const BuyAStarGrid = ({ onSelectStar }) => {
 
     const resetFilters = () => {
         setSearchTerm('');
-        setStatusFilter('unclaimed');
         setColorFilter('all');
         setConstellationFilter('all');
         setTypeFilter('all');
         setSortBy('alphabetical');
-        setMaxDistance(0);
+        setDistanceRange({ min: null, max: null });
+        setPriceRange({ min: null, max: null });
     };
 
     const { width: viewportWidth, height: viewportHeight } = viewportSize;
@@ -325,27 +478,25 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                     </div>
                 </div>
 
-                <div>
-                    <div style={filterSectionTitle}>Status</div>
-                    <div style={{ display: 'grid', gap: '12px' }}>
-                        {[
-                            { value: 'unclaimed', label: 'Unclaimed' },
-                            { value: 'claimed', label: 'Claimed' },
-                            { value: 'all', label: 'All stars' },
-                        ].map((option) => (
-                            <label key={option.value} style={radioLabelStyle}>
-                                <input
-                                    type="radio"
-                                    name="status-filter"
-                                    checked={statusFilter === option.value}
-                                    onChange={() => setStatusFilter(option.value)}
-                                    style={{ accentColor: '#ff6a00' }}
-                                />
-                                {option.label}
-                            </label>
-                        ))}
-                    </div>
-                </div>
+                <RangeFilter
+                    title="Predicted price range"
+                    min={minPriceCap}
+                    max={maxPriceCap}
+                    values={priceRange}
+                    onChange={setPriceRange}
+                    step={0.5}
+                    formatValue={formatCurrency}
+                />
+
+                <RangeFilter
+                    title="Distance from Sun"
+                    min={minDistanceCap}
+                    max={maxDistanceCap}
+                    values={distanceRange}
+                    onChange={setDistanceRange}
+                    step={100}
+                    formatValue={(value) => formatRangeNumber(value, ' ly')}
+                />
 
                 <div>
                     <div style={filterSectionTitle}>Sort by</div>
@@ -353,9 +504,12 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                         <option style={optionStyle} value="alphabetical">Alphabetical</option>
                         <option style={optionStyle} value="distance-near">Distance: nearest first</option>
                         <option style={optionStyle} value="distance-far">Distance: farthest first</option>
-                        <option style={optionStyle} value="brightness">Brightness</option>
-                        <option style={optionStyle} value="predicted-price">Predicted price</option>
-                        <option style={optionStyle} value="claimed-first">Claimed first</option>
+                        <option style={optionStyle} value="apparent-brightest">Apparent brightness: highest first</option>
+                        <option style={optionStyle} value="apparent-dimmest">Apparent brightness: lowest first</option>
+                        <option style={optionStyle} value="absolute-brightest">Absolute brightness: highest first</option>
+                        <option style={optionStyle} value="absolute-dimmest">Absolute brightness: lowest first</option>
+                        <option style={optionStyle} value="price-low">Predicted price: low to high</option>
+                        <option style={optionStyle} value="price-high">Predicted price: high to low</option>
                     </select>
                 </div>
 
@@ -364,11 +518,12 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                     <select value={colorFilter} onChange={(event) => setColorFilter(event.target.value)} style={selectStyle}>
                         <option style={optionStyle} value="all">All colours</option>
                         <option style={optionStyle} value="Blue">Blue</option>
+                        <option style={optionStyle} value="Blue-White">Blue-white</option>
                         <option style={optionStyle} value="White">White</option>
+                        <option style={optionStyle} value="Yellow-White">Yellow-white</option>
                         <option style={optionStyle} value="Yellow">Yellow</option>
                         <option style={optionStyle} value="Orange">Orange</option>
                         <option style={optionStyle} value="Red">Red</option>
-                        <option style={optionStyle} value="Other">Other</option>
                     </select>
                 </div>
 
@@ -400,43 +555,6 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                     </select>
                 </div>
 
-                <div>
-                    <div style={filterSectionTitle}>Distance from Sun</div>
-                    <div
-                        style={{
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                            borderRadius: '14px',
-                            padding: '14px 14px 16px',
-                        }}
-                    >
-                        <input
-                            type="range"
-                            min={0}
-                            max={maxDistanceCap || 1}
-                            step={100}
-                            value={distanceSliderValue}
-                            onChange={(event) => setMaxDistance(Number(event.target.value))}
-                            style={sliderStyle}
-                        />
-                        <div
-                            style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginTop: '10px',
-                                gap: '16px',
-                                color: '#a4a4ad',
-                                fontSize: '0.86rem',
-                            }}
-                        >
-                            <span>0 ly</span>
-                            <span style={{ color: '#ffffff', fontWeight: 600 }}>
-                                {isAnyDistance ? 'Any distance' : `${maxDistance.toLocaleString()} ly max`}
-                            </span>
-                        </div>
-                    </div>
-                </div>
             </div>
         </>
     );
@@ -499,7 +617,7 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                                     {loading ? 'Loading stars...' : `${totalStars.toLocaleString()} stars`}
                                 </div>
                                 <div style={{ color: '#8f8f98', fontSize: `${clamp(0.95 * pageScale, 0.82, 0.95).toFixed(3)}rem` }}>
-                                    Filtered by status, color, constellation, distance, and type.
+                                    Available stars, refined by price, distance, colour, constellation, and type.
                                 </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: useFilterDrawer ? 'space-between' : 'flex-end', flex: useFilterDrawer ? '1 1 100%' : '0 1 auto' }}>

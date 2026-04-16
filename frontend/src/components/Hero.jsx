@@ -36,6 +36,11 @@ const Hero = () => {
     const { width: viewportWidth, height: viewportHeight } = viewportSize;
     const widthScale = viewportWidth / 1440;
     const heightScale = viewportHeight / 920;
+    const viewportAspectRatio = viewportHeight > 0 ? viewportWidth / viewportHeight : 1;
+    const portraitCompression = viewportWidth < 760
+        ? clamp((0.76 - viewportAspectRatio) / 0.34, 0, 1)
+        : 0;
+    const heroHeightVh = clamp(100 - (portraitCompression * 18), 82, 100);
     const heroScale = clamp(Math.min(widthScale, heightScale), 0.42, 1.08);
     const smallWidthThreshold = 0.76;
     const widthDrivenStarScale = widthScale < smallWidthThreshold
@@ -111,7 +116,7 @@ const Hero = () => {
         <section
             onMouseMove={handlePointerMove}
             onMouseLeave={handlePointerLeave}
-            style={{ position: 'relative', height: '100vh', width: '100%', overflow: 'hidden' }}
+            style={{ position: 'relative', height: `${heroHeightVh}vh`, width: '100%', overflow: 'hidden' }}
         >
             <motion.div
                 style={{

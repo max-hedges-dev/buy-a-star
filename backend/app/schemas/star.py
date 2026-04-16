@@ -85,7 +85,10 @@ class StarListRead(StarBase):
 class StarCatalogueFacetsRead(BaseModel):
     constellations: list[str] = Field(default_factory=list)
     star_types: list[str] = Field(default_factory=list)
+    min_distance_ly: float = 0
     max_distance_ly: float = 0
+    min_price: float = 0
+    max_price: float = 0
 
 
 class StarCatalogueRead(BaseModel):

@@ -176,7 +176,7 @@ const Hero = () => {
                         color: '#ffffff',
                     }}
                 >
-                    Own a real star. Forever.
+                    Own a real star Forever
                 </motion.h1>
 
                 <motion.p

@@ -28,10 +28,8 @@ class CheckoutOptionsResponse(BaseModel):
     default_certificate_type: str
     currency: str
     supported_countries: list[str]
-    named_star_price_minor_units: int
-    named_star_price: float
-    unnamed_star_price_minor_units: int
-    unnamed_star_price: float
+    star_price_minor_units: int
+    star_price: float
     options: list[CheckoutOptionRead]
 
 

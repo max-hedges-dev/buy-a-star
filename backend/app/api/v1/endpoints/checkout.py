@@ -7,6 +7,7 @@ import stripe
 from app.api.deps import require_current_user
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.star import Star
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.checkout import (
@@ -18,9 +19,8 @@ from app.schemas.checkout import (
     CheckoutWebhookResponse,
 )
 from app.services.certificate_options import DEFAULT_CERTIFICATE_TYPE, list_certificate_options
-from app.services.pricing import pricing_quote_for_country, SUPPORTED_COUNTRIES
+from app.services.pricing import pricing_quote_for_country, star_price_for_country, SUPPORTED_COUNTRIES
 from app.services.stripe_checkout import (
-    _stripe_id,
     _stripe_value,
     create_embedded_checkout_session,
     fulfill_checkout_session,
@@ -28,29 +28,31 @@ from app.services.stripe_checkout import (
     mark_checkout_session_expired,
     retrieve_checkout_session,
 )
-from app.services.stripe_resale import (
-    finalize_resale_checkout_session,
-    handle_payout_event,
-    handle_refund_event,
-    mark_resale_failed,
-    sync_seller_account_status,
-)
 
 router = APIRouter()
 
 
 @router.get("/options", response_model=CheckoutOptionsResponse)
-async def checkout_options(country_code: str = Query("GB")) -> CheckoutOptionsResponse:
+async def checkout_options(
+    country_code: str = Query("GB"),
+    star_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CheckoutOptionsResponse:
     quote = pricing_quote_for_country(country_code)
+    star_price = quote.named_star_price
+    if star_id is not None:
+        result = await db.execute(select(Star).where(Star.id == star_id))
+        star = result.scalars().first()
+        if star is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Star not found.")
+        star_price = star_price_for_country(star, quote.country_code)
     return CheckoutOptionsResponse(
         country_code=quote.country_code,
         default_certificate_type=DEFAULT_CERTIFICATE_TYPE,
         currency=quote.currency,
         supported_countries=SUPPORTED_COUNTRIES,
-        named_star_price_minor_units=quote.named_star_price.amount_minor_units,
-        named_star_price=float(quote.named_star_price.amount_major),
-        unnamed_star_price_minor_units=quote.unnamed_star_price.amount_minor_units,
-        unnamed_star_price=float(quote.unnamed_star_price.amount_major),
+        star_price_minor_units=star_price.amount_minor_units,
+        star_price=float(star_price.amount_major),
         options=[
             CheckoutOptionRead(
                 code=option.code,
@@ -157,42 +159,10 @@ async def stripe_webhook(
 
     metadata = _stripe_value(event_object, "metadata", {}) or {}
     if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
-        if _stripe_value(metadata, "flow") == "resale":
-            await finalize_resale_checkout_session(db, event_object["id"])
-        else:
-            await fulfill_checkout_session(db, event_object["id"])
+        await fulfill_checkout_session(db, event_object["id"])
     elif event_type == "checkout.session.expired":
-        if _stripe_value(metadata, "flow") == "resale":
-            await mark_resale_failed(db, event_object["id"])
-        else:
-            await mark_checkout_session_expired(db, event_object["id"])
+        await mark_checkout_session_expired(db, event_object["id"])
     elif event_type == "checkout.session.async_payment_failed":
-        if _stripe_value(metadata, "flow") == "resale":
-            await mark_resale_failed(db, event_object["id"])
-        else:
-            await mark_checkout_session_failed(db, event_object["id"])
-    elif event_type == "charge.refunded":
-        payment_intent_id = _stripe_id(_stripe_value(event_object, "payment_intent"))
-        charge_id = _stripe_id(event_object)
-        await handle_refund_event(db, payment_intent_id, charge_id, _stripe_value(event_object, "amount_refunded"))
-    elif event_type in {"refund.updated", "refund.created"}:
-        payment_intent_id = _stripe_id(_stripe_value(event_object, "payment_intent"))
-        charge_id = _stripe_id(_stripe_value(event_object, "charge"))
-        await handle_refund_event(db, payment_intent_id, charge_id, _stripe_value(event_object, "amount"))
-    elif event_type in {"payout.paid", "payout.failed", "payout.canceled", "payout.updated"}:
-        await handle_payout_event(
-            db,
-            _stripe_id(event_object),
-            _stripe_value(event_object, "status"),
-            _stripe_value(event_object, "failure_message"),
-        )
-    elif event_type == "account.updated":
-        connected_account_id = _stripe_id(event_object)
-        if connected_account_id:
-            result = await db.execute(select(User).where(User.connected_account_id == connected_account_id))
-            user = result.scalars().first()
-            if user:
-                await sync_seller_account_status(user)
-                await db.commit()
+        await mark_checkout_session_failed(db, event_object["id"])
 
     return CheckoutWebhookResponse()

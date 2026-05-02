@@ -11,15 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.star import Star
-from app.models.resale import ResaleListing
-from app.models.star_valuation_history import StarValuationHistory
 from app.core.config import settings
 from app.schemas.star import (
     StarCatalogueFacetsRead,
     StarCatalogueRead,
     StarDetailRead,
     StarListRead,
-    StarValuationHistoryPointRead,
 )
 
 
@@ -40,7 +37,7 @@ def _configured_registration_price(star: Star) -> float:
 
 def serialize_star(star: Star) -> dict:
     first_purchase_price = _configured_registration_price(star)
-    current_price = _float(star.ask_price) or first_purchase_price
+    current_price = _float(star.model_value) or first_purchase_price
     return {
         "id": star.id,
         "scientific_name": star.scientific_name,
@@ -55,10 +52,6 @@ def serialize_star(star: Star) -> dict:
         "price": current_price,
         "first_purchase_price": first_purchase_price,
         "model_value": _float(star.model_value),
-        "ask_price": _float(star.ask_price),
-        "highest_bid": _float(star.highest_bid),
-        "last_sale_price": _float(star.last_sale_price),
-        "last_sale_at": star.last_sale_at,
         "distance_ly": star.distance_ly,
         "is_bought": bool(star.is_bought),
         "owner_name": star.owner_name,
@@ -139,7 +132,7 @@ def _name_sort_expression():
     return func.lower(func.coalesce(Star.common_name, Star.display_name, Star.scientific_name, ""))
 
 
-def _predicted_price_expression():
+def _current_price_expression():
     return Star.model_value
 
 
@@ -200,9 +193,9 @@ def _apply_catalogue_filters(
 ):
     query = _apply_search(query, search)
 
-    if status == "claimed":
+    if status == "owned":
         query = query.where(Star.is_bought.is_(True))
-    elif status == "unclaimed":
+    elif status == "available":
         query = query.where(Star.is_bought.is_(False))
 
     query = _apply_colour_filter(query, colour)
@@ -219,12 +212,12 @@ def _apply_catalogue_filters(
     if max_distance_ly is not None and max_distance_ly > 0:
         query = query.where(Star.distance_ly <= max_distance_ly)
 
-    predicted_price = _predicted_price_expression()
+    current_price = _current_price_expression()
     if min_price is not None and min_price > 0:
-        query = query.where(predicted_price >= min_price)
+        query = query.where(current_price >= min_price)
 
     if max_price is not None and max_price > 0:
-        query = query.where(predicted_price <= max_price)
+        query = query.where(current_price <= max_price)
 
     return query
 
@@ -246,21 +239,19 @@ def _apply_catalogue_sort(query, sort_by: str | None):
     if sort_key == "absolute-dimmest":
         return query.order_by(Star.absolute_magnitude.desc().nullslast(), name_sort.asc())
     if sort_key == "price-low":
-        return query.order_by(_predicted_price_expression().asc().nullslast(), name_sort.asc())
+        return query.order_by(_current_price_expression().asc().nullslast(), name_sort.asc())
     if sort_key == "price-high":
-        return query.order_by(_predicted_price_expression().desc().nullslast(), name_sort.asc())
-    if sort_key == "predicted-price":
-        return query.order_by(Star.model_value.desc().nullslast(), name_sort.asc())
-    if sort_key == "claimed-first":
+        return query.order_by(_current_price_expression().desc().nullslast(), name_sort.asc())
+    if sort_key == "registered-first":
         return query.order_by(Star.is_bought.desc(), name_sort.asc())
 
     return query.order_by(name_sort.asc())
 
 
 def _catalogue_status_conditions(status: str | None):
-    if status == "claimed":
+    if status == "owned":
         return [Star.is_bought.is_(True)]
-    if status == "unclaimed":
+    if status == "available":
         return [Star.is_bought.is_(False)]
     return []
 
@@ -285,7 +276,7 @@ async def _build_catalogue_facets(db: AsyncSession, status: str | None) -> StarC
         select(func.min(Star.distance_ly), func.max(Star.distance_ly)).where(*status_conditions)
     )
     price_bounds_result = await db.execute(
-        select(func.min(_predicted_price_expression()), func.max(_predicted_price_expression())).where(*status_conditions)
+        select(func.min(_current_price_expression()), func.max(_current_price_expression())).where(*status_conditions)
     )
     min_distance, max_distance = distance_bounds_result.one()
     min_price, max_price = price_bounds_result.one()
@@ -301,43 +292,8 @@ async def _build_catalogue_facets(db: AsyncSession, status: str | None) -> StarC
 
 
 async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetailRead:
-    active_listing_result = await db.execute(
-        select(ResaleListing)
-        .where(ResaleListing.star_id == star.id, ResaleListing.status == "active")
-        .order_by(ResaleListing.created_at.desc(), ResaleListing.id.desc())
-    )
-    active_listing = active_listing_result.scalars().first()
-    listing_payload = None
-    if active_listing:
-        listing_payload = {
-            "id": active_listing.id,
-            "price": float(active_listing.price),
-            "currency": active_listing.currency,
-            "seller_user_id": active_listing.seller_user_id,
-            "status": active_listing.status,
-            "created_at": active_listing.created_at,
-        }
-
-    history_result = await db.execute(
-        select(StarValuationHistory)
-        .where(StarValuationHistory.star_id == star.id)
-        .order_by(StarValuationHistory.valuation_date.asc())
-    )
-    history = [
-        StarValuationHistoryPointRead(
-            valuation_date=item.valuation_date,
-            model_value=float(item.model_value),
-            energy_price=_float(item.energy_price),
-            metals_price=_float(item.metals_price),
-            energy_change_ratio=item.energy_change_ratio,
-            metals_change_ratio=item.metals_change_ratio,
-        )
-        for item in history_result.scalars().all()
-    ]
-
     return StarDetailRead(
         **serialize_star(star),
-        active_resale_listing=listing_payload,
         phot_g_mean_mag=star.phot_g_mean_mag,
         parallax=star.parallax,
         lum_flame=star.lum_flame,
@@ -351,7 +307,6 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
         age_flame=star.age_flame,
         evolstage_flame=star.evolstage_flame,
         classprob_dsc_combmod_binarystar=star.classprob_dsc_combmod_binarystar,
-        valuation_history=history,
     )
 
 
@@ -381,7 +336,7 @@ async def read_star_catalogue(
     page: int = 1,
     page_size: int = 24,
     search: Optional[str] = None,
-    status: Optional[str] = "unclaimed",
+    status: Optional[str] = "all",
     colour: Optional[str] = "all",
     constellation: Optional[str] = "all",
     star_type: Optional[str] = "all",

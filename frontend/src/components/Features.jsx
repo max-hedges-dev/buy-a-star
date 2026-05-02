@@ -526,7 +526,7 @@ const Features = () => {
                         Own a piece of the universe. Today.
                     </h3>
                     <p style={{ maxWidth: '760px', margin: '0 auto 30px', color: '#b7b7be', lineHeight: 1.85, fontSize: '1.08rem' }}>
-                        Whether it be a gift for a loved one or a personal investment - Aster Atlas is the registry for you.
+                        Whether it is a meaningful gift for someone you love or a lasting keepsake for yourself, Aster Atlas is designed to make the moment feel rare, personal, and beautifully recorded.
                     </p>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: `${Math.round(clamp(16 * sectionScale, 10, 16))}px`, flexWrap: 'wrap' }}>
                         <Link to="/buy" style={primaryButtonStyle}>

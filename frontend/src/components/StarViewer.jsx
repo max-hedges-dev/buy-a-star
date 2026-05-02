@@ -4,10 +4,9 @@ import { Stars } from '@react-three/drei';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
 import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2, Truck } from 'lucide-react';
-import { createCheckoutSession, createResaleCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../services/api';
+import { createCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
-import StarValueChart from './StarValueChart';
 import { getColorFamily, getSpectralDisplay } from '../utils/starAppearance';
 
 const formatMaybeNumber = (value, digits = 2) => {
@@ -185,19 +184,6 @@ const formatMoney = (amount, currency) =>
         currency: (currency || 'gbp').toUpperCase(),
     }).format(amount);
 
-const formatSterling = (amount) =>
-    new Intl.NumberFormat('en-GB', {
-        style: 'currency',
-        currency: 'GBP',
-    }).format(amount || 0);
-
-const formatMarketValue = (amount, emptyLabel = 'Not listed') => {
-    if (typeof amount !== 'number' || Number.isNaN(amount)) {
-        return emptyLabel;
-    }
-    return formatSterling(amount);
-};
-
 const formatCompact = (value, digits = 1) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
         return null;
@@ -228,7 +214,7 @@ const getPercentileSubtitle = (star, componentKey, labelPrefix = 'Catalog percen
         return null;
     }
 
-    return `${labelPrefix} · ${Math.round(percentile * 100)}th`;
+    return `${labelPrefix} - ${Math.round(percentile * 100)}th`;
 };
 
 const getSpectralBandKey = (star, spectralDisplay) => {
@@ -249,6 +235,105 @@ const getSpectralBandKey = (star, spectralDisplay) => {
         Red: 'M',
     };
     return fallbackMap[colorFamily] || 'G';
+};
+
+const formatCoordinate = (value, positiveLabel, negativeLabel) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return null;
+    }
+    const direction = value >= 0 ? positiveLabel : negativeLabel;
+    return `${Math.abs(value).toFixed(1)} deg ${direction}`;
+};
+
+const buildPriceSignatureFactors = (star) => {
+    const missingMetrics = Array.isArray(star?.valuation_missing_metrics) ? star.valuation_missing_metrics.length : 0;
+    const visibilityValue = typeof star?.apparent_magnitude === 'number'
+        ? `Apparent magnitude ${star.apparent_magnitude.toFixed(2)}`
+        : typeof star?.absolute_magnitude === 'number'
+            ? `Absolute magnitude ${star.absolute_magnitude.toFixed(2)}`
+            : 'Brightness profile available';
+    const positionParts = [];
+    if (star?.constellation) {
+        positionParts.push(star.constellation);
+    }
+    const declination = formatCoordinate(star?.dec_degrees, 'N', 'S');
+    if (declination) {
+        positionParts.push(declination);
+    }
+
+    const distinctivenessParts = [];
+    if (star?.spectral_type) {
+        distinctivenessParts.push(star.spectral_type);
+    }
+    if (star?.variable_designation) {
+        distinctivenessParts.push('variable catalogued');
+    }
+    if (star?.non_single_star) {
+        distinctivenessParts.push('multiple-star profile');
+    }
+
+    const physicalParts = [];
+    if (typeof star?.luminosity === 'number' && Number.isFinite(star.luminosity)) {
+        physicalParts.push(`${formatCompact(star.luminosity, star.luminosity > 999 ? 1 : 2)}x solar output`);
+    }
+    if (typeof star?.radius_flame === 'number' && Number.isFinite(star.radius_flame)) {
+        physicalParts.push(`${star.radius_flame.toFixed(star.radius_flame > 10 ? 1 : 2)} solar radii`);
+    }
+    if (typeof star?.mass_flame === 'number' && Number.isFinite(star.mass_flame)) {
+        physicalParts.push(`${star.mass_flame.toFixed(star.mass_flame > 10 ? 1 : 2)} solar masses`);
+    }
+
+    return [
+        {
+            label: 'Catalogue quality',
+            value: star?.category || 'Catalogued star',
+            detail: star?.gaia_source_id
+                ? `Anchored to Gaia DR3 source ${star.gaia_source_id}.`
+                : 'Anchored to the published catalogue record for this star.',
+        },
+        {
+            label: 'Brightness and visibility',
+            value: visibilityValue,
+            detail: 'Visible brightness and intrinsic light output help shape today\'s registration price.',
+        },
+        {
+            label: 'Distinctiveness',
+            value: distinctivenessParts.length ? distinctivenessParts.join(', ') : 'Spectral character recorded',
+            detail: 'Colour band, classification, and unusual features contribute to the star\'s individual signature.',
+        },
+        {
+            label: 'Celestial position',
+            value: positionParts.length ? positionParts.join(' | ') : 'Sky position recorded',
+            detail: typeof star?.distance_ly === 'number'
+                ? `${star.distance_ly.toFixed(2)} light years from Earth.`
+                : 'Placement within the night sky helps round out the profile.',
+        },
+        {
+            label: 'Physical profile',
+            value: physicalParts.length ? physicalParts.join(' | ') : 'Measured stellar characteristics',
+            detail: 'Where available, mass, radius, temperature, and luminosity add depth to the pricing signature.',
+        },
+        {
+            label: 'Data confidence',
+            value: missingMetrics === 0 ? 'Complete signature' : missingMetrics <= 2 ? 'Strong signature' : 'Developing signature',
+            detail: missingMetrics === 0
+                ? 'The current catalogue snapshot includes the full set of core pricing inputs.'
+                : `${missingMetrics} supporting input${missingMetrics === 1 ? '' : 's'} remain unavailable, so the price leans more heavily on the confirmed record.`,
+        },
+    ];
+};
+
+const buildPriceRefreshLabel = (star, status) => {
+    if (star?.model_value_last_calculated_at) {
+        return `Refreshed ${new Date(star.model_value_last_calculated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+    if (status === 'loading') {
+        return 'Refreshing price signature...';
+    }
+    if (star?.valuation_eligible) {
+        return 'Awaiting the next catalogue refresh';
+    }
+    return 'Built from the best available catalogue record';
 };
 
 const instrumentShellStyle = {
@@ -816,7 +901,7 @@ const ObservatoryBackdrop = ({ starLayout, hoveredInstrument }) => {
 const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { isAuthenticated, isLoadingUser, user } = useAuth();
+    const { isAuthenticated, isLoadingUser } = useAuth();
     const [viewportSize, setViewportSize] = useState(() => ({
         width: typeof window !== 'undefined' ? window.innerWidth : 1720,
         height: typeof window !== 'undefined' ? window.innerHeight : 980,
@@ -833,7 +918,6 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-    const [isResaleCheckoutOpen, setIsResaleCheckoutOpen] = useState(false);
     const [starDetail, setStarDetail] = useState(star);
     const [starDetailStatus, setStarDetailStatus] = useState('idle');
     const [layoutEditMode, setLayoutEditMode] = useState(false);
@@ -875,7 +959,6 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         []
     );
     const activeStar = starDetail || star;
-    const valuationHistory = activeStar.valuation_history || [];
     const spectralDisplay = useMemo(() => getSpectralDisplay(activeStar), [activeStar]);
     const gaiaIdentifier = useMemo(() => getGaiaIdentifier(activeStar), [activeStar]);
     const spectralBand = useMemo(() => getSpectralBandKey(activeStar, spectralDisplay), [activeStar, spectralDisplay]);
@@ -891,6 +974,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         () => getPercentileSubtitle(activeStar, 'mass_outlier'),
         [activeStar]
     );
+    const priceSignatureFactors = useMemo(() => buildPriceSignatureFactors(activeStar), [activeStar]);
+    const priceRefreshLabel = useMemo(() => buildPriceRefreshLabel(activeStar, starDetailStatus), [activeStar, starDetailStatus]);
     const isPortraitLayout = viewportSize.width < viewportSize.height;
     const isLandscapeLayout = viewportSize.width >= 1180;
     const usesObservatoryModal = isPortraitLayout || !isLandscapeLayout;
@@ -1222,7 +1307,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         const loadCheckoutOptions = async () => {
             setCheckoutOptionsStatus('loading');
             try {
-                const response = await fetchCheckoutOptions(selectedCountryCode);
+                const response = await fetchCheckoutOptions(selectedCountryCode, star.id);
                 const nextOptions = response.options || [];
                 const nextCountryCode = response.country_code || selectedCountryCode;
                 const nextSupportedCountries = Array.from(new Set([nextCountryCode, ...(response.supported_countries || [])]));
@@ -1236,8 +1321,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                 setSelectedCountryCode(nextCountryCode);
                 setShowCountrySelector(!detectedCountryCode || !nextSupportedCountries.includes(detectedCountryCode));
                 setPricingCurrency(response.currency || 'gbp');
-                setNamedStarPrice(response.named_star_price || 0);
-                setUnnamedStarPrice(response.unnamed_star_price || 0);
+                setStarPrice(response.star_price || 0);
                 setSupportedCountries(nextSupportedCountries);
                 setError(null);
                 setCheckoutOptionsStatus('ready');
@@ -1248,18 +1332,17 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         };
 
         loadCheckoutOptions();
-    }, [selectedCountryCode]);
+    }, [detectedCountryCode, selectedCountryCode, star.id]);
 
     const [pricingCurrency, setPricingCurrency] = useState('gbp');
-    const [namedStarPrice, setNamedStarPrice] = useState(parseFloat(star.price));
-    const [unnamedStarPrice, setUnnamedStarPrice] = useState(parseFloat(star.price));
+    const [starPrice, setStarPrice] = useState(parseFloat(star.price));
     const [supportedCountries, setSupportedCountries] = useState([]);
 
     const selectedCertificateOption = useMemo(
         () => checkoutOptions.find((option) => option.code === certificateType) || checkoutOptions[0] || null,
         [certificateType, checkoutOptions]
     );
-    const basePrice = activeStar.common_name ? namedStarPrice : unnamedStarPrice;
+    const basePrice = starPrice;
     const certificatePrice = selectedCertificateOption?.price || 0;
     const shippingPrice = selectedCertificateOption?.shipping_amount || 0;
     const total = basePrice + certificatePrice + shippingPrice;
@@ -1319,42 +1402,6 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const handleCheckoutError = useCallback((message) => {
         setError(message);
         setIsCheckoutOpen(false);
-    }, []);
-
-    const handleResalePurchase = () => {
-        if (!isAuthenticated) {
-            navigate(`/auth?next=${encodeURIComponent(location.pathname)}`);
-            return;
-        }
-        setError(null);
-        setIsResaleCheckoutOpen(true);
-    };
-
-    const createResaleStripeSession = useCallback(async () => {
-        const listingId = activeStar.active_resale_listing?.id;
-        if (!listingId) {
-            throw new Error('This resale listing is no longer available.');
-        }
-        setProcessing(true);
-        try {
-            return await createResaleCheckoutSession(listingId);
-        } finally {
-            setProcessing(false);
-        }
-    }, [activeStar.active_resale_listing?.id]);
-
-    const handleResaleCheckoutComplete = useCallback((sessionId) => {
-        if (!sessionId) {
-            setError('Stripe returned without a resale checkout session identifier.');
-            return;
-        }
-
-        navigate(`/resale/complete?session_id=${encodeURIComponent(sessionId)}`);
-    }, [navigate]);
-
-    const handleResaleCheckoutError = useCallback((message) => {
-        setError(message);
-        setIsResaleCheckoutOpen(false);
     }, []);
 
     const handleOpenObservatoryModal = useCallback(() => {
@@ -1582,14 +1629,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                     {activeStar.owner_name}
                                 </div>
                                 <div style={{ color: '#b7c6b8', lineHeight: 1.65, fontSize: '0.94rem', marginBottom: '14px' }}>
-                                    This star is already claimed and recorded in the Aster Atlas registry.
+                                    This star is already registered and recorded in the Aster Atlas registry.
                                 </div>
                                 <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap', color: '#9aa89a', fontSize: '0.9rem' }}>
                                     <div>
                                         <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
                                             Registry State
                                         </span>
-                                        Claimed and visible in account records
+                                        Registered and preserved in account records
                                     </div>
                                     {activeStar.purchase_date ? (
                                         <div>
@@ -1625,97 +1672,6 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             </div>
                         )}
 
-                        {activeStar.is_bought && activeStar.active_resale_listing ? (
-                            <div
-                                style={{
-                                    background: 'linear-gradient(135deg, rgba(255,126,43,0.16), rgba(18,18,24,0.9))',
-                                    border: '1px solid rgba(255,126,43,0.26)',
-                                    borderRadius: scalePx(22),
-                                    padding: scalePx(24),
-                                    marginBottom: scalePx(24),
-                                    color: 'white',
-                                }}
-                            >
-                                <div style={{ color: '#ffb08a', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px', fontWeight: 'bold' }}>
-                                    Listed for Resale
-                                </div>
-                                <div style={{ fontSize: '1.85rem', fontFamily: 'serif', marginBottom: '10px' }}>
-                                    {formatMoney(activeStar.active_resale_listing.price, activeStar.active_resale_listing.currency)}
-                                </div>
-                                <p style={{ color: '#f0c2af', lineHeight: 1.65, fontSize: '0.97rem', marginBottom: '18px' }}>
-                                    Buy this registered star from its current owner. The ownership record transfers only after Stripe confirms the resale payment.
-                                </p>
-
-                                {error ? (
-                                    <div style={{ color: '#ffb3a3', marginBottom: '15px', padding: '10px', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>
-                                        {error}
-                                    </div>
-                                ) : null}
-
-                                {user?.id === activeStar.active_resale_listing.seller_user_id ? (
-                                    <p style={{ color: '#b7c6b8', lineHeight: 1.6 }}>
-                                        This is your active listing. Manage it from your ownership page.
-                                    </p>
-                                ) : !isResaleCheckoutOpen ? (
-                                    <button
-                                        type="button"
-                                        onClick={handleResalePurchase}
-                                        disabled={processing || isLoadingUser}
-                                        style={{
-                                            width: '100%',
-                                            padding: '18px',
-                                            background: 'var(--primary)',
-                                            color: 'white',
-                                            fontSize: '1.05rem',
-                                            fontWeight: 'bold',
-                                            textTransform: 'uppercase',
-                                            borderRadius: '12px',
-                                            border: 'none',
-                                            cursor: processing || isLoadingUser ? 'not-allowed' : 'pointer',
-                                            display: 'flex',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            gap: '10px',
-                                            opacity: processing || isLoadingUser ? 0.7 : 1,
-                                            boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
-                                        }}
-                                    >
-                                        {processing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
-                                        {processing ? 'Starting Stripe Checkout...' : isAuthenticated ? 'Buy Resale Star' : 'Sign In To Buy'}
-                                    </button>
-                                ) : (
-                                    <div style={{ display: 'grid', gap: '18px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                            <div>
-                                                <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Secure resale payment</div>
-                                                <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete this peer-to-peer transfer using Stripe test checkout.</div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsResaleCheckoutOpen(false)}
-                                                style={{
-                                                    padding: '10px 16px',
-                                                    borderRadius: '999px',
-                                                    background: 'rgba(255,255,255,0.06)',
-                                                    border: '1px solid rgba(255,255,255,0.1)',
-                                                    color: 'white',
-                                                }}
-                                            >
-                                                Close
-                                            </button>
-                                        </div>
-                                        <div style={{ background: '#ffffff', borderRadius: '18px', overflow: 'hidden', padding: '8px' }}>
-                                            <EmbeddedStripeCheckout
-                                                createSession={createResaleStripeSession}
-                                                onComplete={handleResaleCheckoutComplete}
-                                                onError={handleResaleCheckoutError}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
-
                         <div
                             style={{
                                 background: 'rgba(18, 18, 24, 0.86)',
@@ -1728,30 +1684,76 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '18px' }}>
                                 <div>
                                     <div style={{ color: '#ff8a4d', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>
-                                        Valuation
+                                        Celestial Price Signature
                                     </div>
                                     <div style={{ color: 'white', fontSize: '1.45rem', fontWeight: 'bold' }}>
-                                        Single-line house value model
+                                        Today&apos;s Aster Atlas registration price
                                     </div>
                                 </div>
-                                <div style={{ color: '#8f8f99', fontSize: '0.88rem', textAlign: 'right' }}>
-                                    {activeStar.model_value_last_calculated_at
-                                        ? `Updated ${new Date(activeStar.model_value_last_calculated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
-                                        : starDetailStatus === 'loading'
-                                            ? 'Loading valuation data...'
-                                            : activeStar.valuation_eligible
-                                                ? 'Awaiting next daily snapshot'
-                                                : 'Valuation unavailable'}
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ color: '#8f8f99', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                        Today&apos;s Price
+                                    </div>
+                                    <div style={{ color: 'white', fontSize: '1.95rem', fontWeight: 'bold', marginBottom: '6px' }}>
+                                        {formatMoney(basePrice, pricingCurrency)}
+                                    </div>
+                                    <div style={{ color: '#8f8f99', fontSize: '0.88rem' }}>
+                                        {priceRefreshLabel}
+                                    </div>
                                 </div>
                             </div>
 
-                            <StarValueChart points={valuationHistory} currencyFormatter={formatSterling} />
+                            <p style={{ color: '#b8b8c4', lineHeight: 1.7, fontSize: '0.96rem', margin: '0 0 18px 0' }}>
+                                Each star receives a daily Aster Atlas price signature drawn from its astronomical profile. We use the same underlying model across the catalogue, then present the result as today&apos;s registration price for this star.
+                            </p>
 
-                            {activeStar.last_sale_price || activeStar.last_sale_at ? (
-                                <div style={{ color: '#8f8f99', fontSize: '0.9rem', marginTop: '14px' }}>
-                                    Last sale: {formatMarketValue(activeStar.last_sale_price)}{activeStar.last_sale_at ? ` on ${new Date(activeStar.last_sale_at).toLocaleDateString('en-GB')}` : ''}
-                                </div>
-                            ) : null}
+                            <div
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                    gap: '12px',
+                                    marginBottom: '16px',
+                                }}
+                            >
+                                {priceSignatureFactors.map((factor) => (
+                                    <div
+                                        key={factor.label}
+                                        style={{
+                                            borderRadius: scalePx(18),
+                                            padding: scalePx(18),
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
+                                        }}
+                                    >
+                                        <div style={{ color: '#ffb08a', fontSize: '0.76rem', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>
+                                            {factor.label}
+                                        </div>
+                                        <div style={{ color: 'white', fontSize: '1rem', fontWeight: 'bold', lineHeight: 1.45, marginBottom: '8px' }}>
+                                            {factor.value}
+                                        </div>
+                                        <div style={{ color: '#9ea0af', fontSize: '0.88rem', lineHeight: 1.65 }}>
+                                            {factor.detail}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    gap: '16px',
+                                    flexWrap: 'wrap',
+                                    paddingTop: '14px',
+                                    borderTop: '1px solid rgba(255,255,255,0.08)',
+                                    color: '#8f8f99',
+                                    fontSize: '0.88rem',
+                                    lineHeight: 1.6,
+                                }}
+                            >
+                                <span>This figure is the Aster Atlas registration price for today, designed to feel considered, transparent, and gift-worthy.</span>
+                                <span>Certificate and delivery options are added separately at checkout.</span>
+                            </div>
                         </div>
 
                     {activeStar.is_bought ? null : (
@@ -1765,7 +1767,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             }}
                         >
                             <h2 style={{ fontSize: '1.5rem', margin: '0 0 20px 0', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' }}>
-                                Claim This Star
+                                Register This Star
                             </h2>
 
                             {error && (

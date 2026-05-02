@@ -14,7 +14,7 @@ const VIEW_MODE = {
     MAP: 'MAP',
     TRANSITION: 'TRANSITION',
     DISPLAY: 'DISPLAY',
-    GRID: 'GRID' // New mode for the "Buy a Star" marketplace
+    GRID: 'GRID'
 };
 
 const slugifyStarName = (value) => (

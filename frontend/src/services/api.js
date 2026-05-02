@@ -77,7 +77,7 @@ export async function fetchStarCatalogue({
     page = 1,
     pageSize = 24,
     search = "",
-    status = "unclaimed",
+    status = "all",
     colour = "all",
     constellation = "all",
     starType = "all",
@@ -149,11 +149,33 @@ export async function createCheckoutSession({
     });
 }
 
-export async function fetchCheckoutOptions(countryCode) {
+export async function fetchCheckoutOptions(countryCode, starId = null) {
     const params = new URLSearchParams({
         country_code: countryCode,
+        ...(starId ? { star_id: starId.toString() } : {}),
     });
-    return apiRequest(`/checkout/options?${params.toString()}`);
+    const response = await apiRequest(`/checkout/options?${params.toString()}`);
+
+    if (typeof response?.star_price === 'number') {
+        return response;
+    }
+
+    const fallbackStarPrice = typeof response?.named_star_price === 'number'
+        ? response.named_star_price
+        : typeof response?.unnamed_star_price === 'number'
+            ? response.unnamed_star_price
+            : 0;
+    const fallbackMinorUnits = typeof response?.named_star_price_minor_units === 'number'
+        ? response.named_star_price_minor_units
+        : typeof response?.unnamed_star_price_minor_units === 'number'
+            ? response.unnamed_star_price_minor_units
+            : Math.round(fallbackStarPrice * 100);
+
+    return {
+        ...response,
+        star_price: fallbackStarPrice,
+        star_price_minor_units: fallbackMinorUnits,
+    };
 }
 
 export async function fetchCheckoutSessionStatus(sessionId) {
@@ -170,70 +192,4 @@ export async function fetchAccountOverview() {
 
 export async function fetchAccountOrder(transactionId) {
     return apiRequest(`/account/orders/${transactionId}`);
-}
-
-export async function updateOwnedStarPrice(starId, askPrice) {
-    return apiRequest(`/account/stars/${starId}/price`, {
-        method: 'PATCH',
-        body: {
-            ask_price: askPrice,
-        },
-    });
-}
-
-export async function fetchSellerStatus() {
-    return apiRequest('/resale/seller/status');
-}
-
-export async function createSellerOnboardingLink() {
-    return apiRequest('/resale/seller/onboarding-link', {
-        method: 'POST',
-    });
-}
-
-export async function createSellerDashboardLink() {
-    return apiRequest('/resale/seller/dashboard-link', {
-        method: 'POST',
-    });
-}
-
-export async function createResaleListing({ starId, price, currency = 'gbp' }) {
-    return apiRequest('/resale/listings', {
-        method: 'POST',
-        body: {
-            star_id: starId,
-            price,
-            currency,
-        },
-    });
-}
-
-export async function cancelResaleListing(listingId) {
-    return apiRequest(`/resale/listings/${listingId}`, {
-        method: 'DELETE',
-    });
-}
-
-export async function createResaleCheckoutSession(listingId) {
-    return apiRequest(`/resale/listings/${listingId}/checkout`, {
-        method: 'POST',
-    });
-}
-
-export async function fetchResaleCheckoutSessionStatus(sessionId) {
-    return apiRequest(`/resale/session-status?session_id=${encodeURIComponent(sessionId)}`);
-}
-
-export async function fetchSellerBalance() {
-    return apiRequest('/resale/balance');
-}
-
-export async function withdrawSellerBalance({ amount, currency = 'gbp' }) {
-    return apiRequest('/resale/withdraw', {
-        method: 'POST',
-        body: {
-            amount,
-            currency,
-        },
-    });
 }

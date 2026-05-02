@@ -9,25 +9,13 @@ class AccountStarSummary(BaseModel):
     scientific_name: str
     owner_name: str | None = None
     category: str
+    price: float | None = None
     constellation: str | None = None
     distance_ly: float
     spectral_type: str | None = None
     purchase_date: datetime | None = None
     registration_number: str | None = None
-    ask_price: float | None = None
-    model_value: float | None = None
     is_current_owner: bool = True
-    active_resale_listing: dict | None = None
-
-
-class AccountStarPriceUpdateRequest(BaseModel):
-    ask_price: float | None = None
-
-
-class AccountStarPriceUpdateResponse(BaseModel):
-    star_id: int
-    ask_price: float | None = None
-    model_value: float | None = None
 
 
 class AccountOrderSummary(BaseModel):

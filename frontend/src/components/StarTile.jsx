@@ -127,10 +127,10 @@ const formatDistance = (distance) =>
 const formatPrice = (price) => {
     const numericPrice = Number(price);
     if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
-        return 'Predicted price unavailable';
+        return 'Aster Atlas price unavailable';
     }
 
-    return `Predicted ${new Intl.NumberFormat(undefined, {
+    return `Today's Aster Atlas price ${new Intl.NumberFormat(undefined, {
         style: 'currency',
         currency: 'GBP',
         maximumFractionDigits: numericPrice < 100 ? 2 : 0,
@@ -214,7 +214,7 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                     )}
                 </div>
 
-                <div style={statusPill(isClaimed, scale)}>{isClaimed ? 'Claimed' : 'Unclaimed'}</div>
+                <div style={statusPill(isClaimed, scale)}>{isClaimed ? 'Owned' : 'Available'}</div>
             </div>
 
                 <div style={{ display: 'grid', gap: `${Math.round(7 * scale)}px`, color: '#b6b6be' }}>
@@ -242,7 +242,7 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                         lineHeight: 1.5,
                     }}
                 >
-                    <strong style={{ color: '#d9d9df', fontWeight: 600 }}>Owner</strong>
+                    <strong style={{ color: '#d9d9df', fontWeight: 600 }}>Owned by</strong>
                     <div>{star.owner_name || 'Recorded owner'}</div>
                 </div>
             ) : (

@@ -341,7 +341,7 @@ const BuyAStarGrid = ({ onSelectStar }) => {
             page: page + 1,
             pageSize: LIMIT,
             search: debouncedSearchTerm,
-            status: 'unclaimed',
+            status: 'all',
             colour: colorFilter,
             constellation: constellationFilter,
             starType: typeFilter,
@@ -479,7 +479,7 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                 </div>
 
                 <RangeFilter
-                    title="Predicted price range"
+                    title="Aster Atlas price range"
                     min={minPriceCap}
                     max={maxPriceCap}
                     values={priceRange}
@@ -508,8 +508,8 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                         <option style={optionStyle} value="apparent-dimmest">Apparent brightness: lowest first</option>
                         <option style={optionStyle} value="absolute-brightest">Absolute brightness: highest first</option>
                         <option style={optionStyle} value="absolute-dimmest">Absolute brightness: lowest first</option>
-                        <option style={optionStyle} value="price-low">Predicted price: low to high</option>
-                        <option style={optionStyle} value="price-high">Predicted price: high to low</option>
+                        <option style={optionStyle} value="price-low">Aster Atlas price: low to high</option>
+                        <option style={optionStyle} value="price-high">Aster Atlas price: high to low</option>
                     </select>
                 </div>
 

@@ -1,26 +1,7 @@
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
-
-
-class StarValuationHistoryPointRead(BaseModel):
-    valuation_date: date
-    model_value: float
-    energy_price: Optional[float] = None
-    metals_price: Optional[float] = None
-    energy_change_ratio: Optional[float] = None
-    metals_change_ratio: Optional[float] = None
-
-
-class StarResaleListingRead(BaseModel):
-    id: int
-    price: float
-    currency: str
-    seller_user_id: int
-    status: str
-    created_at: Optional[datetime] = None
-
 
 class StarBase(BaseModel):
     scientific_name: str
@@ -35,10 +16,6 @@ class StarBase(BaseModel):
     price: float
     first_purchase_price: float
     model_value: Optional[float] = None
-    ask_price: Optional[float] = None
-    highest_bid: Optional[float] = None
-    last_sale_price: Optional[float] = None
-    last_sale_at: Optional[datetime] = None
     distance_ly: float
     is_bought: bool = False
     owner_name: Optional[str] = None
@@ -83,7 +60,6 @@ class StarBase(BaseModel):
     valuation_scores: Optional[dict[str, Any]] = None
     valuation_debug: Optional[dict[str, Any]] = None
     current_owner_user_id: Optional[int] = None
-    active_resale_listing: Optional[StarResaleListingRead] = None
 
 
 class StarListRead(StarBase):
@@ -125,7 +101,6 @@ class StarDetailRead(StarListRead):
     age_flame: Optional[float] = None
     evolstage_flame: Optional[float] = None
     classprob_dsc_combmod_binarystar: Optional[float] = None
-    valuation_history: list[StarValuationHistoryPointRead] = []
 
 
 class StarPurchaseRequest(BaseModel):

@@ -192,7 +192,8 @@ def pricing_quote_for_country(country_code: str) -> PricingQuote:
 
 def star_price_for_country(star: Star, country_code: str) -> MoneyAmount:
     quote = pricing_quote_for_country(country_code)
-    return quote.named_star_price if is_named_star(star) else quote.unnamed_star_price
+    gbp_price_minor_units = int(((star.model_value or star.issue_price or star.price) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return convert_from_gbp(gbp_price_minor_units, quote.currency)
 
 
 def certificate_price_for_country(certificate_type: str, country_code: str) -> MoneyAmount:

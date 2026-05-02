@@ -1,4 +1,21 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost']);
+
+function resolveApiBaseUrl() {
+    const configuredBaseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
+
+    try {
+        const currentHost = window.location.hostname;
+        const parsedUrl = new URL(configuredBaseUrl);
+        if (LOOPBACK_HOSTS.has(currentHost) && LOOPBACK_HOSTS.has(parsedUrl.hostname) && currentHost !== parsedUrl.hostname) {
+            parsedUrl.hostname = currentHost;
+        }
+        return parsedUrl.toString().replace(/\/$/, '');
+    } catch {
+        return configuredBaseUrl.replace(/\/$/, '');
+    }
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export async function apiRequest(path, options = {}) {
     const { body, headers, credentials = 'include', ...rest } = options;

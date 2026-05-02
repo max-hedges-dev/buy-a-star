@@ -167,7 +167,7 @@ async def create_embedded_checkout_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Star not found.")
 
     if star.is_bought:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This star has already been claimed.")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This star has already been registered.")
 
     option = get_certificate_option(certificate_type)
     normalized_country = normalize_country_code(country_code)

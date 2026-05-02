@@ -1,23 +1,26 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_current_user
 from app.db.session import get_db
 from app.models.star import Star
-from app.models.resale import ResaleListing
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.account import (
     AccountOrderDetail,
     AccountOrderSummary,
     AccountOverviewResponse,
-    AccountStarPriceUpdateRequest,
-    AccountStarPriceUpdateResponse,
     AccountStarSummary,
 )
 from app.services.certificate_options import certificate_label
+
+
+def _current_star_price(star: Star) -> float:
+    for candidate in (star.model_value, star.issue_price, star.price):
+        if candidate is not None:
+            return float(candidate)
+    return 0.0
 
 router = APIRouter()
 
@@ -26,34 +29,20 @@ def _star_display_name(star: Star) -> str:
     return star.common_name or star.display_name or star.scientific_name
 
 
-def _listing_payload(listing: ResaleListing | None) -> dict | None:
-    if listing is None:
-        return None
-    return {
-        "id": listing.id,
-        "price": float(listing.price),
-        "currency": listing.currency,
-        "status": listing.status,
-        "created_at": listing.created_at.isoformat() if listing.created_at else None,
-    }
-
-
-def _star_summary(star: Star, transaction: Transaction, active_listing: ResaleListing | None = None) -> AccountStarSummary:
+def _star_summary(star: Star, transaction: Transaction) -> AccountStarSummary:
     return AccountStarSummary(
         id=star.id,
         display_name=_star_display_name(star),
         scientific_name=star.scientific_name,
         owner_name=transaction.owner_name or star.owner_name,
         category=star.category,
+        price=_current_star_price(star),
         constellation=star.constellation,
         distance_ly=star.distance_ly,
         spectral_type=star.spectral_type,
         purchase_date=star.purchase_date,
         registration_number=transaction.registration_number,
-        ask_price=float(star.ask_price) if star.ask_price is not None else None,
-        model_value=float(star.model_value) if star.model_value is not None else None,
         is_current_owner=star.current_owner_user_id == transaction.user_id,
-        active_resale_listing=_listing_payload(active_listing),
     )
 
 
@@ -91,14 +80,10 @@ async def read_account_overview(
     rows = result.all()
 
     orders = [_order_summary(transaction, star) for transaction, star in rows]
+
     owned_result = await db.execute(
-        select(Star, Transaction, ResaleListing)
+        select(Star, Transaction)
         .join(Transaction, Transaction.star_id == Star.id)
-        .outerjoin(
-            ResaleListing,
-            (ResaleListing.star_id == Star.id)
-            & (ResaleListing.status.in_(["active", "checkout_pending"])),
-        )
         .where(
             Star.current_owner_user_id == current_user.id,
             Transaction.user_id == current_user.id,
@@ -108,11 +93,11 @@ async def read_account_overview(
     )
     seen_star_ids = set()
     stars = []
-    for star, transaction, listing in owned_result.all():
+    for star, transaction in owned_result.all():
         if star.id in seen_star_ids:
             continue
         seen_star_ids.add(star.id)
-        stars.append(_star_summary(star, transaction, listing))
+        stars.append(_star_summary(star, transaction))
 
     return AccountOverviewResponse(orders=orders, stars=stars)
 
@@ -124,13 +109,8 @@ async def read_account_order(
     db: AsyncSession = Depends(get_db),
 ) -> AccountOrderDetail:
     result = await db.execute(
-        select(Transaction, Star, ResaleListing)
+        select(Transaction, Star)
         .join(Star, Star.id == Transaction.star_id)
-        .outerjoin(
-            ResaleListing,
-            (ResaleListing.star_id == Star.id)
-            & (ResaleListing.status.in_(["active", "checkout_pending"])),
-        )
         .where(Transaction.id == transaction_id, Transaction.user_id == current_user.id)
     )
     row = result.first()
@@ -138,54 +118,10 @@ async def read_account_order(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
 
-    transaction, star, listing = row
+    transaction, star = row
     summary = _order_summary(transaction, star)
-    summary.star.active_resale_listing = _listing_payload(listing)
-    summary.star.is_current_owner = star.current_owner_user_id == current_user.id
 
     return AccountOrderDetail(
         **summary.model_dump(),
         certificate_available=transaction.includes_certificate and transaction.status == "fulfilled",
-    )
-
-
-@router.patch("/stars/{star_id}/price", response_model=AccountStarPriceUpdateResponse)
-async def update_owned_star_price(
-    star_id: int,
-    payload: AccountStarPriceUpdateRequest,
-    current_user: User = Depends(require_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> AccountStarPriceUpdateResponse:
-    result = await db.execute(
-        select(Transaction, Star)
-        .join(Star, Star.id == Transaction.star_id)
-        .where(
-            Star.id == star_id,
-            Transaction.user_id == current_user.id,
-            Transaction.status == "fulfilled",
-            Star.current_owner_user_id == current_user.id,
-        )
-        .order_by(Transaction.fulfilled_at.desc().nullslast(), Transaction.id.desc())
-    )
-    row = result.first()
-
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owned star not found.")
-
-    _, star = row
-    ask_price = payload.ask_price
-    if ask_price is not None:
-        if ask_price <= 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner price must be greater than zero.")
-        star.ask_price = Decimal(str(ask_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    else:
-        star.ask_price = None
-
-    await db.commit()
-    await db.refresh(star)
-
-    return AccountStarPriceUpdateResponse(
-        star_id=star.id,
-        ask_price=float(star.ask_price) if star.ask_price is not None else None,
-        model_value=float(star.model_value) if star.model_value is not None else None,
     )

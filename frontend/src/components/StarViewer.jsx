@@ -69,6 +69,18 @@ const OBSERVATORY_MODULE_HEIGHTS = {
     age: 118,
 };
 
+const inputStyle = {
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    padding: '15px',
+    borderRadius: '10px',
+    border: '1px solid rgba(245,239,226,0.14)',
+    background: 'rgba(7,10,17,0.76)',
+    color: 'white',
+    fontSize: '1rem',
+};
+
 const sanitizeObservatoryLayout = (value, defaultsMap = DEFAULT_OBSERVATORY_LAYOUT) => {
     const next = {};
 
@@ -907,7 +919,12 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         height: typeof window !== 'undefined' ? window.innerHeight : 980,
     }));
     const detectedCountryCode = useMemo(() => detectCountryCode(), []);
+    const [registrationType, setRegistrationType] = useState('self');
     const [ownerName, setOwnerName] = useState('');
+    const [recipientName, setRecipientName] = useState('');
+    const [recipientEmail, setRecipientEmail] = useState('');
+    const [dedication, setDedication] = useState('');
+    const [giftMessage, setGiftMessage] = useState('');
     const [certificateType, setCertificateType] = useState('digital');
     const [checkoutOptions, setCheckoutOptions] = useState([]);
     const [selectedCountryCode, setSelectedCountryCode] = useState(detectedCountryCode || 'GB');
@@ -1354,7 +1371,11 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         }
 
         if (!ownerName.trim()) {
-            setError('Please enter the name for the certificate.');
+            setError('Please enter the registered display name.');
+            return;
+        }
+        if (registrationType === 'gift' && !recipientName.trim()) {
+            setError('Please enter the recipient name for this gift.');
             return;
         }
         if (!acceptedTerms) {
@@ -1379,7 +1400,12 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         try {
             return await createCheckoutSession({
                 starId: star.id,
+                registrationType,
                 ownerName,
+                recipientName,
+                recipientEmail,
+                dedication,
+                giftMessage,
                 certificateType,
                 countryCode: selectedCountryCode,
                 acceptedTerms,
@@ -1388,7 +1414,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         } finally {
             setProcessing(false);
         }
-    }, [acceptedPrivacy, acceptedTerms, certificateType, ownerName, selectedCountryCode, star.id]);
+    }, [acceptedPrivacy, acceptedTerms, certificateType, dedication, giftMessage, ownerName, recipientEmail, recipientName, registrationType, selectedCountryCode, star.id]);
 
     const handleCheckoutComplete = useCallback((sessionId) => {
         if (!sessionId) {
@@ -1623,25 +1649,25 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 }}
                             >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#9ce29c', marginBottom: '10px', fontWeight: 'bold', letterSpacing: '0.04em' }}>
-                                    <CheckCircle2 size={22} /> OWNERSHIP
+                                    <CheckCircle2 size={22} /> REGISTERED STAR
                                 </div>
                                 <div style={{ fontSize: '1.9rem', fontFamily: 'serif', marginBottom: '8px' }}>
                                     {activeStar.owner_name}
                                 </div>
                                 <div style={{ color: '#b7c6b8', lineHeight: 1.65, fontSize: '0.94rem', marginBottom: '14px' }}>
-                                    This star is already registered and recorded in the Aster Atlas registry.
+                                    This star is already registered and recorded in the Aster Atlas private registry.
                                 </div>
                                 <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap', color: '#9aa89a', fontSize: '0.9rem' }}>
                                     <div>
-                                        <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
-                                            Registry State
-                                        </span>
-                                        Registered and preserved in account records
+                                            <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
+                                                Registry State
+                                            </span>
+                                        Registered and preserved in Aster Atlas
                                     </div>
                                     {activeStar.purchase_date ? (
                                         <div>
                                             <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
-                                                Owned Since
+                                                Registered since
                                             </span>
                                             {new Date(activeStar.purchase_date).toLocaleDateString('en-GB')}
                                         </div>
@@ -1661,13 +1687,13 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 }}
                             >
                                 <div style={{ color: '#ffb08a', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px', fontWeight: 'bold' }}>
-                                    Ownership
+                                    Registration
                                 </div>
                                 <div style={{ fontSize: '1.85rem', fontFamily: 'serif', marginBottom: '8px' }}>
-                                    Be The First Owner
+                                    Create the first record
                                 </div>
                                 <div style={{ color: '#f0c2af', lineHeight: 1.65, fontSize: '0.97rem' }}>
-                                    Register this star in your name and establish the first ownership record in the registry.
+                                    Register this star inside Aster Atlas and create the first private registry record for it.
                                 </div>
                             </div>
                         )}
@@ -1684,15 +1710,15 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '18px' }}>
                                 <div>
                                     <div style={{ color: '#ff8a4d', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>
-                                        Celestial Price Signature
+                                        Registration price
                                     </div>
                                     <div style={{ color: 'white', fontSize: '1.45rem', fontWeight: 'bold' }}>
-                                        Today&apos;s Aster Atlas registration price
+                                        A considered registration price for this star
                                     </div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
                                     <div style={{ color: '#8f8f99', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '6px' }}>
-                                        Today&apos;s Price
+                                        Registration price
                                     </div>
                                     <div style={{ color: 'white', fontSize: '1.95rem', fontWeight: 'bold', marginBottom: '6px' }}>
                                         {formatMoney(basePrice, pricingCurrency)}
@@ -1704,7 +1730,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             </div>
 
                             <p style={{ color: '#b8b8c4', lineHeight: 1.7, fontSize: '0.96rem', margin: '0 0 18px 0' }}>
-                                Each star receives a daily Aster Atlas price signature drawn from its astronomical profile. We use the same underlying model across the catalogue, then present the result as today&apos;s registration price for this star.
+                                Each star receives a registration price shaped by its astronomical profile. The price remains visible, but the real focus is the lasting record, certificate, and star page you create around it.
                             </p>
 
                             <div
@@ -1752,7 +1778,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 }}
                             >
                                 <span>This figure is the Aster Atlas registration price for today, designed to feel considered, transparent, and gift-worthy.</span>
-                                <span>Certificate and delivery options are added separately at checkout.</span>
+                                <span>Certificate and delivery options are added separately during registration.</span>
                             </div>
                         </div>
 
@@ -1767,7 +1793,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                             }}
                         >
                             <h2 style={{ fontSize: '1.5rem', margin: '0 0 20px 0', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' }}>
-                                Register This Star
+                                Register this star
                             </h2>
 
                             {error && (
@@ -1806,26 +1832,113 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         </select>
                                     </>
                                 ) : null}
-                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
-                                    Name to appear on Registry
-                                </label>
-                                <input
-                                    type="text"
-                                    value={ownerName}
-                                    onChange={(e) => setOwnerName(e.target.value)}
-                                    placeholder="e.g. John Doe"
-                                    style={{
-                                        width: '100%',
-                                        maxWidth: '100%',
-                                        boxSizing: 'border-box',
-                                        padding: '15px',
-                                        borderRadius: '8px',
-                                        border: '1px solid rgba(255,255,255,0.2)',
-                                        background: 'rgba(0,0,0,0.5)',
-                                        color: 'white',
-                                        fontSize: '1rem',
-                                    }}
-                                />
+                                <div style={{ marginBottom: '18px' }}>
+                                    <div style={{ color: '#ffb08a', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '10px' }}>
+                                        Step 2 · Who is this for?
+                                    </div>
+                                    <div style={{ display: 'grid', gap: '10px' }}>
+                                        {[
+                                            { value: 'self', label: 'For myself', body: 'Attach the registration to your account as the current holder.' },
+                                            { value: 'gift', label: 'For someone else', body: 'Prepare the gift now. The recipient can view it first and claim it later.' },
+                                            { value: 'decide_later', label: 'I will decide later', body: 'Register it to your account for now and keep future gifting open.' },
+                                        ].map((option) => {
+                                            const isSelected = registrationType === option.value;
+                                            return (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => setRegistrationType(option.value)}
+                                                    style={{
+                                                        display: 'grid',
+                                                        gap: '6px',
+                                                        width: '100%',
+                                                        padding: '16px',
+                                                        borderRadius: '14px',
+                                                        border: `1px solid ${isSelected ? 'var(--border-gold)' : 'rgba(255,255,255,0.1)'}`,
+                                                        background: isSelected ? 'rgba(200,121,58,0.12)' : 'rgba(0,0,0,0.28)',
+                                                        color: 'white',
+                                                        textAlign: 'left',
+                                                    }}
+                                                >
+                                                    <strong>{option.label}</strong>
+                                                    <span style={{ color: '#b7b3ab', fontSize: '0.92rem', lineHeight: 1.6 }}>{option.body}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div style={{ color: '#ffb08a', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '10px' }}>
+                                    Step 3 · Registration details
+                                </div>
+                                <div style={{ display: 'grid', gap: '14px' }}>
+                                    {registrationType === 'gift' ? (
+                                        <>
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                    Recipient name
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={recipientName}
+                                                    onChange={(e) => setRecipientName(e.target.value)}
+                                                    placeholder="e.g. Amelia"
+                                                    style={inputStyle}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                    Recipient email (optional)
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    value={recipientEmail}
+                                                    onChange={(e) => setRecipientEmail(e.target.value)}
+                                                    placeholder="For a later claim invitation"
+                                                    style={inputStyle}
+                                                />
+                                            </div>
+                                        </>
+                                    ) : null}
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                            Registered display name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={ownerName}
+                                            onChange={(e) => setOwnerName(e.target.value)}
+                                            placeholder={registrationType === 'gift' ? 'e.g. Amelia Rose' : 'e.g. John Doe'}
+                                            style={inputStyle}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                            Dedication (optional)
+                                        </label>
+                                        <textarea
+                                            value={dedication}
+                                            onChange={(e) => setDedication(e.target.value)}
+                                            rows={3}
+                                            placeholder="A short dedication or why this star matters."
+                                            style={{ ...inputStyle, resize: 'vertical', minHeight: '108px' }}
+                                        />
+                                    </div>
+                                    {registrationType === 'gift' ? (
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                Gift message (optional)
+                                            </label>
+                                            <textarea
+                                                value={giftMessage}
+                                                onChange={(e) => setGiftMessage(e.target.value)}
+                                                rows={3}
+                                                placeholder="A note for the recipient."
+                                                style={{ ...inputStyle, resize: 'vertical', minHeight: '108px' }}
+                                            />
+                                        </div>
+                                    ) : null}
+                                </div>
                             </div>
 
                             <div style={{ marginBottom: '30px' }}>
@@ -1878,7 +1991,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
 
                             <div style={{ display: 'grid', gap: '10px', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ color: '#aaa' }}>Star registration</span>
+                                    <span style={{ color: '#aaa' }}>Registry record</span>
                                     <span style={{ color: 'white' }}>{formatMoney(basePrice, pricingCurrency)}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1892,9 +2005,18 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                     </div>
                                 ) : null}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                                    <span style={{ color: '#aaa' }}>Total Registration Fee</span>
+                                    <span style={{ color: '#aaa' }}>Total to complete registration</span>
                                     <span style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{formatMoney(total, pricingCurrency)}</span>
                                 </div>
+                            </div>
+
+                            <div className="glass-card" style={{ padding: '18px 18px', marginBottom: '20px' }}>
+                                <div className="eyebrow" style={{ marginBottom: '8px' }}>Step 4 · Preview</div>
+                                <p className="muted-copy" style={{ margin: 0 }}>
+                                    You are preparing a private Aster Atlas registry record for <strong style={{ color: 'var(--text-primary)' }}>{ownerName || 'this star'}</strong>
+                                    {registrationType === 'gift' && recipientName ? `, intended for ${recipientName}` : ''}.
+                                    {dedication ? ' The dedication will appear with the record when made public.' : ' You can return later to expand the public StarWiki page.'}
+                                </p>
                             </div>
 
                             {!isCheckoutOpen ? (
@@ -1949,15 +2071,15 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         }}
                                     >
                                         {processing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
-                                        {processing ? 'Starting Stripe Checkout...' : isAuthenticated ? 'Continue to Secure Payment' : 'Sign In To Purchase'}
+                                        {processing ? 'Starting registration...' : isAuthenticated ? 'Complete Registration' : 'Sign in to continue'}
                                     </button>
                                     {!isAuthenticated ? (
                                         <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>
-                                            You&apos;ll be redirected to sign in before completing this purchase.
+                                            You&apos;ll be redirected to sign in before saving this star to your account.
                                         </p>
                                     ) : null}
                                     <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
-                                        Secure payment via Stripe sandbox checkout. Physical certificate options collect the delivery address inside Stripe.
+                                        Secure payment via Stripe sandbox checkout. Aster Atlas remains a private registry built around real catalogued stars.
                                     </p>
                                 </>
                             ) : (
@@ -1965,7 +2087,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <div>
                                             <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Secure payment</div>
-                                            <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete your purchase below using Stripe's sandbox checkout.</div>
+                                            <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete your registration below using Stripe&apos;s sandbox checkout.</div>
                                         </div>
                                         <button
                                             type="button"
@@ -1978,7 +2100,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                                 color: 'white',
                                             }}
                                         >
-                                            Edit order
+                                            Edit registration
                                         </button>
                                     </div>
 
@@ -2169,7 +2291,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 e.currentTarget.style.boxShadow = '0 16px 36px rgba(255,77,0,0.38)';
                             }}
                         >
-                            View in Galaxy
+                            View in atlas
                         </button>
                         <div
                             style={{

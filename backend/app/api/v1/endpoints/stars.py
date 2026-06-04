@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.models.registration import Registration
 from app.models.star import Star
 from app.core.config import settings
 from app.schemas.star import (
@@ -292,6 +293,24 @@ async def _build_catalogue_facets(db: AsyncSession, status: str | None) -> StarC
 
 
 async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetailRead:
+    registration_result = await db.execute(
+        select(Registration).where(Registration.star_id == star.id).order_by(Registration.created_at.desc(), Registration.id.desc())
+    )
+    registration = registration_result.scalars().first()
+    public_registration = None
+    if registration and registration.public_page_visibility == "public":
+        public_registration = {
+            "registration_id": registration.id,
+            "registration_number": registration.registration_number,
+            "status": registration.status,
+            "registered_display_name": registration.registered_display_name,
+            "dedication": registration.dedication,
+            "is_gift": registration.is_gift,
+            "claim_status": registration.claim_status,
+            "public_page_slug": registration.public_page_slug,
+            "starwiki_url": f"/starwiki/{registration.public_page_slug}",
+        }
+
     return StarDetailRead(
         **serialize_star(star),
         phot_g_mean_mag=star.phot_g_mean_mag,
@@ -307,6 +326,7 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
         age_flame=star.age_flame,
         evolstage_flame=star.evolstage_flame,
         classprob_dsc_combmod_binarystar=star.classprob_dsc_combmod_binarystar,
+        public_registration=public_registration,
     )
 
 

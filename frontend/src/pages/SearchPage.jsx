@@ -29,7 +29,7 @@ const slugifyStarName = (value) => (
 
 const getStarSlug = (star) => slugifyStarName(star.common_name || star.display_name || star.scientific_name);
 
-const GalaxyLoadingIndicator = ({ label = 'Loading galaxy...' }) => (
+const GalaxyLoadingIndicator = ({ label = 'Loading the Atlas...' }) => (
     <div
         style={{
             position: 'absolute',
@@ -38,7 +38,10 @@ const GalaxyLoadingIndicator = ({ label = 'Loading galaxy...' }) => (
             display: 'grid',
             placeItems: 'center',
             pointerEvents: 'none',
-            background: 'radial-gradient(circle at 50% 50%, rgba(255,94,24,0.08), rgba(0,0,0,0) 34%)',
+            background: `
+                radial-gradient(circle at 50% 42%, rgba(216,168,95,0.08), transparent 18%),
+                radial-gradient(circle at 50% 50%, rgba(200,121,58,0.12), rgba(0,0,0,0) 36%)
+            `,
         }}
     >
         <style>
@@ -58,33 +61,57 @@ const GalaxyLoadingIndicator = ({ label = 'Loading galaxy...' }) => (
                 display: 'grid',
                 justifyItems: 'center',
                 gap: '18px',
-                color: 'white',
+                color: 'var(--text-color)',
                 textAlign: 'center',
-                textTransform: 'uppercase',
-                letterSpacing: '0.2em',
-                fontWeight: 800,
+                padding: '24px 28px',
             }}
         >
             <div
                 style={{
-                    width: '54px',
-                    height: '54px',
+                    width: '66px',
+                    height: '66px',
                     borderRadius: '999px',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    borderTopColor: '#ff6a00',
-                    borderRightColor: 'rgba(255,160,92,0.7)',
-                    boxShadow: '0 0 32px rgba(255,94,24,0.2), inset 0 0 18px rgba(255,255,255,0.04)',
-                    animation: 'galaxyLoadingSpin 0.9s linear infinite',
+                    border: '1px solid rgba(245,239,226,0.14)',
+                    borderTopColor: 'rgba(216,168,95,0.9)',
+                    borderRightColor: 'rgba(200,121,58,0.72)',
+                    boxShadow: '0 0 32px rgba(200,121,58,0.16), inset 0 0 18px rgba(255,255,255,0.03)',
+                    animation: 'galaxyLoadingSpin 1.2s linear infinite',
                 }}
             />
             <div
                 style={{
-                    fontSize: 'clamp(1.1rem, 2vw, 1.65rem)',
+                    color: 'var(--primary-strong)',
+                    fontSize: '0.72rem',
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    fontWeight: 700,
+                    opacity: 0.9,
+                }}
+            >
+                Aster Atlas
+            </div>
+            <div
+                style={{
+                    fontFamily: 'var(--font-serif)',
+                    fontWeight: 600,
+                    fontSize: 'clamp(1.5rem, 2.3vw, 2.2rem)',
+                    letterSpacing: '-0.02em',
                     animation: 'galaxyLoadingPulse 1.6s ease-in-out infinite',
-                    textShadow: '0 0 24px rgba(255,94,24,0.22)',
+                    textShadow: '0 0 24px rgba(216,168,95,0.12)',
                 }}
             >
                 {label}
+            </div>
+            <div
+                style={{
+                    maxWidth: '320px',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.95rem',
+                    lineHeight: 1.7,
+                    textShadow: '0 0 20px rgba(0,0,0,0.18)',
+                }}
+            >
+                Preparing the star field and registry view.
             </div>
         </div>
     </div>
@@ -121,6 +148,7 @@ const SearchPage = () => {
     const [macroFlyInMode, setMacroFlyInMode] = useState(false);
     const [galaxyBackdropReady, setGalaxyBackdropReady] = useState(false);
     const [galaxyMapReady, setGalaxyMapReady] = useState(false);
+    const [galaxyReadyFallbackTriggered, setGalaxyReadyFallbackTriggered] = useState(false);
 
     // Idle State
     const [isHoveringStar, setIsHoveringStar] = useState(false);
@@ -146,10 +174,11 @@ const SearchPage = () => {
         (viewMode === VIEW_MODE.TRANSITION && Boolean(targetStar))
     );
     const galaxySceneReady = shouldShowMapLayer && galaxyBackdropReady && galaxyMapReady;
+    const canDisplayGalaxyScene = galaxySceneReady || galaxyReadyFallbackTriggered;
     const shouldShowFullScreenLoader = !isPlainGridRoute && !selectedStar && (
         loading ||
         starRouteLoading ||
-        (shouldShowMapLayer && !galaxySceneReady)
+        (shouldShowMapLayer && !canDisplayGalaxyScene)
     );
 
     const handleGalaxyBackdropReady = useCallback(() => {
@@ -159,6 +188,24 @@ const SearchPage = () => {
     const handleGalaxyMapReady = useCallback(() => {
         setGalaxyMapReady(true);
     }, []);
+
+    useEffect(() => {
+        if (!shouldShowMapLayer) {
+            setGalaxyReadyFallbackTriggered(false);
+            return undefined;
+        }
+
+        if (galaxySceneReady) {
+            setGalaxyReadyFallbackTriggered(false);
+            return undefined;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            setGalaxyReadyFallbackTriggered(true);
+        }, 2500);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [galaxySceneReady, shouldShowMapLayer]);
 
     const loadStars = useCallback(async (term = "") => {
         setGalaxyBackdropReady(false);
@@ -495,9 +542,9 @@ const SearchPage = () => {
                 zIndex: 1,
                 // Hide Map if showing Display OR if Transitioning BACK to Map (blurring display)
                 visibility: shouldShowMapLayer ? 'visible' : 'hidden',
-                opacity: galaxySceneReady ? 1 : 0,
+                opacity: canDisplayGalaxyScene ? 1 : 0,
                 transition: 'opacity 0.32s ease',
-                pointerEvents: galaxySceneReady ? 'auto' : 'none',
+                pointerEvents: canDisplayGalaxyScene ? 'auto' : 'none',
             }}>
                 <Suspense fallback={<GalaxyLoadingIndicator />}>
                     <GalaxyMapLayer
@@ -528,7 +575,7 @@ const SearchPage = () => {
                     <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                         <input
                             type="text"
-                            placeholder="Search Milky Way..."
+                            placeholder="Search the Atlas..."
                             value={searchTerm}
                             onChange={handleSearchChange}
                             onFocus={() => { if (searchTerm.length > 1) setShowSuggestions(true); }}
@@ -567,8 +614,8 @@ const SearchPage = () => {
                     )}
 
                     {!selectedStar && (
-                        <div style={{ color: '#888', marginTop: '10px' }}>
-                            Drag to Rotate • Scroll to Zoom • Click to Explore
+                        <div style={{ color: 'var(--text-muted)', marginTop: '10px' }}>
+                            Drag to rotate · Scroll to zoom · Click a star to explore
                         </div>
                     )}
                 </div>
@@ -624,10 +671,11 @@ const SearchPage = () => {
             {/* Modals & Loading */}
             {error && <div style={{ position: 'absolute', bottom: 20, left: 20, color: 'red', zIndex: 200 }}>{error}</div>}
             {shouldShowFullScreenLoader && (
-                <GalaxyLoadingIndicator label={starSlug ? 'Loading star...' : 'Loading galaxy...'} />
+                <GalaxyLoadingIndicator label={starSlug ? 'Loading star...' : 'Loading the Atlas...'} />
             )}
         </div>
     );
 };
 
 export default SearchPage;
+

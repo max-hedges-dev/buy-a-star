@@ -5,9 +5,18 @@ from pydantic import BaseModel
 
 class AccountStarSummary(BaseModel):
     id: int
+    registration_id: int | None = None
+    transaction_id: int | None = None
+    public_page_slug: str | None = None
     display_name: str
     scientific_name: str
     owner_name: str | None = None
+    recipient_name: str | None = None
+    dedication: str | None = None
+    current_holder_label: str | None = None
+    claim_status: str | None = None
+    status: str | None = None
+    is_gift: bool = False
     category: str
     price: float | None = None
     constellation: str | None = None
@@ -20,9 +29,17 @@ class AccountStarSummary(BaseModel):
 
 class AccountOrderSummary(BaseModel):
     id: int
+    registration_id: int | None = None
+    public_page_slug: str | None = None
     registration_number: str | None = None
     status: str
     owner_name: str | None = None
+    recipient_name: str | None = None
+    dedication: str | None = None
+    gift_message: str | None = None
+    registration_type: str = "self"
+    claim_status: str | None = None
+    is_gift: bool = False
     amount: float
     currency: str
     includes_certificate: bool

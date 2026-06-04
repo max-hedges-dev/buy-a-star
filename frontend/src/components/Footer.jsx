@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import fullLogoLeftWhite from '../assets/AA Full Logo Left White.png';
 
 const headingStyle = {
-    color: '#ff9150',
-    letterSpacing: '0.14em',
+    color: 'var(--primary-strong)',
+    letterSpacing: '0.18em',
     textTransform: 'uppercase',
     fontWeight: 700,
     fontSize: 'clamp(0.72rem, 1.4vw, 0.78rem)',
@@ -18,10 +18,10 @@ const Footer = () => {
             style={{
                 position: 'relative',
                 background: `
-                    radial-gradient(circle at 50% 0%, rgba(255,96,24,0.12), transparent 30%),
-                    linear-gradient(180deg, #090909 0%, #030303 100%)
+                    radial-gradient(circle at 50% 0%, rgba(216,168,95,0.12), transparent 30%),
+                    linear-gradient(180deg, #070a11 0%, #020305 100%)
                 `,
-                borderTop: '1px solid rgba(255,255,255,0.08)',
+                borderTop: '1px solid rgba(245,239,226,0.08)',
                 padding: 'clamp(38px, 5vw, 54px) clamp(16px, 4vw, 40px) clamp(32px, 4vw, 42px)',
                 zIndex: 2,
             }}
@@ -61,7 +61,7 @@ const Footer = () => {
                     .site-footer__links {
                         display: grid;
                         gap: clamp(10px, 1.4vw, 12px);
-                        color: #d8d8dd;
+                        color: var(--text-secondary);
                         font-size: clamp(0.92rem, 1.6vw, 1rem);
                     }
 
@@ -72,18 +72,18 @@ const Footer = () => {
                     }
 
                     .site-footer__links a:hover {
-                        color: #ffffff;
+                        color: var(--text-color);
                         transform: translateX(2px);
                     }
 
                     .site-footer__bottom {
-                        border-top: 1px solid rgba(255,255,255,0.08);
+                        border-top: 1px solid rgba(245,239,226,0.08);
                         padding-top: 20px;
                         display: flex;
                         justify-content: space-between;
                         gap: 18px;
                         flex-wrap: wrap;
-                        color: #818187;
+                        color: var(--text-faint);
                         font-size: clamp(0.82rem, 1.4vw, 0.92rem);
                     }
 
@@ -131,8 +131,8 @@ const Footer = () => {
                         <div style={headingStyle}>Explore</div>
                         <div className="site-footer__links">
                             <Link to="/">Home</Link>
-                            <Link to="/buy">Buy a Star</Link>
-                            <Link to="/search">Search Galaxy</Link>
+                            <Link to="/buy">Find a Star</Link>
+                            <Link to="/search">Explore the Atlas</Link>
                             <Link to="/about">About</Link>
                             <Link to="/faq">FAQ</Link>
                         </div>

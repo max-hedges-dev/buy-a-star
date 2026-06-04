@@ -10,8 +10,8 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const navLinks = [
     { to: '/', label: 'Home' },
-    { to: '/search', label: 'Explore the Galaxy' },
-    { to: '/buy', label: 'Register a Star' },
+    { to: '/search', label: 'Explore the Atlas' },
+    { to: '/buy', label: 'Find a Star' },
     { to: '/about', label: 'About' },
     { to: '/faq', label: 'FAQ' },
 ];
@@ -72,14 +72,14 @@ const Navbar = () => {
         width: actionSize,
         height: actionSize,
         borderRadius: 999,
-        background: 'rgba(255,255,255,0.06)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        color: 'white',
+        background: 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(245,239,226,0.08)',
+        color: 'var(--text-color)',
         cursor: 'pointer',
         pointerEvents: 'auto',
     };
     const navLinkStyle = {
-        color: 'white',
+        color: 'var(--text-color)',
         cursor: 'pointer',
         pointerEvents: 'auto',
         textDecoration: 'none',
@@ -99,9 +99,9 @@ const Navbar = () => {
                     display: 'flex',
                     alignItems: 'center',
                     padding: `0 ${resolvedNavPaddingX}px`,
-                    background: isScrolled ? 'rgba(6,6,6,0.78)' : 'rgba(6,6,6,0.18)',
-                    backdropFilter: 'blur(18px)',
-                    borderBottom: isScrolled ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
+                    background: isScrolled ? 'rgba(7,10,17,0.84)' : 'rgba(7,10,17,0.28)',
+                    backdropFilter: 'blur(20px)',
+                    borderBottom: isScrolled ? '1px solid rgba(245,239,226,0.08)' : '1px solid transparent',
                     position: 'fixed',
                     top: 0,
                     left: 0,
@@ -153,7 +153,7 @@ const Navbar = () => {
                         fontSize: `${clamp(0.9 * navScale, 0.74, 0.9).toFixed(3)}rem`,
                         fontWeight: '600',
                         textTransform: 'uppercase',
-                        letterSpacing: '1px',
+                        letterSpacing: '0.12em',
                         zIndex: 1,
                     }}
                 >
@@ -207,8 +207,8 @@ const Navbar = () => {
                                     padding: `${Math.round(clamp(10 * navScale, 8, 10))}px ${Math.round(clamp(14 * navScale, 10, 14))}px`,
                                     borderRadius: 999,
                                     background: 'rgba(255,255,255,0.04)',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    color: 'white',
+                                    border: '1px solid rgba(245,239,226,0.08)',
+                                    color: 'var(--text-color)',
                                     fontSize: actionFontSize,
                                     cursor: 'pointer',
                                     pointerEvents: 'auto',
@@ -227,14 +227,15 @@ const Navbar = () => {
                             style={{
                                 padding: `${Math.round(clamp(10 * navScale, 8, 10))}px ${Math.round(clamp(16 * navScale, 10, 16))}px`,
                                 borderRadius: 999,
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.08)',
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(245,239,226,0.08)',
+                                color: 'var(--text-color)',
                                 fontSize: actionFontSize,
                                 cursor: 'pointer',
                                 pointerEvents: 'auto',
                             }}
                         >
-                            Sign In
+                            Sign in
                         </Link>
                     ) : null}
                 </div>
@@ -264,8 +265,8 @@ const Navbar = () => {
                             width: 'min(82vw, 360px)',
                             zIndex: 60,
                             padding: `${navHeight + 26}px 24px 28px`,
-                            background: 'linear-gradient(160deg, rgba(11,11,14,0.98), rgba(26,16,10,0.96))',
-                            borderLeft: '1px solid rgba(255,255,255,0.1)',
+                            background: 'linear-gradient(160deg, rgba(16,18,23,0.98), rgba(28,21,18,0.96))',
+                            borderLeft: '1px solid rgba(245,239,226,0.1)',
                             boxShadow: '-28px 0 80px rgba(0,0,0,0.48)',
                             transform: isMenuOpen ? 'translateX(0)' : 'translateX(104%)',
                             transition: 'transform 0.26s ease',
@@ -276,7 +277,7 @@ const Navbar = () => {
                     >
                         <p
                             style={{
-                                color: '#ff9c63',
+                                color: 'var(--primary-strong)',
                                 fontSize: '0.76rem',
                                 letterSpacing: '0.22em',
                                 textTransform: 'uppercase',
@@ -297,8 +298,8 @@ const Navbar = () => {
                                     padding: '16px 18px',
                                     borderRadius: 18,
                                     background: 'rgba(255,255,255,0.045)',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    color: 'white',
+                                    border: '1px solid rgba(245,239,226,0.08)',
+                                    color: 'var(--text-color)',
                                     fontSize: '0.94rem',
                                     fontWeight: 800,
                                     letterSpacing: '0.08em',

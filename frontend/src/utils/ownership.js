@@ -14,11 +14,21 @@ export const getStarDisplayName = (star) => (
 
 export const getStarSlug = (star) => slugifyStarName(getStarDisplayName(star));
 
-export const getPublicStarPath = (star) => `/search/${getStarSlug(star)}`;
+export const getPublicStarPath = (starOrRegistration) => {
+    const publicSlug = starOrRegistration?.public_page_slug || starOrRegistration?.publicRegistration?.public_page_slug;
+    if (publicSlug) {
+        return `/starwiki/${publicSlug}`;
+    }
+    return `/search/${getStarSlug(starOrRegistration?.star || starOrRegistration)}`;
+};
 
-export const getOwnedStarPath = (orderOrStar) => {
-    const transactionId = orderOrStar?.id || orderOrStar?.transaction_id;
-    const star = orderOrStar?.star || orderOrStar;
+export const getOwnedStarPath = (registrationOrOrderOrStar) => {
+    const registrationId = registrationOrOrderOrStar?.registration_id || registrationOrOrderOrStar?.id;
+    if (registrationId) {
+        return `/account/registrations/${registrationId}`;
+    }
+    const transactionId = registrationOrOrderOrStar?.id || registrationOrOrderOrStar?.transaction_id;
+    const star = registrationOrOrderOrStar?.star || registrationOrOrderOrStar;
     return `/account/stars/${transactionId}/${getStarSlug(star)}`;
 };
 
@@ -61,6 +71,12 @@ export const getDeliveryLabel = (order) => (
 );
 
 export const getVisibilityLabel = () => 'Visible in the registry when someone searches this star';
+
+export const formatClaimStatus = (value) => (
+    (value || 'not_claimable')
+        .replaceAll('_', ' ')
+        .replace(/\b\w/g, (match) => match.toUpperCase())
+);
 
 export const formatOrderStatus = (value) => (
     (value || 'pending')

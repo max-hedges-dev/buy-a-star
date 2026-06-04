@@ -141,17 +141,17 @@ const OwnedStarPage = () => {
                 <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: px(26) }}>
                     {status === 'loading' ? (
                         <section className="glass-card" style={{ padding: '40px' }}>
-                            <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Page</p>
+                            <p className="eyebrow" style={{ marginBottom: 16 }}>Star Page</p>
                             <h1 style={{ fontSize: 'clamp(2.1rem, 4vw, 3.8rem)', marginBottom: 14 }}>
-                                Loading your star ownership page
+                                Loading your star page
                             </h1>
-                            <p className="muted-copy">We&apos;re preparing the ownership details and certificate access for this registration.</p>
+                            <p className="muted-copy">We&apos;re preparing the registry details and certificate access for this registration.</p>
                         </section>
                     ) : null}
 
                     {status === 'error' ? (
                         <section className="glass-card" style={{ padding: '40px' }}>
-                            <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Page</p>
+                            <p className="eyebrow" style={{ marginBottom: 16 }}>Star Page</p>
                             <h1 style={{ fontSize: 'clamp(2.1rem, 4vw, 3.8rem)', marginBottom: 14 }}>
                                 We couldn&apos;t load that star page
                             </h1>
@@ -167,20 +167,20 @@ const OwnedStarPage = () => {
                             <section className="glass-card" style={{ padding: heroPadding }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.35fr 0.95fr', gap: px(28), alignItems: 'start' }}>
                                     <div>
-                                        <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Page</p>
+                                        <p className="eyebrow" style={{ marginBottom: 16 }}>Star Page</p>
                                         <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.4rem)', lineHeight: 0.96, marginBottom: 16 }}>
                                             {getStarDisplayName(order.star)}
                                         </h1>
                                         <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 26 }}>
-                                            This is the ownership home for your registered star. The entry is held in the name of {order.owner_name}, recorded under {order.registration_number}, and preserved inside your Aster Atlas account.
+                                            This is the ownership page for your registered star. The entry is held in the name of {order.owner_name}, recorded under {order.registration_number}, and preserved inside your Aster Atlas account.
                                         </p>
 
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 24 }}>
                                             <Link to={getPublicStarPath(order.star)} style={actionButtonStyle}>
-                                                View in Atlas
+                                                View in atlas
                                             </Link>
                                             <button type="button" className="secondary-button" style={actionStyle} onClick={handleCopyLink}>
-                                                {copied ? 'Registry Link Copied' : 'Copy Registry Link'}
+                                                {copied ? 'Star page link copied' : 'Copy star page link'}
                                             </button>
                                         </div>
 
@@ -233,7 +233,7 @@ const OwnedStarPage = () => {
                                 <div className="glass-card" style={{ padding: wideCardPadding }}>
                                     <p className="eyebrow" style={{ marginBottom: 16 }}>Certificate Access</p>
                                     <h2 style={{ fontSize: 'clamp(1.8rem, 3vw, 3rem)', marginBottom: 14 }}>
-                                        Your certificate lives with the ownership record
+                                        Your certificate lives with the registry record
                                     </h2>
                                     <p className="muted-copy" style={{ marginBottom: 26, maxWidth: 760 }}>
                                         Use this page as your registry home, then open the certificate and order record whenever you want to revisit the gift, confirm fulfilment, or share the registration.
@@ -246,7 +246,7 @@ const OwnedStarPage = () => {
                                             style={actionStyle}
                                             onClick={handleDownloadCertificate}
                                         >
-                                            {isDownloading ? 'Preparing Download...' : 'Download Certificate'}
+                                            {isDownloading ? 'Preparing download...' : 'Download certificate'}
                                         </button>
                                     </div>
 
@@ -279,26 +279,26 @@ const OwnedStarPage = () => {
                                     </section>
 
                                     <section className="glass-card" style={{ padding: cardPadding }}>
-                                        <p className="eyebrow" style={{ marginBottom: 16 }}>Aster Atlas Price</p>
+                                        <p className="eyebrow" style={{ marginBottom: 16 }}>Registration price</p>
                                         <div style={{ display: 'grid', gap: 12 }}>
-                                            <div style={{ color: 'rgba(255,255,255,0.58)' }}>Today&apos;s registration price</div>
+                                            <div style={{ color: 'rgba(255,255,255,0.58)' }}>Current registration price</div>
                                             <strong style={{ fontSize: '1.35rem' }}>
                                                 {typeof order.star.price === 'number' ? formatSterling(order.star.price) : 'Unavailable'}
                                             </strong>
                                             <p className="muted-copy" style={{ margin: 0 }}>
-                                                This is the current Aster Atlas registration price for this star, shaped by the same signature model used across the catalogue. Your ownership record preserves the amount you paid at the time of registration.
+                                                This is the current registration price shown for this star across the atlas. Your private ownership record preserves the amount you paid at the time of registration.
                                             </p>
                                         </div>
                                     </section>
 
                                     <section className="glass-card" style={{ padding: cardPadding }}>
-                                        <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Actions</p>
+                                        <p className="eyebrow" style={{ marginBottom: 16 }}>Registry actions</p>
                                         <div style={{ display: 'grid', gap: 12 }}>
                                             <Link to="/account?section=orders" className="secondary-button">
                                                 Review all orders
                                             </Link>
                                             <Link to="/account?section=stars" className="secondary-button">
-                                                Return to account hub
+                                                Return to account
                                             </Link>
                                         </div>
                                     </section>

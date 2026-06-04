@@ -80,13 +80,22 @@ async def create_session(
     if not payload.accepted_privacy:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You must accept the Privacy Notice.")
     if not payload.owner_name.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner name is required.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Registered display name is required.")
+    if payload.registration_type not in {"self", "gift", "decide_later"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid registration type.")
+    if payload.registration_type == "gift" and not (payload.recipient_name or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recipient name is required for a gift registration.")
 
     client_secret, session_id = await create_embedded_checkout_session(
         db=db,
         star_id=payload.star_id,
         user=current_user,
         owner_name=payload.owner_name,
+        registration_type=payload.registration_type,
+        recipient_name=payload.recipient_name,
+        recipient_email=payload.recipient_email,
+        dedication=payload.dedication,
+        gift_message=payload.gift_message,
         certificate_type=payload.certificate_type,
         country_code=payload.country_code,
     )
@@ -120,10 +129,16 @@ async def session_status(
         transaction_status=fulfillment.transaction_status,
         fulfilled=fulfillment.fulfilled,
         transaction_id=fulfillment.transaction_id,
+        registration_id=fulfillment.registration_id,
+        public_page_slug=fulfillment.public_page_slug,
         registration_number=fulfillment.registration_number,
         star_id=fulfillment.star_id,
         star_name=fulfillment.star_name,
         owner_name=fulfillment.owner_name,
+        registration_type=fulfillment.registration_type,
+        recipient_name=fulfillment.recipient_name,
+        claim_status=fulfillment.claim_status,
+        claim_url=fulfillment.claim_url,
         includes_certificate=fulfillment.includes_certificate,
         certificate_type=fulfillment.certificate_type,
         certificate_label=fulfillment.certificate_label,

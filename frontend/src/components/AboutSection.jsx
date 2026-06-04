@@ -7,18 +7,18 @@ const pageWidth = {
 };
 
 const eyebrowStyle = {
-    color: '#ff9150',
-    letterSpacing: '0.18em',
+    color: 'var(--primary-strong)',
+    letterSpacing: '0.2em',
     textTransform: 'uppercase',
     fontWeight: 700,
-    fontSize: '0.82rem',
+    fontSize: '0.78rem',
     marginBottom: '18px',
 };
 
 const paragraphStyle = {
-    color: '#b7b7be',
+    color: 'var(--text-secondary)',
     lineHeight: 1.9,
-    fontSize: '1.08rem',
+    fontSize: '1.06rem',
     maxWidth: '860px',
 };
 
@@ -43,11 +43,13 @@ const Section = ({ eyebrow, headline, paragraphs, sidePanel }) => (
             }}
         >
             <div>
-                <div style={eyebrowStyle}>{eyebrow}</div>
+                {eyebrow ? <div style={eyebrowStyle}>{eyebrow}</div> : null}
                 <h2
                     style={{
-                        fontSize: 'clamp(1.75rem, 3vw, 2.35rem)',
-                        lineHeight: 1.15,
+                        fontFamily: 'var(--font-serif)',
+                        fontSize: 'clamp(2rem, 3vw, 2.8rem)',
+                        lineHeight: 1,
+                        letterSpacing: '-0.02em',
                         marginBottom: '22px',
                         fontWeight: 600,
                         maxWidth: '920px',
@@ -71,16 +73,17 @@ const Section = ({ eyebrow, headline, paragraphs, sidePanel }) => (
             {sidePanel && (
                 <aside
                     style={{
-                        borderLeft: '1px solid rgba(255,255,255,0.08)',
+                        borderLeft: '1px solid rgba(245,239,226,0.08)',
                         paddingLeft: '32px',
                         minHeight: '100%',
                     }}
                 >
                     <div
                         style={{
-                            color: '#ffffff',
-                            fontSize: '1.35rem',
-                            lineHeight: 1.25,
+                            color: 'var(--text-color)',
+                            fontFamily: 'var(--font-serif)',
+                            fontSize: '1.7rem',
+                            lineHeight: 1.05,
                             marginBottom: '14px',
                             fontWeight: 600,
                         }}
@@ -89,7 +92,7 @@ const Section = ({ eyebrow, headline, paragraphs, sidePanel }) => (
                     </div>
                     <p
                         style={{
-                            color: '#b7b7be',
+                            color: 'var(--text-secondary)',
                             lineHeight: 1.8,
                             fontSize: '1rem',
                             maxWidth: '420px',
@@ -110,8 +113,9 @@ const AboutSection = () => {
             style={{
                 padding: '120px 40px 140px',
                 background: `
-                    radial-gradient(circle at 20% 10%, rgba(255,90,20,0.08), transparent 24%),
-                    linear-gradient(180deg, #090909 0%, #050505 100%)
+                    radial-gradient(circle at 20% 10%, rgba(200,121,58,0.08), transparent 24%),
+                    radial-gradient(circle at 80% 16%, rgba(93,130,184,0.08), transparent 24%),
+                    linear-gradient(180deg, #070a11 0%, #020305 100%)
                 `,
                 position: 'relative',
                 zIndex: 2,
@@ -126,68 +130,70 @@ const AboutSection = () => {
                     style={{
                         paddingBottom: '56px',
                         marginBottom: '68px',
-                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                        borderBottom: '1px solid rgba(245,239,226,0.08)',
                     }}
                 >
                     <div style={eyebrowStyle}>ABOUT ASTER ATLAS</div>
                     <h1
                         style={{
-                            fontSize: 'clamp(2.8rem, 5vw, 4.5rem)',
-                            lineHeight: 1.02,
+                            fontFamily: 'var(--font-serif)',
+                            fontSize: 'clamp(3rem, 5vw, 4.9rem)',
+                            lineHeight: 0.95,
+                            letterSpacing: '-0.02em',
                             marginBottom: '24px',
-                            textTransform: 'uppercase',
                             maxWidth: '980px',
+                            fontWeight: 600,
                         }}
                     >
-                        A PRIVATE CELESTIAL REGISTRY BUILT ON REAL STAR DATA
+                        A private celestial registry for meaningful star records.
                     </h1>
-                    <p style={{ ...paragraphStyle, fontSize: '1.14rem', marginBottom: '18px', maxWidth: '900px' }}>
-                        Aster Atlas is a private celestial registry built around real catalogued stars. It allows a star to be selected, recorded in the registry, and issued with a certificate and permanent star record inside the atlas.
+                    <p style={{ ...paragraphStyle, fontSize: '1.12rem', marginBottom: '18px', maxWidth: '900px' }}>
+                        Aster Atlas is a private celestial registry built around real catalogued stars. It helps people choose, register, and revisit a star through a lasting record, certificate, and atlas page.
                     </p>
                     <p style={{ ...paragraphStyle, maxWidth: '900px' }}>
-                        Each entry is tied to an actual astronomical source record rather than an invented listing. The purpose of Aster Atlas is not to claim scientific naming authority, but to provide a clear and lasting private registry for people who want to register a star properly.
+                        The aim is not to replace scientific naming authority. The aim is to make a selected star feel findable, personal, and properly recorded inside a private registry.
                     </p>
                 </motion.header>
 
                 <Section
                     eyebrow="DATA SOURCE"
-                    headline="Gaia Data Release 3"
+                    headline="Built on real catalogue data."
                     paragraphs={[
-                        'Aster Atlas uses modern star catalogue data as the basis for its records, with the third major data set from the European Space Agency\'s Gaia mission (Gaia DR3) forming the core reference source. That gives each registered star a real astronomical identifier and a consistent set of star details.',
-                        'The registry uses this data to identify and display the star clearly. This includes the star’s catalogue reference and key recorded properties used in the atlas and on the certificate.',
+                        'Aster Atlas uses modern star catalogue data as the basis for its records. Each registered star is tied to an astronomical source entry, giving every record a real point of reference rather than an invented listing.',
+                        'This foundation allows each star to be displayed, searched, and recorded consistently across the atlas, the certificate, and the ownership area.',
                     ]}
                     sidePanel={{
-                        title: 'Why Gaia',
-                        body: 'Gaia is the European Space Agency mission and data archive built to map the Milky Way with high-precision star positions and related measurements. Using Gaia-based data gives the registry a real astronomical foundation instead of an invented list of names.',
+                        title: 'Why Gaia matters.',
+                        body: 'Gaia is a European Space Agency mission that mapped the Milky Way with high-precision star positions and related measurements. Gaia-based data gives Aster Atlas a real astronomical foundation while the private registry layer records the chosen name, dedication, and ownership details within Aster Atlas.',
                     }}
                 />
 
                 <Section
                     eyebrow="WHY WE STARTED IT"
-                    headline="Most star registries stop at the certificate"
+                    headline="Most star gifts end at the certificate."
                     paragraphs={[
-                        'Many star-gift sites are built around a single novelty outcome: a certificate with very little structure behind it. The registry itself is often unclear, the data is thin, and the star is difficult to revisit in any meaningful way after purchase.',
-                        'Aster Atlas was founded to take a more structured approach. The idea was simple: if a star is being registered, the registry should be real in the sense that it is organised, searchable, tied to actual star data, and clearly recorded.',
-                        'That is why Aster Atlas is built around formal star records, a persistent registry, and an atlas that allows the star to be found again later.',
+                        'Many star-gift sites are built around a single novelty outcome: a certificate with very little structure behind it. The registry is often unclear, the data is thin, and the star is difficult to revisit in any meaningful way after purchase.',
+                        'Aster Atlas was founded to take a more structured approach. If a star is being registered, the record should be organised, searchable, tied to real star data, and easy to return to later.',
+                        'That is why Aster Atlas is built around formal star records, a persistent private registry, and an atlas that allows each registered star to be found again.',
                     ]}
                 />
 
                 <Section
                     eyebrow="WHAT A REGISTRATION MEANS"
-                    headline="A private record, not a scientific renaming"
+                    headline="A private record, not a scientific rename."
                     paragraphs={[
                         'Aster Atlas is a private registry. Registering a star creates a record for that star within Aster Atlas, together with the selected registration details and certificate.',
-                        'It does not replace the star’s scientific designation and it does not claim to act as an international naming authority. The scientific catalogue reference remains in place, and the Aster Atlas registration sits alongside it as a private recorded entry.',
+                        'It does not replace the star�s scientific designation and it does not claim to act as an international naming authority. The scientific catalogue reference remains in place, and the Aster Atlas registration sits alongside it as a private recorded entry.',
                     ]}
                 />
 
                 <Section
                     eyebrow="VISION"
-                    headline="A long-term registry, not a one-time novelty product"
+                    headline="A lasting atlas, not a one-time novelty product."
                     paragraphs={[
-                        'The long-term aim is to build Aster Atlas into a durable celestial registry with a large searchable catalogue, stable star records, and a presentation standard that remains consistent as the platform grows.',
-                        'Over time, that includes expanding the atlas, improving the depth of each star record, refining the certificate and ownership record, and adding more ways for registered stars to be revisited and managed inside the registry.',
-                        'The intention is straightforward: to build a star registry that is structured properly, based on real astronomical data, and recognised for the quality of its records.',
+                        'The long-term aim is to build Aster Atlas into a durable celestial registry with a searchable catalogue, stable star records, and a presentation standard that remains consistent as the platform grows.',
+                        'Over time, the atlas can support richer star pages, stronger gifting journeys, clearer ownership records, and more ways for registered stars to be revisited, shared, and understood.',
+                        'The intention is straightforward: build a star registry that is structured properly, based on real astronomical data, and recognised for the quality of its records.',
                     ]}
                 />
             </div>

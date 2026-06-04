@@ -10,7 +10,10 @@ const AuthPage = lazy(() => import('./pages/AuthPage'));
 const AccountPage = lazy(() => import('./pages/AccountPage'));
 const OrderCertificatePage = lazy(() => import('./pages/OrderCertificatePage'));
 const OwnedStarPage = lazy(() => import('./pages/OwnedStarPage'));
+const RegistrationOwnershipPage = lazy(() => import('./pages/RegistrationOwnershipPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const StarWikiPage = lazy(() => import('./pages/StarWikiPage'));
+const ClaimStarPage = lazy(() => import('./pages/ClaimStarPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const CheckoutCompletePage = lazy(() => import('./pages/CheckoutCompletePage'));
 
@@ -72,6 +75,16 @@ function App() {
                             </ProtectedRoute>
                         )}
                     />
+                    <Route
+                        path="/account/registrations/:registrationId"
+                        element={(
+                            <ProtectedRoute>
+                                <RegistrationOwnershipPage />
+                            </ProtectedRoute>
+                        )}
+                    />
+                    <Route path="/starwiki/:slug" element={<StarWikiPage />} />
+                    <Route path="/claim/:claimToken" element={<ClaimStarPage />} />
                     <Route path="/search/*" element={<SearchPage />} />
                     <Route path="/buy/*" element={<SearchPage />} />
                 </Routes>

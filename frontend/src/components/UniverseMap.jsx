@@ -562,7 +562,7 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
                         </svg>
 
                         <div style={{
-                            background: activeHoverStar.is_bought ? 'rgba(0,0,0,0.85)' : 'rgba(20,20,30,0.8)',
+                            background: activeHoverStar.is_bought ? 'rgba(16,18,23,0.9)' : 'rgba(20,20,30,0.84)',
                             backdropFilter: 'blur(5px)',
                             padding: '10px 15px',
                             borderRadius: '8px',
@@ -571,16 +571,16 @@ const UniverseMap = ({ stars, onSelectStar, targetStar, targetZoomScale = 1, vie
                             width: 'max-content',
                             boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
                         }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '2px', fontFamily: 'serif' }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '2px', fontFamily: 'var(--font-serif)' }}>
                                 {activeHoverStar.common_name || activeHoverStar.scientific_name}
                             </div>
                             {activeHoverStar.is_bought ? (
-                                <div style={{ fontSize: '0.8rem', color: '#aaa', textTransform: 'uppercase' }}>
-                                    Owned by: <span style={{ color: 'white', fontWeight: 'bold' }}>{activeHoverStar.owner_name}</span>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                                    Registered to: <span style={{ color: 'white', fontWeight: 'bold' }}>{activeHoverStar.owner_name}</span>
                                 </div>
                             ) : (
-                                <div style={{ fontSize: '0.85rem', color: '#88cc88', fontWeight: 'bold', letterSpacing: '0.5px' }}>
-                                    CLAIMABLE
+                                <div style={{ fontSize: '0.85rem', color: 'var(--primary-strong)', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                                    AVAILABLE FOR REGISTRATION
                                 </div>
                             )}
                         </div>

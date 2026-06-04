@@ -74,7 +74,7 @@ const OrderCertificatePage = () => {
                                 <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3.4rem)', marginBottom: 14 }}>
                                     Preparing your order record
                                 </h1>
-                                <p className="muted-copy">Loading the ownership, certificate, and receipt details for this registration.</p>
+                                <p className="muted-copy">Loading the star page, certificate, and receipt details for this registration.</p>
                             </>
                         ) : null}
 
@@ -98,14 +98,14 @@ const OrderCertificatePage = () => {
                                             Order record for {order.star.display_name}
                                         </h1>
                                         <p className="muted-copy" style={{ maxWidth: 760, marginBottom: 24 }}>
-                                            This page combines the certificate preview, ownership details, and purchase record for registration {order.registration_number}.
+                                            This page combines the certificate preview, registry details, and purchase record for registration {order.registration_number}.
                                         </p>
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
                                             <Link to={getOwnedStarPath(order)} className="secondary-button" style={actionStyle}>
-                                                Open Ownership Page
+                                                Open star page
                                             </Link>
                                             <Link to={getPublicStarPath(order.star)} className="secondary-button" style={actionStyle}>
-                                                View in Galaxy
+                                                View in atlas
                                             </Link>
                                         </div>
                                     </div>
@@ -157,7 +157,7 @@ const OrderCertificatePage = () => {
 
                             <div style={{ display: 'grid', gap: px(22) }}>
                                 <section className="glass-card" style={{ ...sectionCardStyle, padding: cardPadding }}>
-                                    <p className="eyebrow" style={{ marginBottom: 16 }}>Ownership Details</p>
+                                    <p className="eyebrow" style={{ marginBottom: 16 }}>Registry Details</p>
                                     <div className="profile-meta">
                                         <div>
                                             <span>Registered owner</span>

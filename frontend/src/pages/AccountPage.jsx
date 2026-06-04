@@ -21,15 +21,15 @@ import {
 const SECTION_CONFIG = [
     {
         id: 'stars',
-        label: 'My Stars',
+        label: 'My registered stars',
         title: 'Your registered stars',
-        description: 'Ownership pages, certificates, and registry details in one place.',
+        description: 'Star records, certificates, and registry details in one place.',
     },
     {
         id: 'orders',
-        label: 'Orders',
-        title: 'Orders and receipts',
-        description: 'Payment records, fulfilment progress, and certificate types.',
+        label: 'Orders & certificates',
+        title: 'Orders and certificates',
+        description: 'Payment records, fulfilment progress, and certificate details.',
     },
 ];
 
@@ -49,8 +49,8 @@ const primaryButtonStyle = {
     gap: 10,
     padding: '15px 20px',
     borderRadius: 999,
-    background: 'linear-gradient(135deg, #ff5b16 0%, #ff8b2d 100%)',
-    color: 'white',
+        background: 'var(--cta-gradient)',
+        color: '#070a11',
     fontWeight: 700,
     letterSpacing: '0.04em',
     border: '1px solid rgba(255,255,255,0.14)',
@@ -104,7 +104,7 @@ const emptyStateStyle = {
 
 const SectionButton = ({ section, isActive, onClick }) => (
     <button type="button" onClick={onClick} style={navButtonStyle(isActive)}>
-        <span className="eyebrow" style={{ color: isActive ? '#ff9f72' : 'var(--primary)' }}>{section.label}</span>
+        <span className="eyebrow" style={{ color: isActive ? 'var(--primary-strong)' : 'var(--primary-strong)' }}>{section.label}</span>
         <strong style={{ fontSize: '1rem' }}>{section.title}</strong>
         <span style={{ color: 'rgba(255,255,255,0.68)', lineHeight: 1.5 }}>{section.description}</span>
     </button>
@@ -200,9 +200,9 @@ const AccountPage = () => {
         if (!starRecords.length) {
             return (
                 <EmptyState
-                    eyebrow="My Stars"
+                    eyebrow="My registered stars"
                     title="No fulfilled stars yet"
-                    body="Fulfilled registrations become ownership pages here, ready for revisiting, sharing, and certificate access."
+                    body="This is where your star records, certificates, and registry details will appear after registration."
                     actionTo="/search"
                     actionLabel="Find a Star"
                 />
@@ -216,7 +216,7 @@ const AccountPage = () => {
                         <article key={`${star.id}-${order?.id || 'star'}`} style={{ ...recordCardStyle, padding: `${px(24)}px ${px(24)}px ${px(22)}px` }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
                                 <div>
-                                    <p className="eyebrow" style={{ marginBottom: 10 }}>Owned Star</p>
+                                    <p className="eyebrow" style={{ marginBottom: 10 }}>Registered Star</p>
                                     <h2 style={{ fontSize: '1.8rem', marginBottom: 8 }}>{getStarDisplayName(star)}</h2>
                                     <p className="muted-copy">
                                         Registered to {star.owner_name || 'Owner pending'} on {formatDate(star.purchase_date || order?.fulfilled_at || order?.created_at)}
@@ -246,7 +246,7 @@ const AccountPage = () => {
                             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                                 {order ? (
                                     <Link to={getOwnedStarPath(order)} style={primaryButtonStyle}>
-                                        Open Ownership Page
+                                        Open star page
                                     </Link>
                                 ) : null}
                                 {order ? (
@@ -256,11 +256,11 @@ const AccountPage = () => {
                                         style={actionStyle}
                                         onClick={() => handleDownloadCertificate(order)}
                                     >
-                                        {downloadingOrderId === order.id ? 'Preparing Download...' : 'Download Certificate'}
+                                        {downloadingOrderId === order.id ? 'Preparing download...' : 'Download certificate'}
                                     </button>
                                 ) : null}
                                 <Link to={getPublicStarPath(star)} className="secondary-button" style={actionStyle}>
-                                    View in Atlas
+                                    View in atlas
                                 </Link>
                             </div>
                         </article>
@@ -319,11 +319,11 @@ const AccountPage = () => {
 
                             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                                 <Link to={getOrderPath(order.id)} style={primaryButtonStyle}>
-                                    Open Order Record
+                                    Open order record
                                 </Link>
                                 {order.status === 'fulfilled' ? (
                                     <Link to={getOwnedStarPath(order)} className="secondary-button" style={actionStyle}>
-                                        Open Ownership Page
+                                        Open star page
                                     </Link>
                                 ) : null}
                             </div>
@@ -344,10 +344,10 @@ const AccountPage = () => {
                             <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
                                 <p className="eyebrow" style={{ marginBottom: 16 }}>Account</p>
                                 <h1 style={{ fontSize: 'clamp(2.5rem, 5vw, 4.6rem)', lineHeight: 0.95, marginBottom: 16 }}>
-                                    Your ownership hub
+                                    Your registered stars.
                                 </h1>
                                 <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 26 }}>
-                                    Aster Atlas should feel reassuring after purchase. This account area keeps your ownership pages, certificates, and order records front and centre.
+                                    This is where your star records, certificates, and registry details live. Return here to open ownership pages, download certificates, and revisit each star in the atlas.
                                 </p>
 
                                 <div
@@ -381,7 +381,7 @@ const AccountPage = () => {
 
                                 <div className="profile-meta">
                                     <div>
-                                        <span>Owned stars</span>
+                                        <span>Registered stars</span>
                                         <strong>{stars.length}</strong>
                                     </div>
                                     <div>
@@ -390,7 +390,7 @@ const AccountPage = () => {
                                     </div>
                                     <div>
                                         <span>Latest order</span>
-                                        <strong>{latestOrder ? formatDate(latestOrder.created_at) : 'None yet'}</strong>
+                                <strong>{latestOrder ? formatDate(latestOrder.created_at) : 'None yet'}</strong>
                                     </div>
                                 </div>
                             </aside>
@@ -401,9 +401,9 @@ const AccountPage = () => {
                         <section className="glass-card" style={{ padding: '40px' }}>
                             <p className="eyebrow" style={{ marginBottom: 16 }}>Loading</p>
                             <h2 style={{ fontSize: 'clamp(2rem, 4vw, 3.4rem)', marginBottom: 12 }}>
-                                Preparing your ownership hub
+                                Preparing your account
                             </h2>
-                            <p className="muted-copy">We&apos;re pulling together your stars, certificates, and order history now.</p>
+                            <p className="muted-copy">We&apos;re pulling together your registered stars, certificates, and order history now.</p>
                         </section>
                     ) : null}
 
@@ -411,7 +411,7 @@ const AccountPage = () => {
                         <section className="glass-card" style={{ padding: '40px' }}>
                             <p className="eyebrow" style={{ marginBottom: 16 }}>Account</p>
                             <h2 style={{ fontSize: 'clamp(2rem, 4vw, 3.4rem)', marginBottom: 12 }}>
-                                We couldn&apos;t load your ownership hub
+                                We couldn&apos;t load your account
                             </h2>
                             <p className="muted-copy" style={{ marginBottom: 22 }}>{error}</p>
                             <button type="button" className="secondary-button" style={{ width: 'fit-content', minWidth: 220 }} onClick={() => window.location.reload()}>

@@ -114,9 +114,9 @@ const statusPill = (isClaimed, scale = 1) => ({
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontWeight: 700,
-    border: `1px solid ${isClaimed ? 'rgba(255,255,255,0.12)' : 'rgba(255,126,43,0.28)'}`,
-    background: isClaimed ? 'rgba(255,255,255,0.05)' : 'rgba(255,106,0,0.12)',
-    color: isClaimed ? '#c3c3cb' : '#ff9c63',
+    border: `1px solid ${isClaimed ? 'rgba(245,239,226,0.12)' : 'rgba(216,168,95,0.28)'}`,
+    background: isClaimed ? 'rgba(255,255,255,0.05)' : 'rgba(216,168,95,0.12)',
+    color: isClaimed ? 'var(--text-secondary)' : 'var(--primary-strong)',
 });
 
 const formatDistance = (distance) =>
@@ -127,10 +127,10 @@ const formatDistance = (distance) =>
 const formatPrice = (price) => {
     const numericPrice = Number(price);
     if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
-        return 'Aster Atlas price unavailable';
+        return 'Registration price unavailable';
     }
 
-    return `Today's Aster Atlas price ${new Intl.NumberFormat(undefined, {
+    return `Registration price ${new Intl.NumberFormat(undefined, {
         style: 'currency',
         currency: 'GBP',
         maximumFractionDigits: numericPrice < 100 ? 2 : 0,
@@ -148,8 +148,8 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             style={{
-                background: 'linear-gradient(180deg, rgba(20,20,30,0.86) 0%, rgba(15,15,24,0.94) 100%)',
-                border: `1px solid ${isHovered ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
+                background: 'linear-gradient(180deg, rgba(23,26,33,0.86) 0%, rgba(16,18,23,0.94) 100%)',
+                border: `1px solid ${isHovered ? 'rgba(216,168,95,0.22)' : 'rgba(245,239,226,0.08)'}`,
                 borderRadius: `${Math.round(18 * scale)}px`,
                 padding: `${Math.round(18 * scale)}px`,
                 cursor: 'default',
@@ -191,8 +191,8 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                         style={{
                             margin: 0,
                             fontSize: `${(1.18 * scale).toFixed(3)}rem`,
-                            color: 'white',
-                            fontFamily: 'serif',
+                            color: 'var(--text-color)',
+                            fontFamily: 'var(--font-serif)',
                             lineHeight: 1.1,
                             wordBreak: 'break-word',
                         }}
@@ -202,7 +202,7 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                     {secondaryName && (
                         <div
                             style={{
-                                color: '#8e8e9c',
+                                color: 'var(--text-muted)',
                                 fontSize: `${(0.78 * scale).toFixed(3)}rem`,
                                 marginTop: `${Math.round(6 * scale)}px`,
                                 lineHeight: 1.45,
@@ -214,18 +214,18 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                     )}
                 </div>
 
-                <div style={statusPill(isClaimed, scale)}>{isClaimed ? 'Owned' : 'Available'}</div>
+                <div style={statusPill(isClaimed, scale)}>{isClaimed ? 'Registered' : 'Available'}</div>
             </div>
 
-                <div style={{ display: 'grid', gap: `${Math.round(7 * scale)}px`, color: '#b6b6be' }}>
+                <div style={{ display: 'grid', gap: `${Math.round(7 * scale)}px`, color: 'var(--text-secondary)' }}>
                     <div style={{ fontSize: `${(0.95 * scale).toFixed(3)}rem` }}>
                         {star.category}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: `${Math.round(16 * scale)}px`, color: '#9595a0', fontSize: `${(0.88 * scale).toFixed(3)}rem` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: `${Math.round(16 * scale)}px`, color: 'var(--text-muted)', fontSize: `${(0.88 * scale).toFixed(3)}rem` }}>
                         <span>{formatDistance(star.distance_ly)} ly</span>
                         <span>{star.constellation || 'Unknown constellation'}</span>
                     </div>
-                    <div style={{ color: '#ffb287', fontSize: `${(0.9 * scale).toFixed(3)}rem`, fontWeight: 700 }}>
+                    <div style={{ color: 'var(--primary-strong)', fontSize: `${(0.9 * scale).toFixed(3)}rem`, fontWeight: 700 }}>
                         {formatPrice(star.model_value)}
                     </div>
                 </div>
@@ -238,26 +238,26 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                         borderRadius: `${Math.round(10 * scale)}px`,
                         border: '1px solid rgba(255,255,255,0.06)',
                         fontSize: `${(0.84 * scale).toFixed(3)}rem`,
-                        color: '#b0b0b8',
+                        color: 'var(--text-secondary)',
                         lineHeight: 1.5,
                     }}
                 >
-                    <strong style={{ color: '#d9d9df', fontWeight: 600 }}>Owned by</strong>
+                    <strong style={{ color: 'var(--text-color)', fontWeight: 600 }}>Registered to</strong>
                     <div>{star.owner_name || 'Recorded owner'}</div>
                 </div>
             ) : (
                 <div
                     style={{
-                        background: 'rgba(255,106,0,0.05)',
+                        background: 'rgba(216,168,95,0.05)',
                         padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
                         borderRadius: `${Math.round(10 * scale)}px`,
-                        border: '1px solid rgba(255,126,43,0.08)',
+                        border: '1px solid rgba(216,168,95,0.12)',
                         fontSize: `${(0.84 * scale).toFixed(3)}rem`,
-                        color: '#ffb287',
+                        color: 'var(--primary-strong)',
                         lineHeight: 1.5,
                     }}
                 >
-                    Available to register.
+                    Available for registration.
                 </div>
             )}
 
@@ -266,8 +266,8 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                 style={{
                     width: '100%',
                     padding: `${Math.round(11 * scale)}px ${Math.round(14 * scale)}px`,
-                    background: 'var(--primary)',
-                    color: 'white',
+                    background: 'var(--cta-gradient)',
+                    color: '#070a11',
                     border: 'none',
                     borderRadius: `${Math.round(10 * scale)}px`,
                     cursor: 'pointer',
@@ -280,7 +280,7 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                     marginTop: 'auto',
                 }}
             >
-                <Eye size={Math.round(18 * scale)} /> View
+                <Eye size={Math.round(18 * scale)} /> View star
             </button>
         </div>
     );

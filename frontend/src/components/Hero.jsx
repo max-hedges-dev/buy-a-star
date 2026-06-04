@@ -52,18 +52,18 @@ const Hero = () => {
     const heroStarSize = clamp(520 * heroStarScale, 180, 562);
     const heroStarBottomOffset = -heroStarSize * clamp(0.28 + (1 - heroStarScale) * 0.38, 0.28, 0.54);
     const heroButtonMarginBottom = clamp(132 * heroScale, 58, 150);
-    const heroTextTop = `${clamp(48 - (1 - heroScale) * 13, 36, 48)}%`;
+    const heroTextTop = `${clamp(46 - (1 - heroScale) * 13, 34, 46)}%`;
     const heroGlowScale = clamp(1 + (heroStarScale - 1) * 0.18, 0.9, 1.04);
     const heroGlowSize = `${clamp(108 * heroGlowScale, 96, 116)}vw`;
     const heroCoronaSize = clamp(780 * heroGlowScale, 620, 820);
     const heroCoronaBottomOffset = heroStarBottomOffset + (heroStarSize / 2) - (heroCoronaSize / 2);
     const heroCoronaBlur = Math.round(clamp(34 * heroGlowScale, 30, 36));
     const heroTitleScale = clamp(0.74 + heroScale * 0.26, 0.82, 1.08);
-    const heroTitleSize = `clamp(${(2.9 * heroTitleScale).toFixed(2)}rem, ${(6.1 * heroTitleScale).toFixed(2)}vw, ${(5.25 * heroTitleScale).toFixed(2)}rem)`;
-    const heroCopySize = `${clamp(1.12 * heroScale, 0.9, 1.12).toFixed(3)}rem`;
-    const heroEyebrowSize = `${clamp(0.86 * heroScale, 0.66, 0.86).toFixed(3)}rem`;
+    const heroTitleSize = `clamp(${(3.1 * heroTitleScale).toFixed(2)}rem, ${(6 * heroTitleScale).toFixed(2)}vw, ${(5.5 * heroTitleScale).toFixed(2)}rem)`;
+    const heroCopySize = `${clamp(1.08 * heroScale, 0.92, 1.08).toFixed(3)}rem`;
+    const heroEyebrowSize = `${clamp(0.82 * heroScale, 0.66, 0.82).toFixed(3)}rem`;
     const heroButtonPadding = `${Math.round(clamp(16 * heroScale, 12, 16))}px ${Math.round(clamp(34 * heroScale, 22, 34))}px`;
-    const heroButtonFontSize = `${clamp(0.95 * heroScale, 0.74, 0.95).toFixed(3)}rem`;
+    const heroButtonFontSize = `${clamp(0.92 * heroScale, 0.74, 0.92).toFixed(3)}rem`;
 
     const handlePointerMove = (event) => {
         const { innerWidth, innerHeight } = window;
@@ -81,33 +81,33 @@ const Hero = () => {
 
     const primaryButtonStyle = {
         padding: heroButtonPadding,
-        background: 'linear-gradient(45deg, #ff4d00, #ff8800)',
-        color: 'white',
+        background: 'var(--cta-gradient)',
+        color: '#070a11',
         fontWeight: '700',
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
         borderRadius: '999px',
-        boxShadow: '0 0 24px rgba(255, 77, 0, 0.35)',
-        border: '1px solid rgba(255,255,255,0.18)',
+        boxShadow: 'var(--shadow-warm)',
+        border: '1px solid rgba(245,239,226,0.12)',
         fontSize: heroButtonFontSize,
     };
 
     const secondaryButtonStyle = {
         padding: heroButtonPadding,
         background: `
-            radial-gradient(circle at 20% 30%, rgba(255,255,255,0.12) 0%, transparent 18%),
-            radial-gradient(circle at 78% 70%, rgba(255,140,60,0.08) 0%, transparent 22%),
-            linear-gradient(135deg, rgba(22,16,20,0.96) 0%, rgba(10,10,14,0.98) 55%, rgba(28,16,10,0.96) 100%)
+            radial-gradient(circle at 20% 30%, rgba(216,168,95,0.08) 0%, transparent 18%),
+            radial-gradient(circle at 78% 70%, rgba(122,92,255,0.08) 0%, transparent 22%),
+            linear-gradient(135deg, rgba(22,18,20,0.94) 0%, rgba(10,10,14,0.98) 55%, rgba(28,21,18,0.94) 100%)
         `,
-        color: 'white',
+        color: 'var(--text-color)',
         fontWeight: '700',
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
         borderRadius: '999px',
-        border: '1px solid rgba(255,255,255,0.12)',
+        border: '1px solid rgba(216,168,95,0.22)',
         fontSize: heroButtonFontSize,
         backdropFilter: 'blur(14px)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -14px 30px rgba(0,0,0,0.28), 0 14px 28px rgba(0,0,0,0.24)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 28px rgba(0,0,0,0.24)',
         position: 'relative',
         overflow: 'hidden',
     };
@@ -116,7 +116,13 @@ const Hero = () => {
         <section
             onMouseMove={handlePointerMove}
             onMouseLeave={handlePointerLeave}
-            style={{ position: 'relative', height: `${heroHeightVh}vh`, width: '100%', overflow: 'hidden' }}
+            style={{
+                position: 'relative',
+                height: `${heroHeightVh}vh`,
+                width: '100%',
+                overflow: 'hidden',
+                background: 'linear-gradient(180deg, rgba(2,3,5,0.7) 0%, rgba(2,3,5,0.94) 100%)',
+            }}
         >
             <motion.div
                 style={{
@@ -138,13 +144,26 @@ const Hero = () => {
             <div
                 style={{
                     position: 'absolute',
+                    inset: 0,
+                    background: `
+                        radial-gradient(circle at 50% 72%, rgba(200,121,58,0.16), transparent 26%),
+                        radial-gradient(circle at 18% 16%, rgba(216,168,95,0.08), transparent 22%),
+                        radial-gradient(circle at 82% 18%, rgba(93,130,184,0.08), transparent 24%)
+                    `,
+                    zIndex: 0,
+                }}
+            />
+
+            <div
+                style={{
+                    position: 'absolute',
                     zIndex: 1,
                     top: heroTextTop,
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
                     textAlign: 'center',
                     width: '100%',
-                    maxWidth: '920px',
+                    maxWidth: '960px',
                     padding: isMobile ? '0 20px' : '0 28px',
                 }}
             >
@@ -153,9 +172,9 @@ const Hero = () => {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.6 }}
                     style={{
-                        color: '#ff9c63',
+                        color: 'var(--primary-strong)',
                         fontSize: heroEyebrowSize,
-                        letterSpacing: `${clamp(0.22 * heroScale, 0.14, 0.22)}em`,
+                        letterSpacing: `${clamp(0.24 * heroScale, 0.16, 0.24)}em`,
                         textTransform: 'uppercase',
                         fontWeight: 700,
                         marginBottom: `${Math.round(clamp(22 * heroScale, 14, 22))}px`,
@@ -169,14 +188,16 @@ const Hero = () => {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.7, delay: 0.08 }}
                     style={{
+                        fontFamily: 'var(--font-serif)',
                         fontSize: heroTitleSize,
-                        fontWeight: '800',
-                        lineHeight: 0.98,
+                        fontWeight: '600',
+                        lineHeight: 0.92,
+                        letterSpacing: '-0.02em',
                         marginBottom: `${Math.round(clamp(24 * heroScale, 16, 24))}px`,
-                        color: '#ffffff',
+                        color: 'var(--text-color)',
                     }}
                 >
-                    Own a real star Forever
+                    Find a star with meaning.
                 </motion.h1>
 
                 <motion.p
@@ -185,13 +206,13 @@ const Hero = () => {
                     transition={{ delay: 0.15, duration: 0.8 }}
                     style={{
                         fontSize: heroCopySize,
-                        color: '#b5b5bc',
-                        lineHeight: isMobile ? '1.64' : isTablet ? '1.74' : '1.9',
+                        color: 'var(--text-secondary)',
+                        lineHeight: isMobile ? '1.64' : isTablet ? '1.74' : '1.86',
                         maxWidth: '760px',
                         margin: `0 auto ${Math.round(clamp(34 * heroScale, 18, 34))}px`,
                     }}
                 >
-                    Choose a real catalogued star, record it in the Aster Atlas registry, and receive a digital certificate issued straight after purchase. Each registered star and its owner can be found forever inside the galaxy.
+                    Choose a real catalogued star, give it a name or dedication, and create a lasting private record inside Aster Atlas. Built for gifts, keepsakes, and stars you want to find again.
                 </motion.p>
 
                 <div style={{ display: 'flex', justifyContent: 'center', gap: `${Math.round(clamp(16 * heroScale, 10, 16))}px`, marginTop: `${Math.round(clamp(20 * heroScale, 10, 20))}px`, flexWrap: 'wrap', marginBottom: `${heroButtonMarginBottom}px`, position: 'relative', zIndex: 3 }}>
@@ -199,13 +220,13 @@ const Hero = () => {
                         to="/buy"
                         style={primaryButtonStyle}
                     >
-                        Register a Star
+                        Find a Star
                     </Link>
                     <Link
                         to="/search"
                         style={secondaryButtonStyle}
                     >
-                        Explore the Galaxy
+                        Explore the Atlas
                     </Link>
                 </div>
             </div>
@@ -222,11 +243,9 @@ const Hero = () => {
                     pointerEvents: 'none',
                     mixBlendMode: 'screen',
                     borderRadius: '50%',
-                    background: `
-                        radial-gradient(circle at 50% 50%, rgba(255,248,214,0.62) 0%, rgba(255,202,112,0.48) 13%, rgba(255,132,34,0.26) 31%, rgba(255,89,18,0.11) 50%, rgba(255,89,18,0) 72%)
-                    `,
+                    background: 'radial-gradient(circle at 50% 50%, rgba(255,248,214,0.54) 0%, rgba(216,168,95,0.34) 14%, rgba(200,121,58,0.18) 31%, rgba(184,107,94,0.08) 50%, rgba(255,89,18,0) 72%)',
                     filter: `blur(${heroCoronaBlur}px)`,
-                    opacity: 0.74,
+                    opacity: 0.72,
                 }}
             />
 
@@ -281,8 +300,8 @@ const Hero = () => {
                     transform: 'translateX(-50%)',
                     width: heroGlowSize,
                     height: heroGlowSize,
-                    background: 'radial-gradient(circle, #ff4d00 0%, transparent 60%)',
-                    opacity: 0.2,
+                    background: 'radial-gradient(circle, rgba(200,121,58,0.9) 0%, transparent 60%)',
+                    opacity: 0.16,
                     zIndex: 0,
                     pointerEvents: 'none',
                 }}

@@ -89,7 +89,11 @@ const CheckoutCompletePage = () => {
     }, [sessionId]);
 
     const ownedStarPath = useMemo(() => (
-        checkoutData?.transaction_id && order ? getOwnedStarPath(order) : null
+        checkoutData?.registration_id
+            ? getOwnedStarPath({ registration_id: checkoutData.registration_id })
+            : checkoutData?.transaction_id && order
+                ? getOwnedStarPath(order)
+                : null
     ), [checkoutData, order]);
 
     return (
@@ -100,9 +104,9 @@ const CheckoutCompletePage = () => {
                     {status === 'loading' ? (
                         <section className="glass-card" style={{ padding: heroPadding, textAlign: 'center' }}>
                             <div style={{ width: '72px', height: '1px', margin: '0 auto 28px', background: 'rgba(255,255,255,0.78)' }} />
-                            <div className="eyebrow" style={{ marginBottom: 18 }}>Ownership Confirmation</div>
+                            <div className="eyebrow" style={{ marginBottom: 18 }}>Registration Confirmation</div>
                             <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.2rem)', marginBottom: 16 }}>
-                                Finalising your ownership record
+                                Finalising your registry record
                             </h1>
                             <p className="muted-copy" style={{ maxWidth: 680, margin: '0 auto' }}>
                                 We&apos;re confirming your payment with Stripe and issuing the registry record now.
@@ -115,34 +119,39 @@ const CheckoutCompletePage = () => {
                             <section className="glass-card" style={{ padding: heroPadding }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.25fr 0.95fr', gap: px(28), alignItems: 'start' }}>
                                     <div>
-                                        <div className="eyebrow" style={{ marginBottom: 18 }}>Ownership Confirmed</div>
+                                        <div className="eyebrow" style={{ marginBottom: 18 }}>Registration Confirmed</div>
                                         <h1 style={{ fontSize: 'clamp(2.6rem, 5.4vw, 4.8rem)', lineHeight: 0.94, marginBottom: 16 }}>
-                                            {checkoutData.star_name} now belongs to {checkoutData.owner_name}
+                                            {checkoutData.star_name} is now recorded for {checkoutData.owner_name}
                                         </h1>
                                         <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 28 }}>
-                                            Your registration is complete, the ownership record has been issued, and your certificate access is ready. This star now appears in your Aster Atlas account as a held registration.
+                                            Your registration is complete, the private registry record has been issued, and your certificate access is ready. This star now appears in your Aster Atlas account with its public StarWiki page and private ownership page.
                                         </p>
 
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
                                             {ownedStarPath ? (
                                                 <Link to={ownedStarPath} style={primaryButtonStyle}>
-                                                    Open Ownership Page
+                                                    Open star page
                                                 </Link>
                                             ) : null}
                                             {checkoutData.transaction_id ? (
                                                 <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={actionStyle}>
-                                                    Open Certificate
+                                                    Open certificate
                                                 </Link>
                                             ) : null}
-                                            <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button" style={actionStyle}>
-                                                View in Galaxy
+                                            <Link to={checkoutData.public_page_slug ? `/starwiki/${checkoutData.public_page_slug}` : (order ? getPublicStarPath(order.star) : '/search')} className="secondary-button" style={actionStyle}>
+                                                Open StarWiki page
                                             </Link>
                                         </div>
 
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
                                             <Link to="/account?section=overview" className="secondary-button" style={actionStyle}>
-                                                Go to My Account
+                                                Enter account
                                             </Link>
+                                            {checkoutData.claim_url ? (
+                                                <a href={checkoutData.claim_url} className="secondary-button" style={actionStyle}>
+                                                    Open gift claim page
+                                                </a>
+                                            ) : null}
                                             {checkoutData.transaction_id ? (
                                                 <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={actionStyle}>
                                                     View Receipt
@@ -167,7 +176,7 @@ const CheckoutCompletePage = () => {
                                         <div style={tileStyle}>
                                             <div className="eyebrow" style={{ marginBottom: 10 }}>What happens next</div>
                                             <p className="muted-copy">
-                                                Your ownership page and certificate stay available in your account. If this order includes a physical certificate, fulfilment now moves into dispatch.
+                                                Your StarWiki page and private ownership page stay available in your account. If this is a gift, the recipient can view it first and claim it later.
                                             </p>
                                         </div>
                                     </aside>
@@ -178,10 +187,10 @@ const CheckoutCompletePage = () => {
                                 <div className="glass-card" style={{ padding: `${px(34)}px ${px(36)}px` }}>
                                     <p className="eyebrow" style={{ marginBottom: 16 }}>Certificate Access</p>
                                     <h2 style={{ fontSize: 'clamp(1.9rem, 3vw, 3rem)', marginBottom: 14 }}>
-                                        Your certificate is part of the ownership record
+                                        Your certificate is part of the registry record
                                     </h2>
                                     <p className="muted-copy" style={{ marginBottom: 26, maxWidth: 760 }}>
-                                        Use the ownership page as your main home for this star, then return to the certificate and receipt whenever you need to revisit the purchase, confirm fulfilment, or share the registration.
+                                        Use the star page as your main home for this record, then return to the certificate and receipt whenever you need to revisit the purchase, confirm fulfilment, or share the registration.
                                     </p>
 
                                     {order ? (
@@ -197,10 +206,18 @@ const CheckoutCompletePage = () => {
                                         <div className="status-grid">
                                             <div className="status-tile">
                                                 <div>
-                                                    <strong>Owner name</strong>
+                                                    <strong>Registered to</strong>
                                                     <p>{checkoutData.owner_name}</p>
                                                 </div>
                                             </div>
+                                            {checkoutData.recipient_name ? (
+                                                <div className="status-tile">
+                                                    <div>
+                                                        <strong>Recipient</strong>
+                                                        <p>{checkoutData.recipient_name}</p>
+                                                    </div>
+                                                </div>
+                                            ) : null}
                                             <div className="status-tile">
                                                 <div>
                                                     <strong>Star</strong>
@@ -227,7 +244,12 @@ const CheckoutCompletePage = () => {
                                         <div style={{ display: 'grid', gap: 12 }}>
                                             {ownedStarPath ? (
                                                 <Link to={ownedStarPath} className="secondary-button">
-                                                    Go to ownership hub
+                                                    Open star page
+                                                </Link>
+                                            ) : null}
+                                            {checkoutData.public_page_slug ? (
+                                                <Link to={`/starwiki/${checkoutData.public_page_slug}`} className="secondary-button">
+                                                    Open public star page
                                                 </Link>
                                             ) : null}
                                             <Link to="/account?section=stars" className="secondary-button">

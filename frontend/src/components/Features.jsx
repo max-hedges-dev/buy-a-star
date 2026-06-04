@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Star, Waypoints } from 'lucide-react';
+import { CheckCircle2, Heart, Search, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import certificateExample from '../assets/Certificate Example.png';
@@ -12,36 +12,38 @@ const sectionWidth = {
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const panelStyle = {
-    background: 'linear-gradient(180deg, rgba(18,18,18,0.92) 0%, rgba(10,10,10,0.98) 100%)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'linear-gradient(180deg, rgba(23,26,33,0.92) 0%, rgba(16,18,23,0.96) 100%)',
+    border: '1px solid rgba(245,239,226,0.08)',
     borderRadius: '28px',
     boxShadow: '0 24px 70px rgba(0,0,0,0.35)',
 };
 
 const primaryButtonStyle = {
     padding: '16px 34px',
-    background: 'linear-gradient(45deg, #ff4d00, #ff8800)',
-    color: 'white',
+    background: 'var(--cta-gradient)',
+    color: '#070a11',
     fontWeight: '700',
     letterSpacing: '0.08em',
     borderRadius: '999px',
-    boxShadow: '0 0 24px rgba(255, 77, 0, 0.35)',
-    border: '1px solid rgba(255,255,255,0.18)',
+    boxShadow: 'var(--shadow-warm)',
+    border: '1px solid rgba(245,239,226,0.18)',
     fontSize: '0.95rem',
     textDecoration: 'none',
+    textTransform: 'uppercase',
 };
 
 const secondaryButtonStyle = {
     padding: '16px 34px',
     background: 'rgba(255,255,255,0.04)',
-    color: 'white',
+    color: 'var(--text-color)',
     fontWeight: '700',
     letterSpacing: '0.08em',
     borderRadius: '999px',
-    border: '1px solid rgba(255,255,255,0.14)',
+    border: '1px solid rgba(216,168,95,0.22)',
     fontSize: '0.95rem',
     backdropFilter: 'blur(14px)',
     textDecoration: 'none',
+    textTransform: 'uppercase',
 };
 
 const SectionHeader = ({ eyebrow, headline, body, centered = false }) => (
@@ -49,11 +51,11 @@ const SectionHeader = ({ eyebrow, headline, body, centered = false }) => (
         {eyebrow && (
             <div
                 style={{
-                    color: '#ff9150',
-                    letterSpacing: '0.18em',
+                    color: 'var(--primary-strong)',
+                    letterSpacing: '0.2em',
                     textTransform: 'uppercase',
                     fontWeight: 700,
-                    fontSize: '0.82rem',
+                    fontSize: '0.78rem',
                     marginBottom: '18px',
                 }}
             >
@@ -62,10 +64,13 @@ const SectionHeader = ({ eyebrow, headline, body, centered = false }) => (
         )}
         <h2
             style={{
+                fontFamily: 'var(--font-serif)',
                 fontSize: 'clamp(2.4rem, 4.6vw, 4rem)',
-                lineHeight: 1.04,
+                fontWeight: 600,
+                lineHeight: 0.98,
+                letterSpacing: '-0.02em',
                 marginBottom: body ? '18px' : 0,
-                textTransform: eyebrow === 'WHY ASTER ATLAS' ? 'uppercase' : 'none',
+                color: 'var(--text-color)',
             }}
         >
             {headline}
@@ -73,10 +78,10 @@ const SectionHeader = ({ eyebrow, headline, body, centered = false }) => (
         {body && (
             <p
                 style={{
-                    color: '#b7b7be',
+                    color: 'var(--text-secondary)',
                     lineHeight: 1.85,
-                    fontSize: '1.08rem',
-                    maxWidth: centered ? '760px' : '720px',
+                    fontSize: '1.06rem',
+                    maxWidth: centered ? '780px' : '720px',
                     margin: centered ? '0 auto' : 0,
                 }}
             >
@@ -89,16 +94,16 @@ const SectionHeader = ({ eyebrow, headline, body, centered = false }) => (
 const SmallCard = ({ title, body }) => (
     <div
         style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.025) 100%)',
-            border: '1px solid rgba(255,255,255,0.07)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+            border: '1px solid rgba(245,239,226,0.08)',
             borderRadius: '22px',
             padding: '26px 24px',
             minHeight: '100%',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
         }}
     >
-        <div style={{ fontSize: '1.12rem', fontWeight: 700, marginBottom: '10px' }}>{title}</div>
-        <div style={{ color: '#a8a8b0', lineHeight: 1.8 }}>{body}</div>
+        <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.42rem', fontWeight: 600, marginBottom: '10px', color: 'var(--text-color)' }}>{title}</div>
+        <div style={{ color: 'var(--text-secondary)', lineHeight: 1.8 }}>{body}</div>
     </div>
 );
 
@@ -121,147 +126,19 @@ const StepCard = ({ icon: Icon, number, title, body }) => (
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, rgba(255,92,0,0.22) 0%, rgba(255,132,0,0.08) 100%)',
-                border: '1px solid rgba(255,132,0,0.16)',
+                background: 'linear-gradient(135deg, rgba(216,168,95,0.22) 0%, rgba(184,107,94,0.08) 100%)',
+                border: '1px solid rgba(216,168,95,0.16)',
                 marginBottom: '20px',
             }}
         >
-            <Icon size={28} color="#ff7a1f" />
+            <Icon size={28} color="var(--primary-strong)" />
         </div>
-        <div style={{ color: '#ff9c63', fontSize: '0.75rem', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: '10px', fontWeight: 700 }}>
+        <div style={{ color: 'var(--primary-strong)', fontSize: '0.75rem', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: '10px', fontWeight: 700 }}>
             Step {number}
         </div>
-        <h3 style={{ fontSize: '1.45rem', marginBottom: '12px', lineHeight: 1.18 }}>{title}</h3>
-        <p style={{ color: '#b7b7be', lineHeight: 1.75 }}>{body}</p>
+        <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.65rem', fontWeight: 600, marginBottom: '12px', lineHeight: 1.08 }}>{title}</h3>
+        <p style={{ color: 'var(--text-secondary)', lineHeight: 1.75 }}>{body}</p>
     </motion.div>
-);
-
-const CertificatePreview = () => (
-    <div
-        style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: '1120px',
-            padding: '18px',
-            borderRadius: '34px',
-            background: 'linear-gradient(135deg, rgba(255,182,120,0.08) 0%, rgba(255,255,255,0.02) 34%, rgba(255,99,32,0.08) 100%)',
-            border: '1px solid rgba(255,190,120,0.16)',
-            boxShadow: '0 30px 120px rgba(0,0,0,0.45)',
-        }}
-    >
-        <div
-            style={{
-                position: 'relative',
-                background: 'linear-gradient(145deg, #f7edd7 0%, #ead7b1 42%, #dcc49a 100%)',
-                borderRadius: '26px',
-                border: '1px solid rgba(88,52,21,0.18)',
-                overflow: 'hidden',
-                aspectRatio: '1.58 / 1',
-            }}
-        >
-            <div
-                style={{
-                    position: 'absolute',
-                    inset: '14px',
-                    borderRadius: '18px',
-                    border: '1px solid rgba(90,58,24,0.22)',
-                    pointerEvents: 'none',
-                }}
-            />
-            <div
-                style={{
-                    position: 'absolute',
-                    inset: '28px',
-                    borderRadius: '14px',
-                    border: '2px solid rgba(89,53,20,0.18)',
-                    pointerEvents: 'none',
-                }}
-            />
-
-            <div style={{ padding: '54px 60px 48px', color: '#3a2615', position: 'relative', height: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '42px', gap: '30px' }}>
-                    <div>
-                        <div style={{ fontSize: '0.76rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: '#8a5d2d', marginBottom: '18px', fontWeight: 700 }}>
-                            Aster Atlas Celestial Registry
-                        </div>
-                        <h3 style={{ fontFamily: 'Georgia, Times New Roman, serif', fontSize: '3.2rem', lineHeight: 1.04, marginBottom: '14px', color: '#2e1d10' }}>
-                            Certificate
-                        </h3>
-                        <p style={{ maxWidth: '460px', lineHeight: 1.7, color: '#6f543a', fontSize: '1.02rem' }}>
-                            Issued as part of the registry record
-                        </p>
-                    </div>
-                    <div
-                        style={{
-                            width: '116px',
-                            height: '116px',
-                            borderRadius: '50%',
-                            background: 'radial-gradient(circle at 35% 35%, #fff2c7 0%, #dca14a 36%, #91551d 100%)',
-                            boxShadow: 'inset 0 2px 10px rgba(255,255,255,0.42), 0 18px 30px rgba(89,48,16,0.16)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            border: '1px solid rgba(110,57,16,0.25)',
-                            flexShrink: 0,
-                        }}
-                    >
-                        <Star size={34} color="#5f3516" />
-                    </div>
-                </div>
-
-                <div style={{ paddingTop: '8px' }}>
-                    <div style={{ color: '#8a5d2d', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, fontSize: '0.82rem', marginBottom: '18px' }}>
-                        Certificate
-                    </div>
-                    <div style={{ fontFamily: 'Georgia, Times New Roman, serif', fontSize: '4.2rem', lineHeight: 0.98, color: '#c95614', marginBottom: '22px' }}>
-                        Certificate
-                    </div>
-                    <div style={{ color: '#6f543a', fontSize: '1.1rem', maxWidth: '560px', lineHeight: 1.8 }}>
-                        The certificate is the formal document attached to the registration. It includes the registered name, the catalog reference, and the key star details.
-                    </div>
-                </div>
-
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1.08fr 0.92fr',
-                        gap: '34px',
-                        alignItems: 'start',
-                        marginBottom: '44px',
-                    }}
-                >
-                    {[
-                        'Delivered digitally immediately after purchase.',
-                        'Shows the registered name and catalog reference.',
-                        'Linked to the starâ€™s record in Aster Atlas.',
-                    ].map((line) => (
-                        <div
-                            key={line}
-                            style={{
-                                background: 'rgba(255,255,255,0.22)',
-                                border: '1px solid rgba(104,68,33,0.16)',
-                                borderRadius: '20px',
-                                padding: '20px 18px',
-                                fontSize: '0.95rem',
-                                lineHeight: 1.6,
-                                color: '#5a4028',
-                            }}
-                        >
-                            {line}
-                        </div>
-                    ))}
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '24px', flexWrap: 'wrap' }}>
-                    <div style={{ width: '220px', height: '1px', background: 'rgba(86,58,28,0.45)' }} />
-                    <div style={{ textAlign: 'right' }}>
-                        <div style={{ width: '220px', height: '1px', background: 'rgba(86,58,28,0.45)', marginBottom: '16px' }} />
-                        <div style={{ width: '180px', height: '1px', background: 'rgba(86,58,28,0.3)', marginLeft: 'auto' }} />
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 );
 
 const Features = () => {
@@ -296,37 +173,37 @@ const Features = () => {
 
     const whyCards = [
         {
-            title: 'Real Stars',
-            body: 'We are the world\'s largest star registry and offer real stars across the entire milky way galaxy.',
+            title: 'Real catalogued stars',
+            body: 'Every registration begins with an actual astronomical source record, not an invented point of light.',
         },
         {
-            title: 'Real Ownership',
-            body: 'Each star can only be owned once. By a single person. Owners will be forever immortalised within the registry.',
+            title: 'Private registry record',
+            body: 'Each star can be registered once within Aster Atlas, creating a clear private record for the chosen name or dedication.',
         },
         {
-            title: 'Searchable',
-            body: 'Registered stars and their owners can be found again through our unique galaxy-view.',
+            title: 'Searchable in the Atlas',
+            body: 'Registered stars can be searched, opened, and revisited through the atlas instead of disappearing after checkout.',
         },
         {
-            title: 'Delivered Quickly',
-            body: 'Ownership details and igital certificates are issued immediately after purchase. Physical certificates are coming soon.',
+            title: 'Certificate included',
+            body: 'Digital certificates are issued after registration with the selected star, registered details, and Aster Atlas record.',
         },
     ];
 
     const steps = [
         {
-            title: 'Choose a star.',
-            body: 'Select a real catalogued star from the registry either though the star listings page or through the galaxy-view.',
-            icon: Star,
+            title: 'Find the right star.',
+            body: 'Browse the atlas and choose a star by distance, colour, constellation, type, or simple personal preference.',
+            icon: Search,
         },
         {
-            title: 'Add the registration details.',
-            body: 'Enter the name or dedication for the registry record and certificate. This can be for youself or for someone else.',
-            icon: Waypoints,
+            title: 'Make it personal.',
+            body: 'Add the name, dedication, or registration details that explain who the star is for and why it matters.',
+            icon: Heart,
         },
         {
-            title: 'Obtain full ownership.',
-            body: 'The completed registration and digital certificate are issued immediately. You will also be able to search through the galaxy and find the star owner. ',
+            title: 'Record and revisit it.',
+            body: 'Receive the certificate and return to the star’s record whenever you want to view it again inside Aster Atlas.',
             icon: CheckCircle2,
         },
     ];
@@ -337,8 +214,9 @@ const Features = () => {
                 position: 'relative',
                 padding: `${sectionPaddingTop}px ${sectionPaddingX}px ${sectionPaddingBottom}px`,
                 background: `
-                    radial-gradient(circle at 50% 0%, rgba(255,101,24,0.12), transparent 28%),
-                    linear-gradient(180deg, #050505 0%, #090909 100%)
+                    radial-gradient(circle at 50% 0%, rgba(216,168,95,0.1), transparent 28%),
+                    radial-gradient(circle at 85% 18%, rgba(122,92,255,0.08), transparent 22%),
+                    linear-gradient(180deg, #070a11 0%, #020305 100%)
                 `,
                 zIndex: 2,
             }}
@@ -352,9 +230,9 @@ const Features = () => {
                     style={{ marginBottom: `${Math.round(clamp(72 * sectionScale, 44, 72))}px` }}
                 >
                     <SectionHeader
-                        eyebrow="WHY ASTER ATLAS?"
-                        headline="A REGISTRY, NOT A NOVELTY"
-                        body="Aster Atlas is built around clear registry records and ownership, real catalogued stars from the latest Gaia Data Release, and a one-of-a-kind visual representation. Each order includes a registered entry, a digital certificate, and a star record that can be searched and revisited forever in our Milky Way galaxy simulation."
+                        eyebrow="WHY ASTER ATLAS"
+                        headline="A private registry, not a throwaway gift."
+                        body="Aster Atlas is built around real catalogued stars, clear private records, and a visual atlas you can return to. Each registration creates a certificate, a searchable star record, and a page that gives the star somewhere to live after purchase."
                         centered
                     />
 
@@ -364,8 +242,8 @@ const Features = () => {
                             marginTop: `${Math.round(clamp(38 * sectionScale, 24, 38))}px`,
                             padding: `${panelPadding}px`,
                             background: `
-                                radial-gradient(circle at top, rgba(255,118,44,0.08), transparent 34%),
-                                linear-gradient(180deg, rgba(18,18,18,0.92) 0%, rgba(10,10,10,0.98) 100%)
+                                radial-gradient(circle at top, rgba(216,168,95,0.08), transparent 34%),
+                                linear-gradient(180deg, rgba(23,26,33,0.92) 0%, rgba(16,18,23,0.98) 100%)
                             `,
                         }}
                     >
@@ -395,10 +273,9 @@ const Features = () => {
                             width: '72px',
                             height: '1px',
                             margin: `${Math.round(clamp(10 * sectionScale, 6, 10))}px auto ${Math.round(clamp(68 * sectionScale, 42, 68))}px`,
-                            background: 'rgba(255,255,255,0.78)',
-                            boxShadow: '0 0 14px rgba(255,255,255,0.12)',
+                            background: 'rgba(245,239,226,0.5)',
+                            boxShadow: '0 0 14px rgba(216,168,95,0.14)',
                         }}
-                        
                     />
 
                     <div style={{ transform: 'translateY(-22px)' }}>
@@ -437,8 +314,8 @@ const Features = () => {
                             width: '72px',
                             height: '1px',
                             margin: `0 auto ${Math.round(clamp(88 * sectionScale, 46, 88))}px`,
-                            background: 'rgba(255,255,255,0.78)',
-                            boxShadow: '0 0 14px rgba(255,255,255,0.12)',
+                            background: 'rgba(245,239,226,0.5)',
+                            boxShadow: '0 0 14px rgba(216,168,95,0.14)',
                         }}
                     />
 
@@ -453,16 +330,16 @@ const Features = () => {
                     >
                     <div style={{ maxWidth: isCompact ? '720px' : 'none', margin: isCompact ? '0 auto' : 0 }}>
                         <SectionHeader
-                            headline="IMMEDIATE PROOF OF OWNERSHIP"
-                            body="After purchasing a star, you'll immediately receive a formal certificate of registration of celestial ownership."
+                            headline="A certificate with something behind it."
+                            body="After registration, you receive a digital certificate tied to a persistent star record inside Aster Atlas — not just an isolated image."
                             centered={isCompact}
                         />
 
                         <div style={{ display: 'grid', gap: `${Math.round(clamp(14 * sectionScale, 10, 14))}px`, marginTop: `${Math.round(clamp(24 * sectionScale, 18, 24))}px`, justifyItems: isCompact ? 'center' : 'start' }}>
                             {[
-                                'Delivered digitally immediately after purchase.',
-                                'Displays the owner name the owned star.',
-                                'Physical certificates coming soon.',
+                                'Delivered digitally after registration.',
+                                'Shows the registered name or dedication and selected star.',
+                                'Connected to a searchable record in the Atlas.',
                             ].map((line) => (
                                 <div
                                     key={line}
@@ -470,13 +347,13 @@ const Features = () => {
                                         display: 'flex',
                                         gap: '14px',
                                         alignItems: 'flex-start',
-                                        color: '#ddd',
+                                        color: 'var(--text-secondary)',
                                         lineHeight: 1.7,
                                         textAlign: 'left',
                                         maxWidth: isCompact ? '520px' : 'none',
                                     }}
                                 >
-                                    <CheckCircle2 size={18} color="#ff7a1f" style={{ marginTop: '5px', flexShrink: 0 }} />
+                                    <CheckCircle2 size={18} color="var(--primary-strong)" style={{ marginTop: '5px', flexShrink: 0 }} />
                                     <span>{line}</span>
                                 </div>
                             ))}
@@ -491,8 +368,8 @@ const Features = () => {
                             justifySelf: isCompact ? 'center' : 'stretch',
                             padding: `${Math.round(clamp(18 * sectionScale, 10, 18))}px`,
                             borderRadius: `${Math.round(clamp(34 * sectionScale, 22, 34))}px`,
-                            background: 'linear-gradient(135deg, rgba(255,182,120,0.08) 0%, rgba(255,255,255,0.02) 34%, rgba(255,99,32,0.08) 100%)',
-                            border: '1px solid rgba(255,190,120,0.16)',
+                            background: 'linear-gradient(135deg, rgba(216,168,95,0.08) 0%, rgba(255,255,255,0.02) 34%, rgba(184,107,94,0.08) 100%)',
+                            border: '1px solid rgba(216,168,95,0.16)',
                             boxShadow: '0 30px 120px rgba(0,0,0,0.45)',
                         }}
                     >
@@ -522,15 +399,15 @@ const Features = () => {
                         padding: `${Math.round(clamp(56 * sectionScale, 34, 56))}px ${Math.round(clamp(40 * sectionScale, 20, 40))}px`,
                     }}
                 >
-                    <h3 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.4rem)', lineHeight: 1.05, marginBottom: '18px' }}>
-                        Own a piece of the universe. Today.
+                    <h3 style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 'clamp(2.4rem, 4vw, 3.6rem)', lineHeight: 0.98, marginBottom: '18px' }}>
+                        Give a star they can return to.
                     </h3>
-                    <p style={{ maxWidth: '760px', margin: '0 auto 30px', color: '#b7b7be', lineHeight: 1.85, fontSize: '1.08rem' }}>
-                        Whether it is a meaningful gift for someone you love or a lasting keepsake for yourself, Aster Atlas is designed to make the moment feel rare, personal, and beautifully recorded.
+                    <p style={{ maxWidth: '760px', margin: '0 auto 30px', color: 'var(--text-secondary)', lineHeight: 1.85, fontSize: '1.08rem' }}>
+                        Whether it is a meaningful gift for someone you love or a lasting keepsake for yourself, Aster Atlas helps make the moment feel personal, recorded, and beautifully preserved.
                     </p>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: `${Math.round(clamp(16 * sectionScale, 10, 16))}px`, flexWrap: 'wrap' }}>
                         <Link to="/buy" style={primaryButtonStyle}>
-                            Register a Star
+                            Find a Star
                         </Link>
                         <Link to="/search" style={secondaryButtonStyle}>
                             Explore the Atlas

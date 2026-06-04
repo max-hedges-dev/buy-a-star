@@ -5,7 +5,12 @@ from pydantic import BaseModel, ConfigDict
 
 class CheckoutSessionCreateRequest(BaseModel):
     star_id: int
+    registration_type: str = "self"
     owner_name: str
+    recipient_name: str | None = None
+    recipient_email: str | None = None
+    dedication: str | None = None
+    gift_message: str | None = None
     certificate_type: str = "digital"
     country_code: str = "GB"
     accepted_terms: bool
@@ -45,10 +50,16 @@ class CheckoutSessionStatusResponse(BaseModel):
     transaction_status: str
     fulfilled: bool
     transaction_id: int
+    registration_id: int | None = None
+    public_page_slug: str | None = None
     registration_number: str | None = None
     star_id: int
     star_name: str
     owner_name: str | None = None
+    registration_type: str = "self"
+    recipient_name: str | None = None
+    claim_status: str | None = None
+    claim_url: str | None = None
     includes_certificate: bool
     certificate_type: str
     certificate_label: str
@@ -68,10 +79,16 @@ class CheckoutFulfillmentResult(BaseModel):
     fulfilled: bool
     transaction_status: str
     transaction_id: int
+    registration_id: int | None = None
+    public_page_slug: str | None = None
     registration_number: str | None = None
     star_id: int
     star_name: str
     owner_name: str | None = None
+    registration_type: str = "self"
+    recipient_name: str | None = None
+    claim_status: str | None = None
+    claim_url: str | None = None
     includes_certificate: bool
     certificate_type: str
     certificate_label: str

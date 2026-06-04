@@ -101,6 +101,7 @@ class StarDetailRead(StarListRead):
     age_flame: Optional[float] = None
     evolstage_flame: Optional[float] = None
     classprob_dsc_combmod_binarystar: Optional[float] = None
+    public_registration: Optional[dict[str, Any]] = None
 
 
 class StarPurchaseRequest(BaseModel):

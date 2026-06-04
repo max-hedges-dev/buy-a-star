@@ -9,7 +9,7 @@ const CONTENT_TOP_OFFSET = 100;
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const filterSectionTitle = {
-    color: '#ff9150',
+    color: 'var(--primary-strong)',
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
     fontWeight: 700,
@@ -19,10 +19,10 @@ const filterSectionTitle = {
 
 const selectStyle = {
     width: '100%',
-    background: 'linear-gradient(180deg, rgba(19,19,24,0.98) 0%, rgba(11,11,15,1) 100%)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'linear-gradient(180deg, rgba(23,26,33,0.98) 0%, rgba(16,18,23,1) 100%)',
+    border: '1px solid rgba(245,239,226,0.08)',
     borderRadius: '12px',
-    color: '#dedee6',
+    color: 'var(--text-color)',
     padding: '12px 14px',
     fontSize: '0.95rem',
     outline: 'none',
@@ -49,8 +49,8 @@ const inputStyle = {
 };
 
 const optionStyle = {
-    background: '#0d0d11',
-    color: '#d7d7de',
+    background: '#101217',
+    color: 'var(--text-color)',
 };
 
 const formatRangeNumber = (value, suffix = '') => (
@@ -146,7 +146,7 @@ const RangeFilter = ({
                             height: '4px',
                             transform: 'translateY(-50%)',
                             borderRadius: '999px',
-                            background: 'linear-gradient(90deg, #ff4d00, #ff9c63)',
+                    background: 'linear-gradient(90deg, #d8a85f, #c8793a)',
                         }}
                     />
                     <input
@@ -479,7 +479,7 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                 </div>
 
                 <RangeFilter
-                    title="Aster Atlas price range"
+                    title="Registration price"
                     min={minPriceCap}
                     max={maxPriceCap}
                     values={priceRange}
@@ -508,8 +508,8 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                         <option style={optionStyle} value="apparent-dimmest">Apparent brightness: lowest first</option>
                         <option style={optionStyle} value="absolute-brightest">Absolute brightness: highest first</option>
                         <option style={optionStyle} value="absolute-dimmest">Absolute brightness: lowest first</option>
-                        <option style={optionStyle} value="price-low">Aster Atlas price: low to high</option>
-                        <option style={optionStyle} value="price-high">Aster Atlas price: high to low</option>
+                        <option style={optionStyle} value="price-low">Registration price: low to high</option>
+                        <option style={optionStyle} value="price-high">Registration price: high to low</option>
                     </select>
                 </div>
 
@@ -590,8 +590,8 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                                 width: `${sidebarWidth}px`,
                                 maxHeight: `calc(100vh - ${filterTopOffset + 24}px)`,
                                 overflowY: 'auto',
-                                background: 'linear-gradient(180deg, rgba(16,16,20,0.94) 0%, rgba(8,8,10,0.98) 100%)',
-                                border: '1px solid rgba(255,255,255,0.08)',
+                                background: 'linear-gradient(180deg, rgba(23,26,33,0.94) 0%, rgba(16,18,23,0.98) 100%)',
+                                border: '1px solid rgba(245,239,226,0.08)',
                                 borderRadius: `${Math.round(24 * pageScale)}px`,
                                 padding: `${filterPanelPadding}px`,
                                 boxShadow: '0 24px 70px rgba(0,0,0,0.35)',
@@ -614,10 +614,10 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                         >
                             <div>
                                 <div style={{ color: '#ffffff', fontSize: `${clamp(1.15 * pageScale, 0.98, 1.15).toFixed(3)}rem`, fontWeight: 700, marginBottom: '6px' }}>
-                                    {loading ? 'Loading stars...' : `${totalStars.toLocaleString()} stars`}
+                                    {loading ? 'Loading stars...' : `${totalStars.toLocaleString()} stars in the Atlas`}
                                 </div>
-                                <div style={{ color: '#8f8f98', fontSize: `${clamp(0.95 * pageScale, 0.82, 0.95).toFixed(3)}rem` }}>
-                                    Available stars, refined by price, distance, colour, constellation, and type.
+                                <div style={{ color: 'var(--text-muted)', fontSize: `${clamp(0.95 * pageScale, 0.82, 0.95).toFixed(3)}rem` }}>
+                                    Browse available and registered stars by distance, colour, constellation, type, and registration status.
                                 </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: useFilterDrawer ? 'space-between' : 'flex-end', flex: useFilterDrawer ? '1 1 100%' : '0 1 auto' }}>
@@ -630,8 +630,8 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                                             gap: '9px',
                                             padding: '11px 16px',
                                             borderRadius: 999,
-                                            background: 'linear-gradient(45deg, #ff4d00, #ff8800)',
-                                            color: 'white',
+                                            background: 'var(--cta-gradient)',
+                                            color: '#070a11',
                                             fontWeight: 800,
                                             letterSpacing: '0.08em',
                                             textTransform: 'uppercase',
@@ -767,8 +767,8 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                             zIndex: 31,
                             overflowY: 'auto',
                             padding: `${CONTENT_TOP_OFFSET}px ${filterPanelPadding}px 28px`,
-                            background: 'linear-gradient(180deg, rgba(16,16,20,0.98) 0%, rgba(8,8,10,1) 100%)',
-                            borderRight: '1px solid rgba(255,255,255,0.1)',
+                            background: 'linear-gradient(180deg, rgba(23,26,33,0.98) 0%, rgba(16,18,23,1) 100%)',
+                            borderRight: '1px solid rgba(245,239,226,0.1)',
                             boxShadow: '28px 0 80px rgba(0,0,0,0.52)',
                         }}
                     >
@@ -784,8 +784,8 @@ const BuyAStarGrid = ({ onSelectStar }) => {
                                 padding: '12px 16px',
                                 borderRadius: 999,
                                 background: 'rgba(255,255,255,0.06)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                color: 'white',
+                                border: '1px solid rgba(245,239,226,0.1)',
+                                color: 'var(--text-color)',
                                 fontWeight: 800,
                                 letterSpacing: '0.08em',
                                 textTransform: 'uppercase',

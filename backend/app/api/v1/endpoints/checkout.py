@@ -89,19 +89,25 @@ async def create_session(
     if payload.registration_type == "gift" and not (payload.recipient_name or "").strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recipient name is required for a gift registration.")
 
-    client_secret, session_id = await create_embedded_checkout_session(
-        db=db,
-        star_id=payload.star_id,
-        user=current_user,
-        owner_name=payload.owner_name,
-        registration_type=payload.registration_type,
-        recipient_name=payload.recipient_name,
-        recipient_email=payload.recipient_email,
-        dedication=payload.dedication,
-        gift_message=payload.gift_message,
-        certificate_type=payload.certificate_type,
-        country_code=payload.country_code,
-    )
+    try:
+        client_secret, session_id = await create_embedded_checkout_session(
+            db=db,
+            star_id=payload.star_id,
+            user=current_user,
+            owner_name=payload.owner_name,
+            registration_type=payload.registration_type,
+            recipient_name=payload.recipient_name,
+            recipient_email=payload.recipient_email,
+            dedication=payload.dedication,
+            gift_message=payload.gift_message,
+            certificate_type=payload.certificate_type,
+            country_code=payload.country_code,
+        )
+    except stripe.error.StripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.user_message or str(exc),
+        ) from exc
     return CheckoutSessionCreateResponse(client_secret=client_secret, session_id=session_id)
 
 

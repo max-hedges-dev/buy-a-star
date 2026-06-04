@@ -1,7 +1,7 @@
 import { apiRequest } from './http';
 
 const STARS_URL = '/stars/';
-const STARS_CACHE_PREFIX = 'aster-atlas-stars-cache:v2:';
+const STARS_CACHE_PREFIX = 'aster-atlas-stars-cache:v3:';
 const STARS_CACHE_TTL_MS = 60 * 1000;
 
 const getStarsCacheKey = (params) => `${STARS_CACHE_PREFIX}${params.toString()}`;
@@ -212,6 +212,12 @@ export async function fetchAccountRegistration(registrationId) {
     return apiRequest(`/registrations/${registrationId}`);
 }
 
+export async function prepareRegistrationClaim(registrationId) {
+    return apiRequest(`/registrations/${registrationId}/prepare-claim`, {
+        method: 'POST',
+    });
+}
+
 export async function previewRegistrationClaim(claimToken) {
     return apiRequest(`/registrations/claim/${encodeURIComponent(claimToken)}`);
 }
@@ -220,4 +226,37 @@ export async function claimRegistration(claimToken) {
     return apiRequest(`/registrations/claim/${encodeURIComponent(claimToken)}`, {
         method: 'POST',
     });
+}
+
+export async function completeDemoRegistration({
+    starId,
+    registrationType = 'self',
+    ownerName,
+    recipientName,
+    recipientEmail,
+    dedication,
+    giftMessage,
+    certificateType,
+    countryCode,
+    acceptedTerms,
+    acceptedPrivacy,
+}) {
+    const data = await apiRequest('/checkout/demo-complete', {
+        method: 'POST',
+        body: {
+            star_id: starId,
+            registration_type: registrationType,
+            owner_name: ownerName,
+            recipient_name: recipientName,
+            recipient_email: recipientEmail,
+            dedication,
+            gift_message: giftMessage,
+            certificate_type: certificateType,
+            country_code: countryCode,
+            accepted_terms: acceptedTerms,
+            accepted_privacy: acceptedPrivacy,
+        },
+    });
+    clearStarsCache();
+    return data;
 }

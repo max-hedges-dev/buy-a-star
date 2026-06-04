@@ -3,14 +3,21 @@ import { Link, useParams } from 'react-router-dom';
 
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
-import { fetchAccountRegistration } from '../services/api';
-import { formatClaimStatus, getPublicStarPath, getStarSlug } from '../utils/ownership';
+import { fetchAccountRegistration, prepareRegistrationClaim } from '../services/api';
+import { getPublicStarPath, getStarSlug } from '../utils/ownership';
 
 const RegistrationOwnershipPage = () => {
     const { registrationId } = useParams();
     const [registration, setRegistration] = useState(null);
     const [status, setStatus] = useState('loading');
     const [error, setError] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [isPreparingClaim, setIsPreparingClaim] = useState(false);
+    const absoluteClaimUrl = registration?.claim_url
+        ? (registration.claim_url.startsWith('http')
+            ? registration.claim_url
+            : `${window.location.origin}${registration.claim_url}`)
+        : null;
 
     useEffect(() => {
         const loadRegistration = async () => {
@@ -26,6 +33,34 @@ const RegistrationOwnershipPage = () => {
 
         loadRegistration();
     }, [registrationId]);
+
+    const handleCopyClaimLink = async () => {
+        if (!registration?.claim_url) return;
+        try {
+            const absoluteUrl = registration.claim_url.startsWith('http')
+                ? registration.claim_url
+                : `${window.location.origin}${registration.claim_url}`;
+            await navigator.clipboard.writeText(absoluteUrl);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1800);
+        } catch {
+            setCopied(false);
+        }
+    };
+
+    const handlePrepareClaim = async () => {
+        if (!registration?.id) return;
+        try {
+            setError('');
+            setIsPreparingClaim(true);
+            const response = await prepareRegistrationClaim(registration.id);
+            setRegistration(response);
+        } catch (requestError) {
+            setError(requestError.message);
+        } finally {
+            setIsPreparingClaim(false);
+        }
+    };
 
     return (
         <div style={{ minHeight: '100vh', background: 'var(--page-background)' }}>
@@ -55,6 +90,9 @@ const RegistrationOwnershipPage = () => {
                         <>
                             <section className="glass-card" style={{ padding: '40px 36px' }}>
                                 <p className="eyebrow" style={{ marginBottom: 14 }}>Private ownership page</p>
+                                {registration.is_demo ? (
+                                    <p className="eyebrow" style={{ marginBottom: 10, color: 'var(--primary-strong)' }}>Demo registration</p>
+                                ) : null}
                                 <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.4rem)', lineHeight: 0.95, marginBottom: 16 }}>
                                     {registration.registered_display_name}
                                 </h1>
@@ -67,12 +105,12 @@ const RegistrationOwnershipPage = () => {
                                         <strong>{registration.registration_number}</strong>
                                     </div>
                                     <div className="glass-card" style={{ padding: '18px 20px' }}>
-                                        <div className="eyebrow" style={{ marginBottom: 8 }}>Claim status</div>
-                                        <strong>{formatClaimStatus(registration.claim_status)}</strong>
+                                        <div className="eyebrow" style={{ marginBottom: 8 }}>Ownership</div>
+                                        <strong>{registration.current_holder_username || (registration.can_manage ? 'You' : 'Another authorised holder')}</strong>
                                     </div>
                                     <div className="glass-card" style={{ padding: '18px 20px' }}>
-                                        <div className="eyebrow" style={{ marginBottom: 8 }}>Current holder</div>
-                                        <strong>{registration.can_manage ? 'You' : 'Another authorised holder'}</strong>
+                                        <div className="eyebrow" style={{ marginBottom: 8 }}>Public star page</div>
+                                        <strong>{registration.public_page_visibility}</strong>
                                     </div>
                                 </div>
                             </section>
@@ -131,12 +169,58 @@ const RegistrationOwnershipPage = () => {
                                         </p>
                                     </div>
 
-                                    {registration.is_gift && registration.claim_status === 'claimable' ? (
+                                    {registration.can_manage && registration.claim_status === 'claimable' ? (
                                         <div className="glass-card" style={{ padding: '18px 18px', marginTop: 18, background: 'var(--surface-warm)' }}>
-                                            <div className="eyebrow" style={{ marginBottom: 8 }}>Gift claim status</div>
-                                            <p className="muted-copy" style={{ margin: 0 }}>
-                                                This gift is still unclaimed. A claim-link management flow can be expanded here in the next phase without changing the data model underneath.
+                                            <div className="eyebrow" style={{ marginBottom: 8 }}>
+                                                {registration.is_gift ? 'Gift status' : 'Claim link ready'}
+                                            </div>
+                                            <p className="muted-copy" style={{ margin: '0 0 14px 0' }}>
+                                                {registration.is_gift
+                                                    ? 'Waiting to be claimed. The recipient can view the gift without an account, but must claim it to edit or manage the registration.'
+                                                    : 'This star can now be claimed by someone else whenever you decide to share it. Once they claim it, they become the current holder and you will lose edit access.'}
                                             </p>
+                                            <div style={{ display: 'grid', gap: 12 }}>
+                                                <div>
+                                                    <div style={{ color: 'var(--text-faint)', marginBottom: 4 }}>Registered to</div>
+                                                    <strong>{registration.recipient_name || registration.registered_display_name}</strong>
+                                                </div>
+                                                <div>
+                                                    <div style={{ color: 'var(--text-faint)', marginBottom: 4 }}>Current holder</div>
+                                                    <strong>You</strong>
+                                                </div>
+                                                {absoluteClaimUrl ? (
+                                                    <div>
+                                                        <div style={{ color: 'var(--text-faint)', marginBottom: 6 }}>Claim link</div>
+                                                        <div className="glass-card" style={{ padding: '12px 14px', wordBreak: 'break-all' }}>
+                                                            {absoluteClaimUrl}
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                                    {absoluteClaimUrl ? (
+                                                        <>
+                                                            <button type="button" className="secondary-button" onClick={handleCopyClaimLink}>
+                                                                {copied ? 'Claim link copied' : 'Copy claim link'}
+                                                            </button>
+                                                            <a href={absoluteClaimUrl} className="secondary-button">
+                                                                Open claim page
+                                                            </a>
+                                                        </>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : null}
+
+                                    {registration.can_manage && registration.can_prepare_claim && registration.claim_status !== 'claimable' ? (
+                                        <div className="glass-card" style={{ padding: '18px 18px', marginTop: 18, background: 'var(--surface-warm)' }}>
+                                            <div className="eyebrow" style={{ marginBottom: 8 }}>Claim or transfer later</div>
+                                            <p className="muted-copy" style={{ margin: '0 0 14px 0' }}>
+                                                If you decide this star should live under someone else&apos;s account later, you can prepare a claim link here and share it when you&apos;re ready. This is available to any current holder, including someone who originally claimed the star from another person.
+                                            </p>
+                                            <button type="button" className="secondary-button" onClick={handlePrepareClaim} disabled={isPreparingClaim}>
+                                                {isPreparingClaim ? 'Preparing claim link...' : 'Prepare claim link'}
+                                            </button>
                                         </div>
                                     ) : null}
                                 </aside>

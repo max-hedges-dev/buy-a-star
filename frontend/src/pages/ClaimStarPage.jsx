@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../hooks/useAuth';
 import { claimRegistration, previewRegistrationClaim } from '../services/api';
+import { formatClaimStatus } from '../utils/ownership';
 
 const ClaimStarPage = () => {
     const { claimToken } = useParams();
@@ -12,6 +13,7 @@ const ClaimStarPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [preview, setPreview] = useState(null);
+    const [claimedResult, setClaimedResult] = useState(null);
     const [status, setStatus] = useState('loading');
     const [error, setError] = useState('');
     const [claiming, setClaiming] = useState(false);
@@ -38,15 +40,25 @@ const ClaimStarPage = () => {
         }
 
         try {
+            setError('');
             setClaiming(true);
             const response = await claimRegistration(claimToken);
-            navigate(`/account/registrations/${response.registration_id}`);
+            setClaimedResult(response);
         } catch (requestError) {
             setError(requestError.message);
         } finally {
             setClaiming(false);
         }
     };
+
+    const ownershipPath = claimedResult
+        ? `/account/registrations/${claimedResult.registration_id}`
+        : preview
+            ? `/account/registrations/${preview.registration_id}`
+            : '/account';
+    const certificatePath = claimedResult?.transaction_id
+        ? `/account/orders/${claimedResult.transaction_id}`
+        : ownershipPath;
 
     return (
         <div style={{ minHeight: '100vh', background: 'var(--page-background)' }}>
@@ -73,19 +85,67 @@ const ClaimStarPage = () => {
                             </>
                         ) : null}
 
-                        {status === 'ready' && preview ? (
+                        {status === 'ready' && claimedResult ? (
+                            <>
+                                <p className="eyebrow" style={{ marginBottom: 14 }}>Claim complete</p>
+                                <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.2rem)', lineHeight: 0.95, marginBottom: 16 }}>
+                                    This star is now saved to your Aster Atlas account.
+                                </h1>
+                                <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 24 }}>
+                                    The registration is now attached to your account as the current holder. You can open the ownership page, revisit the public StarWiki page, or return later for the certificate.
+                                </p>
+                                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                                    <Link to={ownershipPath} className="primary-button">
+                                        Open ownership page
+                                    </Link>
+                                    <Link to={claimedResult.starwiki_url} className="secondary-button">
+                                        Open StarWiki page
+                                    </Link>
+                                    <Link to={certificatePath} className="secondary-button">
+                                        Download certificate
+                                    </Link>
+                                </div>
+                            </>
+                        ) : null}
+
+                        {status === 'ready' && preview && !claimedResult ? (
                             <>
                                 <p className="eyebrow" style={{ marginBottom: 14 }}>Claim your star</p>
+                                {preview.is_demo ? (
+                                    <p className="eyebrow" style={{ marginBottom: 10, color: 'var(--primary-strong)' }}>Demo gift</p>
+                                ) : null}
                                 <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.2rem)', lineHeight: 0.95, marginBottom: 16 }}>
-                                    This star was registered for you.
+                                    {preview.recipient_name ? 'This star was registered for you.' : 'This star has been shared with you.'}
                                 </h1>
                                 <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 24 }}>
                                     Claim it to save the record, edit the StarWiki page later, and keep the certificate in your Aster Atlas account.
                                 </p>
+                                <div className="status-grid" style={{ marginBottom: 22 }}>
+                                    <div className="glass-card" style={{ padding: '18px 20px' }}>
+                                        <div className="eyebrow" style={{ marginBottom: 8 }}>Claim status</div>
+                                        <strong>{preview.claim_status === 'claimable' ? 'Unclaimed' : preview.claim_status}</strong>
+                                    </div>
+                                    {preview.purchaser_name ? (
+                                        <div className="glass-card" style={{ padding: '18px 20px' }}>
+                                            <div className="eyebrow" style={{ marginBottom: 8 }}>Registered by</div>
+                                            <strong>{preview.purchaser_name}</strong>
+                                        </div>
+                                    ) : null}
+                                    <div className="glass-card" style={{ padding: '18px 20px' }}>
+                                        <div className="eyebrow" style={{ marginBottom: 8 }}>Star</div>
+                                        <strong>{preview.star.display_name || preview.star.scientific_name}</strong>
+                                    </div>
+                                </div>
                                 {preview.gift_message ? (
                                     <div className="glass-card" style={{ padding: '22px 22px', background: 'var(--surface-warm)', marginBottom: 20 }}>
                                         <div className="eyebrow" style={{ marginBottom: 8 }}>Gift message</div>
                                         <p style={{ margin: 0, color: 'var(--text-primary)', lineHeight: 1.75 }}>{preview.gift_message}</p>
+                                    </div>
+                                ) : null}
+                                {preview.dedication ? (
+                                    <div className="glass-card" style={{ padding: '22px 22px', marginBottom: 20 }}>
+                                        <div className="eyebrow" style={{ marginBottom: 8 }}>Dedication</div>
+                                        <p style={{ margin: 0, color: 'var(--text-primary)', lineHeight: 1.75 }}>{preview.dedication}</p>
                                     </div>
                                 ) : null}
                                 <div className="status-grid" style={{ marginBottom: 22 }}>
@@ -98,14 +158,30 @@ const ClaimStarPage = () => {
                                         <strong>{preview.registration_number}</strong>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                                    <button type="button" className="primary-button" onClick={handleClaim} disabled={claiming || !preview.can_claim}>
-                                        {claiming ? 'Claiming...' : isAuthenticated ? 'Claim this star' : 'Sign in to claim'}
-                                    </button>
-                                    <Link to={preview.starwiki_url} className="secondary-button">
-                                        Open public star page
-                                    </Link>
-                                </div>
+                                {preview.can_claim ? (
+                                    <div style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
+                                        <button type="button" className="primary-button" onClick={handleClaim} disabled={claiming}>
+                                            {claiming ? 'Claiming...' : isAuthenticated ? 'Claim this star' : 'Sign in to claim'}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="status-banner" style={{ marginBottom: 20 }}>
+                                            This claim link has already been used. Claim status: {formatClaimStatus(preview.claim_status)}.
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                                            <Link to={preview.starwiki_url} className="primary-button">
+                                                Open public star page
+                                            </Link>
+                                            <Link to="/auth" className="secondary-button">
+                                                Enter your account
+                                            </Link>
+                                        </div>
+                                    </>
+                                )}
+                                {error ? (
+                                    <p style={{ marginTop: 16, color: 'var(--status-danger)' }}>{error}</p>
+                                ) : null}
                             </>
                         ) : null}
                     </section>

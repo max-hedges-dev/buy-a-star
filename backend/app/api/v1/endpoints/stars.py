@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.registration import Registration
 from app.models.star import Star
+from app.models.user import User
 from app.core.config import settings
 from app.schemas.star import (
     StarCatalogueFacetsRead,
@@ -97,10 +98,56 @@ def serialize_star(star: Star) -> dict:
         "valuation_scores": star.valuation_scores,
         "valuation_debug": star.valuation_debug,
         "current_owner_user_id": star.current_owner_user_id,
+        "registration_id": None,
+        "public_page_slug": None,
+        "current_holder_username": None,
         "x": star.x,
         "y": star.y,
         "z": star.z,
     }
+
+
+async def _latest_registrations_by_star(db: AsyncSession, star_ids: list[int]) -> dict[int, Registration]:
+    if not star_ids:
+        return {}
+
+    result = await db.execute(
+        select(Registration)
+        .where(Registration.star_id.in_(star_ids))
+        .order_by(Registration.star_id.asc(), Registration.created_at.desc(), Registration.id.desc())
+    )
+    registrations_by_star: dict[int, Registration] = {}
+    for registration in result.scalars().all():
+        registrations_by_star.setdefault(registration.star_id, registration)
+    return registrations_by_star
+
+
+async def _usernames_by_id(db: AsyncSession, user_ids: set[int | None]) -> dict[int, str]:
+    normalized_user_ids = {user_id for user_id in user_ids if user_id is not None}
+    if not normalized_user_ids:
+        return {}
+
+    result = await db.execute(select(User.id, User.username).where(User.id.in_(normalized_user_ids)))
+    return {user_id: username for user_id, username in result.all() if username}
+
+
+async def _serialize_star_collection(db: AsyncSession, stars: list[Star]) -> list[dict]:
+    registrations_by_star = await _latest_registrations_by_star(db, [star.id for star in stars])
+    usernames_by_id = await _usernames_by_id(
+        db,
+        {registration.current_holder_user_id for registration in registrations_by_star.values()},
+    )
+
+    serialized = []
+    for star in stars:
+        payload = serialize_star(star)
+        registration = registrations_by_star.get(star.id)
+        if registration is not None:
+            payload["registration_id"] = registration.id
+            payload["public_page_slug"] = registration.public_page_slug
+            payload["current_holder_username"] = usernames_by_id.get(registration.current_holder_user_id)
+        serialized.append(payload)
+    return serialized
 
 
 def slugify_star_name(value: str | None) -> str:
@@ -299,6 +346,7 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
     registration = registration_result.scalars().first()
     public_registration = None
     if registration and registration.public_page_visibility == "public":
+        usernames_by_id = await _usernames_by_id(db, {registration.current_holder_user_id})
         public_registration = {
             "registration_id": registration.id,
             "registration_number": registration.registration_number,
@@ -308,11 +356,19 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
             "is_gift": registration.is_gift,
             "claim_status": registration.claim_status,
             "public_page_slug": registration.public_page_slug,
+            "current_holder_username": usernames_by_id.get(registration.current_holder_user_id),
             "starwiki_url": f"/starwiki/{registration.public_page_slug}",
         }
 
+    detail_payload = serialize_star(star)
+    if registration is not None:
+        usernames_by_id = await _usernames_by_id(db, {registration.current_holder_user_id})
+        detail_payload["registration_id"] = registration.id
+        detail_payload["public_page_slug"] = registration.public_page_slug
+        detail_payload["current_holder_username"] = usernames_by_id.get(registration.current_holder_user_id)
+
     return StarDetailRead(
-        **serialize_star(star),
+        **detail_payload,
         phot_g_mean_mag=star.phot_g_mean_mag,
         parallax=star.parallax,
         lum_flame=star.lum_flame,
@@ -347,7 +403,7 @@ async def read_stars(
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     stars = result.scalars().all()
-    return [StarListRead(**serialize_star(star)) for star in stars]
+    return [StarListRead(**payload) for payload in await _serialize_star_collection(db, stars)]
 
 
 @router.get("/catalogue", response_model=StarCatalogueRead)
@@ -396,9 +452,10 @@ async def read_star_catalogue(
     )
     items_result = await db.execute(items_query)
     stars = items_result.scalars().all()
+    serialized_stars = await _serialize_star_collection(db, stars)
 
     return StarCatalogueRead(
-        items=[StarListRead(**serialize_star(star)) for star in stars],
+        items=[StarListRead(**payload) for payload in serialized_stars],
         total=total,
         page=bounded_page,
         page_size=safe_page_size,

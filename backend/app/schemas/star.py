@@ -60,6 +60,9 @@ class StarBase(BaseModel):
     valuation_scores: Optional[dict[str, Any]] = None
     valuation_debug: Optional[dict[str, Any]] = None
     current_owner_user_id: Optional[int] = None
+    registration_id: Optional[int] = None
+    public_page_slug: Optional[str] = None
+    current_holder_username: Optional[str] = None
 
 
 class StarListRead(StarBase):

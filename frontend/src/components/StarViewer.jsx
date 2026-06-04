@@ -8,6 +8,7 @@ import { createCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../s
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 import { getColorFamily, getSpectralDisplay } from '../utils/starAppearance';
+import { DEMO_MODE } from '../config/appEnv';
 
 const formatMaybeNumber = (value, digits = 2) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -2079,7 +2080,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         </p>
                                     ) : null}
                                     <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
-                                        Secure payment via Stripe sandbox checkout. Aster Atlas remains a private registry built around real catalogued stars.
+                                        {DEMO_MODE
+                                            ? 'Demo sign-in is active for this environment. After sign-in, checkout uses Stripe test mode just like a real account.'
+                                            : 'Secure payment via Stripe sandbox checkout. Aster Atlas remains a private registry built around real catalogued stars.'}
                                     </p>
                                 </>
                             ) : (

@@ -4,7 +4,9 @@ import { AuthContext } from './auth-context';
 import {
     fetchCurrentUser,
     logoutCurrentUser,
+    signInAsDemoRole,
     signInWithGoogleToken,
+    updateCurrentUserProfile,
 } from '../services/auth';
 
 export function AuthProvider({ children }) {
@@ -54,6 +56,22 @@ export function AuthProvider({ children }) {
         }
     }, [clearAuthError]);
 
+    const signInAsDemo = useCallback(async (role) => {
+        setIsSigningIn(true);
+        clearAuthError();
+
+        try {
+            const response = await signInAsDemoRole(role);
+            setUser(response.user);
+            return response.user;
+        } catch (error) {
+            setAuthError(error.message);
+            throw error;
+        } finally {
+            setIsSigningIn(false);
+        }
+    }, [clearAuthError]);
+
     const logout = useCallback(async () => {
         try {
             await logoutCurrentUser();
@@ -61,6 +79,18 @@ export function AuthProvider({ children }) {
             window.google?.accounts?.id?.disableAutoSelect?.();
             setUser(null);
             clearAuthError();
+        }
+    }, [clearAuthError]);
+
+    const updateProfile = useCallback(async (payload) => {
+        clearAuthError();
+        try {
+            const response = await updateCurrentUserProfile(payload);
+            setUser(response.user);
+            return response.user;
+        } catch (error) {
+            setAuthError(error.message);
+            throw error;
         }
     }, [clearAuthError]);
 
@@ -72,7 +102,9 @@ export function AuthProvider({ children }) {
         isSigningIn,
         logout,
         refreshSession,
+        signInAsDemo,
         signInWithGoogle,
+        updateProfile,
         user,
     };
 

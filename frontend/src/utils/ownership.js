@@ -73,9 +73,13 @@ export const getDeliveryLabel = (order) => (
 export const getVisibilityLabel = () => 'Visible in the registry when someone searches this star';
 
 export const formatClaimStatus = (value) => (
-    (value || 'not_claimable')
+    ({
+        claimable: 'Unclaimed',
+        claimed: 'Claimed',
+        not_claimable: 'Not claimable',
+    }[(value || 'not_claimable')] || (value || 'not_claimable')
         .replaceAll('_', ' ')
-        .replace(/\b\w/g, (match) => match.toUpperCase())
+        .replace(/\b\w/g, (match) => match.toUpperCase()))
 );
 
 export const formatOrderStatus = (value) => (

@@ -1,6 +1,7 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import { GOOGLE_CLIENT_ID } from '../services/auth';
+import { DEMO_MODE } from '../config/appEnv';
 
 const GOOGLE_IDENTITY_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 
@@ -39,7 +40,9 @@ const GoogleSignInButton = ({ disabled = false, onCredential }) => {
     const isConfigured = Boolean(GOOGLE_CLIENT_ID);
     const configurationErrorMessage = isConfigured
         ? ''
-        : 'Google sign-in is not configured. Add VITE_GOOGLE_CLIENT_ID to frontend/.env, then restart the frontend server.';
+        : DEMO_MODE
+            ? ''
+            : 'Google sign-in is not configured. Add VITE_GOOGLE_CLIENT_ID to frontend/.env, then restart the frontend server.';
 
     const handleCredential = useEffectEvent(async (response) => {
         if (!response?.credential) {
@@ -108,7 +111,26 @@ const GoogleSignInButton = ({ disabled = false, onCredential }) => {
                         pointerEvents: disabled ? 'none' : 'auto',
                     }}
                 />
-            ) : null}
+            ) : (
+                <button
+                    type="button"
+                    disabled
+                    style={{
+                        width: '100%',
+                        maxWidth: 320,
+                        height: 44,
+                        borderRadius: 999,
+                        border: '1px solid rgba(245,239,226,0.12)',
+                        background: 'rgba(245,239,226,0.06)',
+                        color: 'rgba(245,239,226,0.72)',
+                        fontSize: '0.98rem',
+                        fontWeight: 600,
+                        cursor: 'not-allowed',
+                    }}
+                >
+                    Continue with Google
+                </button>
+            )}
             {errorMessage ? (
                 <p style={{ color: '#ff8e73', fontSize: '0.95rem', lineHeight: 1.5 }}>{errorMessage}</p>
             ) : null}

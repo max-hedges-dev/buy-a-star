@@ -11,12 +11,15 @@ class AccountStarSummary(BaseModel):
     display_name: str
     scientific_name: str
     owner_name: str | None = None
+    owner_username: str | None = None
     recipient_name: str | None = None
     dedication: str | None = None
     current_holder_label: str | None = None
+    current_holder_username: str | None = None
     claim_status: str | None = None
     status: str | None = None
     is_gift: bool = False
+    is_demo: bool = False
     category: str
     price: float | None = None
     constellation: str | None = None
@@ -40,6 +43,7 @@ class AccountOrderSummary(BaseModel):
     registration_type: str = "self"
     claim_status: str | None = None
     is_gift: bool = False
+    is_demo: bool = False
     amount: float
     currency: str
     includes_certificate: bool

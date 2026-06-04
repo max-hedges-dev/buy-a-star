@@ -17,7 +17,7 @@ from app.schemas.registration import (
     RegistrationClaimResult,
     RegistrationPublicRead,
 )
-from app.services.registration_records import hash_claim_token
+from app.services.registration_records import build_claim_token, parse_claim_token
 from app.api.v1.endpoints.stars import build_star_detail_response
 
 
@@ -28,6 +28,20 @@ def _frontend_public_url(slug: str) -> str:
     return f"/starwiki/{slug}"
 
 
+def _frontend_claim_url(registration: Registration) -> str | None:
+    if registration.is_gift and registration.claim_status == "claimable":
+        return f"/claim/{build_claim_token(registration.id)}"
+    if registration.claim_status == "claimable":
+        return f"/claim/{build_claim_token(registration.id)}"
+    return None
+
+
+def _can_access_registration(current_user: User, registration: Registration) -> bool:
+    if current_user.id == registration.current_holder_user_id:
+        return True
+    return current_user.id == registration.purchaser_user_id and registration.claim_status == "claimable"
+
+
 async def _load_registration_with_star(db: AsyncSession, *, registration_id: int | None = None, slug: str | None = None):
     query = select(Registration, Star).join(Star, Star.id == Registration.star_id)
     if registration_id is not None:
@@ -36,6 +50,15 @@ async def _load_registration_with_star(db: AsyncSession, *, registration_id: int
         query = query.where(Registration.public_page_slug == slug)
     result = await db.execute(query)
     return result.first()
+
+
+async def _load_usernames(db: AsyncSession, *user_ids: int | None) -> dict[int, str]:
+    normalized = [user_id for user_id in user_ids if user_id is not None]
+    if not normalized:
+        return {}
+
+    result = await db.execute(select(User.id, User.username).where(User.id.in_(normalized)))
+    return {user_id: username for user_id, username in result.all() if username}
 
 
 @router.get("/public/{slug}", response_model=RegistrationPublicRead)
@@ -52,6 +75,7 @@ async def read_public_registration(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="StarWiki record not found.")
 
     star_detail = await build_star_detail_response(star, db)
+    usernames = await _load_usernames(db, registration.current_holder_user_id)
     return RegistrationPublicRead(
         id=registration.id,
         registration_number=registration.registration_number,
@@ -60,9 +84,11 @@ async def read_public_registration(
         dedication=registration.dedication,
         gift_message=registration.gift_message,
         is_gift=registration.is_gift,
+        is_demo=registration.is_demo,
         claim_status=registration.claim_status,
         public_page_slug=registration.public_page_slug,
         public_page_visibility=registration.public_page_visibility,
+        current_holder_username=usernames.get(registration.current_holder_user_id),
         star=star_detail,
     )
 
@@ -75,23 +101,29 @@ async def preview_claim(
     result = await db.execute(
         select(Registration, Star)
         .join(Star, Star.id == Registration.star_id)
-        .where(Registration.claim_token_hash == hash_claim_token(claim_token))
+        .where(Registration.id == parse_claim_token(claim_token))
     )
     row = result.first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim link not found.")
 
     registration, star = row
+    purchaser_result = await db.execute(select(User).where(User.id == registration.purchaser_user_id))
+    purchaser = purchaser_result.scalars().first()
     star_detail = await build_star_detail_response(star, db)
+    usernames = await _load_usernames(db, registration.current_holder_user_id)
     return RegistrationClaimPreviewRead(
         registration_id=registration.id,
         registration_number=registration.registration_number,
         registered_display_name=registration.registered_display_name,
         recipient_name=registration.recipient_name,
+        purchaser_name=purchaser.full_name if purchaser else None,
         gift_message=registration.gift_message,
         dedication=registration.dedication,
         claim_status=registration.claim_status,
+        current_holder_username=usernames.get(registration.current_holder_user_id),
         can_claim=registration.claim_status == "claimable",
+        is_demo=registration.is_demo,
         starwiki_url=_frontend_public_url(registration.public_page_slug),
         star=star_detail,
     )
@@ -105,7 +137,7 @@ async def claim_registration(
 ) -> RegistrationClaimResult:
     result = await db.execute(
         select(Registration)
-        .where(Registration.claim_token_hash == hash_claim_token(claim_token))
+        .where(Registration.id == parse_claim_token(claim_token))
         .with_for_update()
     )
     registration = result.scalars().first()
@@ -117,7 +149,10 @@ async def claim_registration(
     previous_holder = registration.current_holder_user_id
     registration.current_holder_user_id = current_user.id
     registration.claim_status = "claimed"
-    registration.status = "registered_gift_claimed"
+    if registration.is_gift and previous_holder == registration.purchaser_user_id and registration.recipient_name:
+        registration.status = "registered_gift_claimed"
+    else:
+        registration.status = "transferred"
     from datetime import datetime, timezone
     registration.claimed_at = datetime.now(timezone.utc)
 
@@ -145,6 +180,7 @@ async def claim_registration(
     await db.commit()
     return RegistrationClaimResult(
         registration_id=registration.id,
+        transaction_id=registration.transaction_id,
         claim_status=registration.claim_status,
         current_holder_user_id=current_user.id,
         starwiki_url=_frontend_public_url(registration.public_page_slug),
@@ -162,10 +198,11 @@ async def read_registration(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found.")
 
     registration, star = row
-    if current_user.id not in {registration.current_holder_user_id, registration.purchaser_user_id}:
+    if not _can_access_registration(current_user, registration):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this registration.")
 
     star_detail = await build_star_detail_response(star, db)
+    usernames = await _load_usernames(db, registration.current_holder_user_id)
     return RegistrationAccountRead(
         id=registration.id,
         transaction_id=registration.transaction_id,
@@ -179,14 +216,80 @@ async def read_registration(
         recipient_name=registration.recipient_name,
         recipient_email=registration.recipient_email,
         is_gift=registration.is_gift,
+        is_demo=registration.is_demo,
         claim_status=registration.claim_status,
         claimed_at=registration.claimed_at,
         public_page_slug=registration.public_page_slug,
         public_page_visibility=registration.public_page_visibility,
         ownership_history_visibility=registration.ownership_history_visibility,
+        current_holder_username=usernames.get(registration.current_holder_user_id),
         can_manage=current_user.id == registration.current_holder_user_id,
         can_claim=registration.claim_status == "claimable",
-        claim_url=None,
+        can_prepare_claim=current_user.id == registration.current_holder_user_id,
+        claim_url=_frontend_claim_url(registration),
+        starwiki_url=_frontend_public_url(registration.public_page_slug),
+        star=star_detail,
+    )
+
+
+@router.post("/{registration_id}/prepare-claim", response_model=RegistrationAccountRead)
+async def prepare_registration_claim(
+    registration_id: int,
+    current_user: User = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RegistrationAccountRead:
+    row = await _load_registration_with_star(db, registration_id=registration_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found.")
+
+    registration, star = row
+    if current_user.id != registration.current_holder_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the current holder can prepare a claim link.")
+
+    registration.claim_status = "claimable"
+    registration.claimed_at = None
+    if registration.is_gift and registration.recipient_name:
+        registration.status = "registered_gift_unclaimed"
+
+    db.add(
+        OwnershipHistory(
+            registration_id=registration.id,
+            from_user_id=current_user.id,
+            to_user_id=None,
+            event_type="claim_link_prepared",
+            event_note="Current holder prepared a claim link for a future transfer.",
+            public_visibility=False,
+        )
+    )
+    await db.commit()
+    await db.refresh(registration)
+
+    star_detail = await build_star_detail_response(star, db)
+    usernames = await _load_usernames(db, registration.current_holder_user_id)
+    return RegistrationAccountRead(
+        id=registration.id,
+        transaction_id=registration.transaction_id,
+        registration_number=registration.registration_number,
+        status=registration.status,
+        purchaser_user_id=registration.purchaser_user_id,
+        current_holder_user_id=registration.current_holder_user_id,
+        registered_display_name=registration.registered_display_name,
+        dedication=registration.dedication,
+        gift_message=registration.gift_message,
+        recipient_name=registration.recipient_name,
+        recipient_email=registration.recipient_email,
+        is_gift=registration.is_gift,
+        is_demo=registration.is_demo,
+        claim_status=registration.claim_status,
+        claimed_at=registration.claimed_at,
+        public_page_slug=registration.public_page_slug,
+        public_page_visibility=registration.public_page_visibility,
+        ownership_history_visibility=registration.ownership_history_visibility,
+        current_holder_username=usernames.get(registration.current_holder_user_id),
+        can_manage=True,
+        can_claim=registration.claim_status == "claimable",
+        can_prepare_claim=True,
+        claim_url=_frontend_claim_url(registration),
         starwiki_url=_frontend_public_url(registration.public_page_slug),
         star=star_detail,
     )

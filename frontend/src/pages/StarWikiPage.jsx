@@ -59,6 +59,9 @@ const StarWikiPage = () => {
                                 <div style={{ display: 'grid', gap: 20 }}>
                                     <div>
                                         <p className="eyebrow" style={{ marginBottom: 14 }}>StarWiki record powered by Aster Atlas</p>
+                                        {registration.is_demo ? (
+                                            <p className="eyebrow" style={{ marginBottom: 10, color: 'var(--primary-strong)' }}>Demo record</p>
+                                        ) : null}
                                         <h1 style={{ fontSize: 'clamp(2.6rem, 5vw, 4.6rem)', lineHeight: 0.94, marginBottom: 16 }}>
                                             {registration.registered_display_name || getStarDisplayName(star)}
                                         </h1>
@@ -73,8 +76,8 @@ const StarWikiPage = () => {
                                             <strong style={{ fontSize: '1.15rem' }}>{registration.registration_number}</strong>
                                         </div>
                                         <div className="glass-card" style={{ padding: '20px 22px' }}>
-                                            <div className="eyebrow" style={{ marginBottom: 8 }}>Registry status</div>
-                                            <strong style={{ fontSize: '1.15rem' }}>{registration.status.replaceAll('_', ' ')}</strong>
+                                            <div className="eyebrow" style={{ marginBottom: 8 }}>Ownership</div>
+                                            <strong style={{ fontSize: '1.15rem' }}>{registration.current_holder_username || 'Not shared yet'}</strong>
                                         </div>
                                     </div>
                                 </div>

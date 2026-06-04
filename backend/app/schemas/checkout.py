@@ -60,6 +60,7 @@ class CheckoutSessionStatusResponse(BaseModel):
     recipient_name: str | None = None
     claim_status: str | None = None
     claim_url: str | None = None
+    is_demo: bool = False
     includes_certificate: bool
     certificate_type: str
     certificate_label: str
@@ -89,6 +90,7 @@ class CheckoutFulfillmentResult(BaseModel):
     recipient_name: str | None = None
     claim_status: str | None = None
     claim_url: str | None = None
+    is_demo: bool = False
     includes_certificate: bool
     certificate_type: str
     certificate_label: str

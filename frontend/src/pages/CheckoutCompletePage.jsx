@@ -8,6 +8,7 @@ import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOrder, fetchCheckoutSessionStatus } from '../services/api';
 import {
     formatDate,
+    formatClaimStatus,
     getDeliveryLabel,
     getOrderPath,
     getOwnedStarPath,
@@ -53,6 +54,8 @@ const CheckoutCompletePage = () => {
     const [checkoutData, setCheckoutData] = useState(null);
     const [order, setOrder] = useState(null);
     const [error, setError] = useState('');
+    const [warning, setWarning] = useState('');
+    const [copied, setCopied] = useState(false);
     const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 960 });
     const pagePaddingX = px(isNarrow ? 18 : 24);
     const heroPadding = `${px(42)}px ${px(40)}px`;
@@ -76,8 +79,12 @@ const CheckoutCompletePage = () => {
                 setStatus(response.fulfilled ? 'success' : 'pending');
 
                 if (response.fulfilled && response.transaction_id) {
-                    const orderResponse = await fetchAccountOrder(response.transaction_id);
-                    setOrder(orderResponse);
+                    try {
+                        const orderResponse = await fetchAccountOrder(response.transaction_id);
+                        setOrder(orderResponse);
+                    } catch (orderError) {
+                        setWarning('Your star was registered, but we could not load the ownership details automatically. You can open them from your account.');
+                    }
                 }
             } catch (requestError) {
                 setStatus('error');
@@ -95,6 +102,26 @@ const CheckoutCompletePage = () => {
                 ? getOwnedStarPath(order)
                 : null
     ), [checkoutData, order]);
+
+    const handleCopyClaimLink = async () => {
+        if (!checkoutData?.claim_url) return;
+        try {
+            const absoluteUrl = checkoutData.claim_url.startsWith('http')
+                ? checkoutData.claim_url
+                : `${window.location.origin}${checkoutData.claim_url}`;
+            await navigator.clipboard.writeText(absoluteUrl);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1800);
+        } catch {
+            setCopied(false);
+        }
+    };
+
+    const absoluteClaimUrl = checkoutData?.claim_url
+        ? (checkoutData.claim_url.startsWith('http')
+            ? checkoutData.claim_url
+            : `${window.location.origin}${checkoutData.claim_url}`)
+        : null;
 
     return (
         <>
@@ -120,17 +147,34 @@ const CheckoutCompletePage = () => {
                                 <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.25fr 0.95fr', gap: px(28), alignItems: 'start' }}>
                                     <div>
                                         <div className="eyebrow" style={{ marginBottom: 18 }}>Registration Confirmed</div>
+                                        {checkoutData.is_demo ? (
+                                            <div className="eyebrow" style={{ marginBottom: 12, color: 'var(--primary-strong)' }}>Demo registration</div>
+                                        ) : null}
                                         <h1 style={{ fontSize: 'clamp(2.6rem, 5.4vw, 4.8rem)', lineHeight: 0.94, marginBottom: 16 }}>
-                                            {checkoutData.star_name} is now recorded for {checkoutData.owner_name}
+                                            {checkoutData.recipient_name || checkoutData.owner_name}&rsquo;s star has been registered.
                                         </h1>
                                         <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 28 }}>
                                             Your registration is complete, the private registry record has been issued, and your certificate access is ready. This star now appears in your Aster Atlas account with its public StarWiki page and private ownership page.
                                         </p>
+                                        {warning ? (
+                                            <div className="status-banner" style={{ marginBottom: 20 }}>{warning}</div>
+                                        ) : null}
+                                        {absoluteClaimUrl ? (
+                                            <div className="glass-card" style={{ padding: '18px 18px', marginBottom: 22, background: 'var(--surface-warm)' }}>
+                                                <div className="eyebrow" style={{ marginBottom: 8 }}>Claim link</div>
+                                                <div style={{ wordBreak: 'break-all', color: 'var(--text-primary)', marginBottom: 12 }}>
+                                                    {absoluteClaimUrl}
+                                                </div>
+                                                <p className="muted-copy" style={{ margin: 0 }}>
+                                                    Share this link with the recipient whenever you are ready. They can view the gift first, then claim it into their own Aster Atlas account.
+                                                </p>
+                                            </div>
+                                        ) : null}
 
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
                                             {ownedStarPath ? (
                                                 <Link to={ownedStarPath} style={primaryButtonStyle}>
-                                                    Open star page
+                                                    Open ownership page
                                                 </Link>
                                             ) : null}
                                             {checkoutData.transaction_id ? (
@@ -147,10 +191,15 @@ const CheckoutCompletePage = () => {
                                             <Link to="/account?section=overview" className="secondary-button" style={actionStyle}>
                                                 Enter account
                                             </Link>
-                                            {checkoutData.claim_url ? (
-                                                <a href={checkoutData.claim_url} className="secondary-button" style={actionStyle}>
-                                                    Open gift claim page
-                                                </a>
+                                            {absoluteClaimUrl ? (
+                                                <>
+                                                    <button type="button" onClick={handleCopyClaimLink} className="secondary-button" style={actionStyle}>
+                                                        {copied ? 'Claim link copied' : 'Copy claim link'}
+                                                    </button>
+                                                    <a href={absoluteClaimUrl} className="secondary-button" style={actionStyle}>
+                                                        Open recipient claim page
+                                                    </a>
+                                                </>
                                             ) : null}
                                             {checkoutData.transaction_id ? (
                                                 <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={actionStyle}>
@@ -166,6 +215,18 @@ const CheckoutCompletePage = () => {
                                             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{checkoutData.registration_number || 'Pending'}</div>
                                         </div>
                                         <div style={tileStyle}>
+                                            <div className="eyebrow" style={{ marginBottom: 10 }}>Claim status</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatClaimStatus(checkoutData.claim_status)}</div>
+                                        </div>
+                                        <div style={tileStyle}>
+                                            <div className="eyebrow" style={{ marginBottom: 10 }}>Current holder</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>
+                                                {checkoutData.registration_type === 'gift'
+                                                    ? (checkoutData.is_demo ? 'Demo buyer (you)' : 'Buyer (you)')
+                                                    : 'You'}
+                                            </div>
+                                        </div>
+                                        <div style={tileStyle}>
                                             <div className="eyebrow" style={{ marginBottom: 10 }}>Certificate</div>
                                             <div style={{ fontSize: '1.32rem', fontWeight: 700 }}>{checkoutData.certificate_label}</div>
                                         </div>
@@ -176,7 +237,9 @@ const CheckoutCompletePage = () => {
                                         <div style={tileStyle}>
                                             <div className="eyebrow" style={{ marginBottom: 10 }}>What happens next</div>
                                             <p className="muted-copy">
-                                                Your StarWiki page and private ownership page stay available in your account. If this is a gift, the recipient can view it first and claim it later.
+                                                {checkoutData.registration_type === 'gift'
+                                                    ? 'Your StarWiki page and private ownership page stay available in your account. The recipient can view the gift first and claim it later.'
+                                                    : 'Your StarWiki page and private ownership page stay available in your account. If you ever want to hand this star over later, you can prepare a claim link from the ownership page.'}
                                             </p>
                                         </div>
                                     </aside>
@@ -232,11 +295,28 @@ const CheckoutCompletePage = () => {
                                             </div>
                                             <div className="status-tile">
                                                 <div>
-                                                    <strong>Status</strong>
-                                                    <p>{checkoutData.transaction_status?.replaceAll('_', ' ')}</p>
+                                                    <strong>Gift status</strong>
+                                                    <p>{formatClaimStatus(checkoutData.claim_status)}</p>
                                                 </div>
                                             </div>
                                         </div>
+                                        {checkoutData.registration_type === 'gift' ? (
+                                            <div className="status-banner" style={{ marginTop: 16 }}>
+                                                {checkoutData.recipient_name
+                                                    ? `You are managing this star until ${checkoutData.recipient_name} claims it.`
+                                                    : 'You are managing this star until the recipient claims it.'}
+                                            </div>
+                                        ) : null}
+                                        {checkoutData.registration_type === 'gift' && !order?.recipient_email ? (
+                                            <div className="status-banner" style={{ marginTop: 12 }}>
+                                                No recipient email was added. You can copy the claim link and send it manually.
+                                            </div>
+                                        ) : null}
+                                        {checkoutData.registration_type === 'gift' && order?.recipient_email ? (
+                                            <div className="status-banner" style={{ marginTop: 12 }}>
+                                                Recipient email saved. Email invitation can be sent later.
+                                            </div>
+                                        ) : null}
                                     </section>
 
                                     <section className="glass-card" style={{ padding: cardPadding }}>

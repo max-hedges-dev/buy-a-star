@@ -8,6 +8,7 @@ import useResponsiveScale from '../hooks/useResponsiveScale';
 import { fetchAccountOverview } from '../services/api';
 import {
     formatDate,
+    formatClaimStatus,
     formatMoney,
     formatOrderStatus,
     getDeliveryLabel,
@@ -122,7 +123,7 @@ const EmptyState = ({ eyebrow, title, body, actionTo, actionLabel }) => (
 );
 
 const AccountPage = () => {
-    const { user } = useAuth();
+    const { updateProfile, user } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const sectionParam = searchParams.get('section');
     const activeSection = SECTION_CONFIG.some((section) => section.id === sectionParam) ? sectionParam : 'stars';
@@ -130,6 +131,9 @@ const AccountPage = () => {
     const [error, setError] = useState('');
     const [overview, setOverview] = useState({ orders: [], stars: [] });
     const [downloadingOrderId, setDownloadingOrderId] = useState(null);
+    const [usernameDraft, setUsernameDraft] = useState('');
+    const [usernameStatus, setUsernameStatus] = useState('');
+    const [isSavingUsername, setIsSavingUsername] = useState(false);
     const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 920 });
 
     useEffect(() => {
@@ -146,6 +150,10 @@ const AccountPage = () => {
 
         loadOverview();
     }, []);
+
+    useEffect(() => {
+        setUsernameDraft(user?.username || '');
+    }, [user?.username]);
 
     useEffect(() => {
         if (!sectionParam || activeSection !== sectionParam) {
@@ -169,7 +177,7 @@ const AccountPage = () => {
     ), [fulfilledOrders, stars]);
 
     const latestOrder = orders[0] || null;
-    const userName = user?.name || user?.email?.split('@')[0] || 'Aster Atlas collector';
+    const userName = user?.username || user?.full_name || user?.email?.split('@')[0] || 'Aster Atlas collector';
     const pagePaddingX = px(isNarrow ? 18 : 24);
     const cardPadding = `${px(30)}px ${px(32)}px`;
     const heroPadding = `${px(42)}px ${px(40)}px`;
@@ -193,6 +201,20 @@ const AccountPage = () => {
             await downloadCertificate(order);
         } finally {
             setDownloadingOrderId(null);
+        }
+    };
+
+    const handleUsernameSave = async (event) => {
+        event.preventDefault();
+        try {
+            setIsSavingUsername(true);
+            setUsernameStatus('');
+            await updateProfile({ username: usernameDraft });
+            setUsernameStatus('Username saved. Aster Atlas can now use it for ownership and StarWiki references.');
+        } catch (requestError) {
+            setUsernameStatus(requestError.message);
+        } finally {
+            setIsSavingUsername(false);
         }
     };
 
@@ -221,6 +243,14 @@ const AccountPage = () => {
                                     <p className="muted-copy">
                                         Registered to {star.owner_name || 'Owner pending'} on {formatDate(star.purchase_date || order?.fulfilled_at || order?.created_at)}
                                     </p>
+                                    {star.current_holder_username || star.current_holder_label ? (
+                                        <p className="muted-copy" style={{ marginTop: 8 }}>
+                                            Ownership: {star.current_holder_username || star.current_holder_label}
+                                        </p>
+                                    ) : null}
+                                    {star.is_demo ? (
+                                        <p className="eyebrow" style={{ marginTop: 10, color: 'var(--primary-strong)' }}>Demo record</p>
+                                    ) : null}
                                 </div>
                                 <div style={{ minWidth: isCompact ? 0 : 180, textAlign: isCompact ? 'left' : 'right' }}>
                                     <div style={{ color: 'rgba(255,255,255,0.62)', marginBottom: 8 }}>Registration number</div>
@@ -241,14 +271,16 @@ const AccountPage = () => {
                                     <div className="eyebrow" style={{ marginBottom: 8 }}>Certificate</div>
                                     <strong>{order?.certificate_label || 'Included'}</strong>
                                 </div>
+                                <div style={summaryTileStyle}>
+                                    <div className="eyebrow" style={{ marginBottom: 8 }}>Claim status</div>
+                                    <strong>{formatClaimStatus(star.claim_status)}</strong>
+                                </div>
                             </div>
 
                             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                                {order ? (
-                                    <Link to={getOwnedStarPath(order)} style={primaryButtonStyle}>
-                                        Open star page
-                                    </Link>
-                                ) : null}
+                                <Link to={getOwnedStarPath(star)} style={primaryButtonStyle}>
+                                    Open ownership page
+                                </Link>
                                 {order ? (
                                     <button
                                         type="button"
@@ -259,8 +291,13 @@ const AccountPage = () => {
                                         {downloadingOrderId === order.id ? 'Preparing download...' : 'Download certificate'}
                                     </button>
                                 ) : null}
+                                {order ? (
+                                    <Link to={getOrderPath(order.id)} className="secondary-button" style={actionStyle}>
+                                        Open order & certificate
+                                    </Link>
+                                ) : null}
                                 <Link to={getPublicStarPath(star)} className="secondary-button" style={actionStyle}>
-                                    View in atlas
+                                    Open StarWiki page
                                 </Link>
                             </div>
                         </article>
@@ -286,7 +323,11 @@ const AccountPage = () => {
         return (
             <section className="glass-card" style={{ padding: cardPadding }}>
                 <div style={{ display: 'grid', gap: 18 }}>
-                    {orders.map((order) => (
+                    {orders.map((order) => {
+                        const canOpenOwnershipPage = order.status === 'fulfilled'
+                            && (order.claim_status === 'claimable' || order.star.current_holder_label === 'You');
+
+                        return (
                         <article key={order.id} style={{ ...recordCardStyle, padding: `${px(24)}px ${px(24)}px ${px(22)}px` }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
                                 <div>
@@ -322,13 +363,17 @@ const AccountPage = () => {
                                     Open order record
                                 </Link>
                                 {order.status === 'fulfilled' ? (
-                                    <Link to={getOwnedStarPath(order)} className="secondary-button" style={actionStyle}>
-                                        Open star page
+                                    <Link
+                                        to={canOpenOwnershipPage ? getOwnedStarPath(order) : getPublicStarPath(order.star)}
+                                        className="secondary-button"
+                                        style={actionStyle}
+                                    >
+                                        {canOpenOwnershipPage ? 'Open ownership page' : 'Open StarWiki page'}
                                     </Link>
                                 ) : null}
                             </div>
                         </article>
-                    ))}
+                    )})}
                 </div>
             </section>
         );
@@ -381,6 +426,10 @@ const AccountPage = () => {
 
                                 <div className="profile-meta">
                                     <div>
+                                        <span>Username</span>
+                                        <strong>{user?.username || 'Not set yet'}</strong>
+                                    </div>
+                                    <div>
                                         <span>Registered stars</span>
                                         <strong>{stars.length}</strong>
                                     </div>
@@ -396,6 +445,55 @@ const AccountPage = () => {
                             </aside>
                         </div>
                     </section>
+
+                    {!user?.username ? (
+                        <section className="glass-card" style={{ padding: cardPadding }}>
+                            <div style={{ display: 'grid', gap: 16 }}>
+                                <div>
+                                    <p className="eyebrow" style={{ marginBottom: 12 }}>Choose your username</p>
+                                    <h2 style={{ fontSize: 'clamp(1.8rem, 3vw, 2.8rem)', marginBottom: 10 }}>
+                                        Pick the name Aster Atlas will use for ownership.
+                                    </h2>
+                                    <p className="muted-copy" style={{ maxWidth: 760 }}>
+                                        Public ownership on StarWiki pages should refer to a stable Aster Atlas username rather than an email address or temporary account label. Choose a unique username once and we&apos;ll use it anywhere ownership is shown.
+                                    </p>
+                                </div>
+                                <form onSubmit={handleUsernameSave} style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
+                                    <label style={{ display: 'grid', gap: 8 }}>
+                                        <span className="eyebrow">Aster Atlas username</span>
+                                        <input
+                                            type="text"
+                                            value={usernameDraft}
+                                            onChange={(event) => setUsernameDraft(event.target.value)}
+                                            placeholder="Choose a unique username"
+                                            style={{
+                                                width: '100%',
+                                                background: 'rgba(255,255,255,0.04)',
+                                                border: '1px solid rgba(245,239,226,0.1)',
+                                                borderRadius: 14,
+                                                padding: '14px 16px',
+                                                color: 'var(--text-primary)',
+                                                fontSize: '1rem',
+                                            }}
+                                        />
+                                    </label>
+                                    <p className="muted-copy" style={{ margin: 0 }}>
+                                        Use 3-24 letters, numbers, hyphens, or underscores.
+                                    </p>
+                                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <button type="submit" className="primary-button" disabled={isSavingUsername}>
+                                            {isSavingUsername ? 'Saving username...' : 'Save username'}
+                                        </button>
+                                        {usernameStatus ? (
+                                            <span className={usernameStatus.toLowerCase().includes('saved') ? 'status-banner' : 'status-banner status-banner-error'}>
+                                                {usernameStatus}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                </form>
+                            </div>
+                        </section>
+                    ) : null}
 
                     {status === 'loading' ? (
                         <section className="glass-card" style={{ padding: '40px' }}>

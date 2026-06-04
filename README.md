@@ -1,6 +1,6 @@
-# Aster Atlas Auth + Payments Setup
+# Aster Atlas Auth, Payments, and Demo Mode Setup
 
-This project now uses Google-only authentication for v1.
+This project now uses Google authentication for the normal customer journey, plus an internal demo mode for founders/builders/testers.
 
 ## What was added
 
@@ -12,6 +12,7 @@ This project now uses Google-only authentication for v1.
 - `GET /api/v1/auth/me` to restore session state
 - `GET /api/v1/auth/protected` as a protected-route proof
 - Frontend `/auth` and protected `/account` routes
+- Internal demo users and demo checkout when explicitly enabled by environment variables
 
 ## Local environment
 
@@ -19,6 +20,10 @@ This project now uses Google-only authentication for v1.
 
 1. Copy [backend/.env.example](/C:/Users/max_h/OneDrive/Documents/Vodafone%20Work/Dev%20Projects/Buy-A-Star%20-%20Copy/backend/.env.example) to `backend/.env`.
 2. Fill in:
+   - `APP_ENV`
+   - `DEMO_MODE`
+   - `ALLOW_DEMO_AUTH`
+   - `ALLOW_DEMO_CHECKOUT`
    - `GOOGLE_CLIENT_ID`
    - `SESSION_SECRET`
    - `FRONTEND_ORIGIN`
@@ -53,8 +58,11 @@ cd backend
 
 1. Copy [frontend/.env.example](/C:/Users/max_h/OneDrive/Documents/Vodafone%20Work/Dev%20Projects/Buy-A-Star%20-%20Copy/frontend/.env.example) to `frontend/.env`.
 2. Fill in:
+   - `VITE_APP_ENV`
+   - `VITE_DEMO_MODE`
+   - `VITE_API_BASE_URL`
    - `VITE_GOOGLE_CLIENT_ID`
-   - `VITE_API_URL`
+   - `VITE_API_URL` (still supported for backward compatibility)
    - `VITE_STRIPE_PUBLISHABLE_KEY`
 3. Start the frontend:
 
@@ -118,6 +126,7 @@ That avoids cookie issues caused by mixing `localhost` and `127.0.0.1`.
 ### Stripe endpoints
 
 - `POST /api/v1/checkout/session`
+- `POST /api/v1/checkout/demo-complete`
 - `GET /api/v1/checkout/session-status`
 - `POST /api/v1/checkout/webhook`
 
@@ -143,3 +152,59 @@ cd backend
 - Set `BACKEND_ORIGIN` to the real HTTPS backend origin so the cookie is marked `Secure`.
 - Keep `SESSION_SECRET` long and random.
 - Add only real deployed frontend domains to the Google OAuth client’s Authorized JavaScript origins.
+
+## Demo / staging mode
+
+Demo mode is for internal testing only. It is not the customer-facing no-account journey.
+
+### Backend example
+
+```env
+APP_ENV=staging
+DEMO_MODE=true
+ALLOW_DEMO_AUTH=true
+ALLOW_DEMO_CHECKOUT=true
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/aster-atlas-staging
+```
+
+### Frontend example
+
+```env
+VITE_APP_ENV=staging
+VITE_DEMO_MODE=true
+VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
+```
+
+### Demo mode behavior
+
+- Shows demo sign-in options on `/auth`
+- Lets testers continue as seeded demo users:
+  - demo buyer
+  - demo recipient
+  - demo collector
+- Shows a demo toolbar in the app
+- Enables `Complete Demo Registration` instead of requiring Stripe
+- Marks created data as demo data in users, transactions, and registrations
+
+### Safety rules
+
+- Demo auth and demo checkout only appear when the environment flags are enabled
+- Production should keep `DEMO_MODE=false`
+- Staging/demo should use a separate database from production
+
+### Demo testing flow
+
+1. Enable the demo flags in both `backend/.env` and `frontend/.env`
+2. Restart backend and frontend
+3. Open `/auth`
+4. Continue as a demo user
+5. Open a star and use `Complete Demo Registration`
+6. Verify:
+   - account overview
+   - checkout complete page
+   - ownership page
+   - public StarWiki page
+7. For gift testing:
+   - choose `For someone else`
+   - complete a demo registration
+   - open the generated claim page

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import re
-import secrets
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.ownership_history import OwnershipHistory
 from app.models.registration import Registration
 from app.models.star import Star
@@ -19,8 +20,28 @@ def hash_claim_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def build_claim_token() -> str:
-    return secrets.token_urlsafe(24)
+def build_claim_token(registration_id: int) -> str:
+    raw = f"claim:{registration_id}"
+    signature = hmac.new(
+        settings.SESSION_SECRET.encode("utf-8"),
+        raw.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:24]
+    return f"{registration_id}-{signature}"
+
+
+def parse_claim_token(token: str) -> int | None:
+    token = (token or "").strip()
+    if "-" not in token:
+        return None
+    registration_part, provided_signature = token.split("-", 1)
+    if not registration_part.isdigit():
+        return None
+    registration_id = int(registration_part)
+    expected = build_claim_token(registration_id)
+    if not hmac.compare_digest(expected, token):
+        return None
+    return registration_id
 
 
 def slugify_record_name(value: str) -> str:
@@ -65,7 +86,6 @@ async def ensure_registration_for_transaction(
     public_slug_base = slugify_record_name(_display_name(transaction, purchaser)) or f"star-{star.id}"
     public_page_slug = f"{public_slug_base}-{registration_number.lower()}"
 
-    claim_token = build_claim_token() if transaction.is_gift else None
     registration = Registration(
         star_id=star.id,
         transaction_id=transaction.id,
@@ -79,14 +99,18 @@ async def ensure_registration_for_transaction(
         dedication=transaction.dedication,
         gift_message=transaction.gift_message,
         is_gift=transaction.is_gift,
+        is_demo=transaction.is_demo,
         claim_status=_claim_status(transaction),
-        claim_token_hash=hash_claim_token(claim_token) if claim_token else None,
+        claim_token_hash=None,
         public_page_slug=public_page_slug,
         public_page_visibility="public",
         ownership_history_visibility="private",
     )
     db.add(registration)
     await db.flush()
+    claim_token = build_claim_token(registration.id) if transaction.is_gift else None
+    if claim_token:
+        registration.claim_token_hash = hash_claim_token(claim_token)
 
     db.add(
         OwnershipHistory(
@@ -102,4 +126,3 @@ async def ensure_registration_for_transaction(
     return registration, claim_token
 def build_registration_number(transaction: Transaction, issued_at: datetime) -> str:
     return f"AA-{issued_at:%Y%m%d}-{transaction.id:06d}"
-

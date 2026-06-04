@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     )
 
     PROJECT_NAME: str = "Aster Atlas"
+    APP_ENV: str = "local"
+    DEMO_MODE: bool = False
+    ALLOW_DEMO_AUTH: bool = False
+    ALLOW_DEMO_CHECKOUT: bool = False
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost/buyastar"
     GOOGLE_CLIENT_ID: str = ""
     SESSION_SECRET: str = "dev-only-session-secret-change-me"

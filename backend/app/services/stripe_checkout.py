@@ -23,7 +23,7 @@ from app.services.pricing import (
     shipping_display_name,
     star_price_for_country,
 )
-from app.services.registration_records import ensure_registration_for_transaction
+from app.services.registration_records import build_claim_token, ensure_registration_for_transaction
 
 CHECKOUT_STATUS_CREATED = "checkout_created"
 CHECKOUT_STATUS_FULFILLED = "fulfilled"
@@ -191,6 +191,9 @@ async def create_embedded_checkout_session(
         dedication=(dedication or "").strip() or None,
         gift_message=(gift_message or "").strip() or None,
         is_gift=registration_type == "gift",
+        is_demo=False,
+        payment_provider="stripe",
+        payment_status="pending",
         amount=_decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency),
         currency=quote.currency,
         includes_certificate=True,
@@ -325,7 +328,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             purchaser=purchaser,
             issued_at=issued_at,
         )
-        claim_url = f"{_frontend_origin().rstrip('/')}/claim/{claim_token}" if claim_token else None
+        claim_url = f"{_frontend_origin().rstrip('/')}/claim/{claim_token or build_claim_token(registration.id)}" if registration.claim_status == "claimable" else None
         await db.commit()
         return CheckoutFulfillmentResult(
             fulfilled=True,
@@ -339,6 +342,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             recipient_name=transaction.recipient_name,
             claim_status=registration.claim_status,
             claim_url=claim_url,
+            is_demo=transaction.is_demo,
             includes_certificate=transaction.includes_certificate,
             certificate_type=transaction.certificate_type,
             certificate_label=certificate_label(transaction.certificate_type),
@@ -355,6 +359,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
     if session_status != "complete" or payment_status != "paid":
         transaction.status = CHECKOUT_STATUS_PAYMENT_FAILED if payment_status == "unpaid" else transaction.status
         transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
+        transaction.payment_status = payment_status or transaction.payment_status
         await db.commit()
         star_result = await db.execute(select(Star).where(Star.id == transaction.star_id))
         star = star_result.scalars().first()
@@ -370,6 +375,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             recipient_name=transaction.recipient_name,
             claim_status=None,
             claim_url=None,
+            is_demo=transaction.is_demo,
             includes_certificate=transaction.includes_certificate,
             certificate_type=transaction.certificate_type,
             certificate_label=certificate_label(transaction.certificate_type),
@@ -401,6 +407,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             recipient_name=transaction.recipient_name,
             claim_status=None,
             claim_url=None,
+            is_demo=transaction.is_demo,
             includes_certificate=transaction.includes_certificate,
             certificate_type=transaction.certificate_type,
             certificate_label=certificate_label(transaction.certificate_type),
@@ -417,6 +424,7 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
     star.purchase_date = now
 
     transaction.status = CHECKOUT_STATUS_FULFILLED
+    transaction.payment_status = "paid"
     transaction.registration_number = _ensure_registration_number(transaction, now)
     transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
     transaction.fulfilled_at = now
@@ -456,7 +464,8 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
         registration_type=transaction.registration_type,
         recipient_name=transaction.recipient_name,
         claim_status=registration.claim_status,
-        claim_url=f"{_frontend_origin().rstrip('/')}/claim/{claim_token}" if claim_token else None,
+        claim_url=f"{_frontend_origin().rstrip('/')}/claim/{claim_token or build_claim_token(registration.id)}" if registration.claim_status == "claimable" else None,
+        is_demo=transaction.is_demo,
         includes_certificate=transaction.includes_certificate,
         certificate_type=transaction.certificate_type,
         certificate_label=certificate_label(transaction.certificate_type),
@@ -464,6 +473,104 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
         fulfilled_at=transaction.fulfilled_at,
         transaction_id=transaction.id,
         registration_number=transaction.registration_number,
+    )
+
+
+async def complete_demo_checkout(
+    db: AsyncSession,
+    *,
+    star_id: int,
+    user: User,
+    owner_name: str,
+    registration_type: str,
+    recipient_name: str | None,
+    recipient_email: str | None,
+    dedication: str | None,
+    gift_message: str | None,
+    certificate_type: str,
+    country_code: str,
+) -> CheckoutFulfillmentResult:
+    result = await db.execute(select(Star).where(Star.id == star_id).with_for_update())
+    star = result.scalars().first()
+
+    if star is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Star not found.")
+    if star.is_bought:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This star has already been registered.")
+
+    option = get_certificate_option(certificate_type)
+    normalized_country = normalize_country_code(country_code)
+    quote = pricing_quote_for_country(normalized_country)
+    now = datetime.now(timezone.utc)
+    clean_owner_name = owner_name.strip()
+
+    transaction = Transaction(
+        star_id=star.id,
+        user_id=user.id,
+        owner_name=clean_owner_name,
+        registration_type=registration_type,
+        recipient_name=(recipient_name or "").strip() or None,
+        recipient_email=(recipient_email or "").strip() or None,
+        dedication=(dedication or "").strip() or None,
+        gift_message=(gift_message or "").strip() or None,
+        is_gift=registration_type == "gift",
+        is_demo=True,
+        payment_provider="demo",
+        payment_status="demo_paid",
+        amount=_decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency),
+        currency=quote.currency,
+        includes_certificate=True,
+        certificate_type=option.code,
+        shipping_required=option.shipping_required,
+        shipping_amount=_decimal_amount(
+            quote.shipping_price.amount_minor_units if option.shipping_required else 0,
+            quote.currency,
+        ),
+        transaction_type="primary",
+        status=CHECKOUT_STATUS_FULFILLED,
+        accepted_terms_at=now,
+        accepted_privacy_at=now,
+        fulfilled_at=now,
+    )
+    db.add(transaction)
+    await db.flush()
+    transaction.registration_number = _ensure_registration_number(transaction, now)
+
+    star.is_bought = True
+    star.current_owner_user_id = transaction.user_id
+    star.owner_name = transaction.owner_name
+    star.purchase_date = now
+
+    registration, claim_token = await ensure_registration_for_transaction(
+        db,
+        transaction=transaction,
+        star=star,
+        purchaser=user,
+        issued_at=now,
+    )
+
+    await db.commit()
+
+    return CheckoutFulfillmentResult(
+        fulfilled=True,
+        transaction_status=transaction.status,
+        transaction_id=transaction.id,
+        registration_id=registration.id,
+        public_page_slug=registration.public_page_slug,
+        registration_number=transaction.registration_number,
+        star_id=star.id,
+        star_name=_star_display_name(star),
+        owner_name=transaction.owner_name,
+        registration_type=transaction.registration_type,
+        recipient_name=transaction.recipient_name,
+        claim_status=registration.claim_status,
+        claim_url=f"{_frontend_origin().rstrip('/')}/claim/{claim_token or build_claim_token(registration.id)}" if registration.claim_status == "claimable" else None,
+        is_demo=transaction.is_demo,
+        includes_certificate=transaction.includes_certificate,
+        certificate_type=transaction.certificate_type,
+        certificate_label=certificate_label(transaction.certificate_type),
+        shipping_required=transaction.shipping_required,
+        fulfilled_at=transaction.fulfilled_at,
     )
 
 

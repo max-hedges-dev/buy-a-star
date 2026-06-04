@@ -1,7 +1,9 @@
+import { API_BASE_ENV } from '../config/appEnv';
+
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
 function resolveApiBaseUrl() {
-    const configuredBaseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
+    const configuredBaseUrl = API_BASE_ENV;
 
     try {
         const currentHost = window.location.hostname;

@@ -20,6 +20,7 @@ class Registration(Base):
     dedication = Column(Text, nullable=True)
     gift_message = Column(Text, nullable=True)
     is_gift = Column(Boolean, nullable=False, default=False)
+    is_demo = Column(Boolean, nullable=False, default=False)
     claim_status = Column(String, nullable=False, default="not_claimable", index=True)
     claim_token_hash = Column(String, nullable=True, unique=True, index=True)
     claimed_at = Column(DateTime(timezone=True), nullable=True)

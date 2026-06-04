@@ -14,7 +14,10 @@ class CurrentUserRead(BaseModel):
     email: EmailStr
     email_verified: bool
     full_name: str | None = None
+    username: str | None = None
     avatar_url: str | None = None
+    is_demo: bool = False
+    demo_role: str | None = None
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
@@ -22,6 +25,14 @@ class CurrentUserRead(BaseModel):
 
 class AuthResponse(BaseModel):
     user: CurrentUserRead
+
+
+class DemoLoginRequest(BaseModel):
+    role: str
+
+
+class UserProfileUpdateRequest(BaseModel):
+    username: str
 
 
 class LogoutResponse(BaseModel):

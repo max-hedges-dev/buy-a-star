@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import Navbar from '../components/Navbar';
 import GoogleSignInButton from '../components/GoogleSignInButton';
+import { DEMO_MODE, APP_ENV } from '../config/appEnv';
 import { useAuth } from '../hooks/useAuth';
 
 const pageStyle = {
@@ -14,7 +15,7 @@ const pageStyle = {
 const AuthPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { authError, clearAuthError, isAuthenticated, isLoadingUser, isSigningIn, signInWithGoogle } = useAuth();
+    const { authError, clearAuthError, isAuthenticated, isLoadingUser, isSigningIn, signInAsDemo, signInWithGoogle } = useAuth();
 
     const params = new URLSearchParams(location.search);
     const nextPath = params.get('next') || '/account';
@@ -31,6 +32,11 @@ const AuthPage = () => {
 
     const handleGoogleCredential = async (credential) => {
         await signInWithGoogle(credential);
+        navigate(nextPath, { replace: true });
+    };
+
+    const handleDemoSignIn = async (role) => {
+        await signInAsDemo(role);
         navigate(nextPath, { replace: true });
     };
 
@@ -55,6 +61,42 @@ const AuthPage = () => {
                     </p>
 
                     <div style={{ display: 'grid', gap: 18 }}>
+                        {DEMO_MODE ? (
+                            <div className="glass-card" style={{ padding: '20px 20px', background: 'rgba(216,168,95,0.08)', border: '1px solid rgba(216,168,95,0.18)' }}>
+                                <div className="eyebrow" style={{ marginBottom: 12 }}>Internal demo access</div>
+                                <p className="muted-copy" style={{ marginBottom: 16 }}>
+                                    Demo mode is enabled for this {APP_ENV} environment. Use a seeded demo identity to test the full account-based journey without Google OAuth.
+                                </p>
+                                <div style={{ display: 'grid', gap: 10 }}>
+                                    {[
+                                        {
+                                            role: 'user1',
+                                            label: 'Continue as demo user 1',
+                                            body: 'Use this to test signing in, registering stars, managing ownership pages, and claiming or sharing stars later.',
+                                        },
+                                        {
+                                            role: 'user2',
+                                            label: 'Continue as demo user 2',
+                                            body: 'Use this to test the same ownership, claim, and sharing powers from a second account.',
+                                        },
+                                    ].map((option) => (
+                                        <div key={option.role} className="glass-card" style={{ padding: '14px 14px', background: 'rgba(245,239,226,0.03)' }}>
+                                            <button
+                                                type="button"
+                                                className="secondary-button"
+                                                onClick={() => handleDemoSignIn(option.role)}
+                                                disabled={isLoadingUser || isSigningIn}
+                                                style={{ width: '100%', marginBottom: 8 }}
+                                            >
+                                                {option.label}
+                                            </button>
+                                            <p className="muted-copy" style={{ margin: 0, fontSize: '0.9rem' }}>{option.body}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+
                         <div>
                             <div style={{ color: 'var(--text-muted)', marginBottom: 10, fontSize: '0.92rem' }}>Continue with Google</div>
                             <GoogleSignInButton disabled={isLoadingUser || isSigningIn} onCredential={handleGoogleCredential} />

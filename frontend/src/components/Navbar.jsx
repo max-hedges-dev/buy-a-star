@@ -12,6 +12,7 @@ const navLinks = [
     { to: '/', label: 'Home' },
     { to: '/search', label: 'Explore the Atlas' },
     { to: '/buy', label: 'Find a Star' },
+    { to: '/claim', label: 'Claim a Star' },
     { to: '/about', label: 'About' },
     { to: '/faq', label: 'FAQ' },
 ];

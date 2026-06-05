@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../hooks/useAuth';
 import { claimRegistration, previewRegistrationClaim } from '../services/api';
-import { formatClaimStatus } from '../utils/ownership';
+import { formatClaimStatus, getStarSlug } from '../utils/ownership';
 
 const ClaimStarPage = () => {
     const { claimToken } = useParams();
@@ -60,6 +60,10 @@ const ClaimStarPage = () => {
         ? `/account/orders/${claimedResult.transaction_id}`
         : ownershipPath;
 
+    if (status === 'ready' && preview && !claimedResult) {
+        return <Navigate to={`/search/${getStarSlug(preview.star)}?claim=${encodeURIComponent(claimToken)}`} replace />;
+    }
+
     return (
         <div style={{ minHeight: '100vh', background: 'var(--page-background)' }}>
             <Navbar />
@@ -92,14 +96,14 @@ const ClaimStarPage = () => {
                                     This star is now saved to your Aster Atlas account.
                                 </h1>
                                 <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 24 }}>
-                                    The registration is now attached to your account as the current holder. You can open the ownership page, revisit the public StarWiki page, or return later for the certificate.
+                                    The registration is now attached to your account as the current holder. You can open the ownership page, revisit the main star page, or return later for the certificate.
                                 </p>
                                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                                     <Link to={ownershipPath} className="primary-button">
                                         Open ownership page
                                     </Link>
                                     <Link to={claimedResult.starwiki_url} className="secondary-button">
-                                        Open StarWiki page
+                                        Open star page
                                     </Link>
                                     <Link to={certificatePath} className="secondary-button">
                                         Download certificate
@@ -118,7 +122,7 @@ const ClaimStarPage = () => {
                                     {preview.recipient_name ? 'This star was registered for you.' : 'This star has been shared with you.'}
                                 </h1>
                                 <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 24 }}>
-                                    Claim it to save the record, edit the StarWiki page later, and keep the certificate in your Aster Atlas account.
+                                    Claim it to save the record, manage the star from your account later, and keep the certificate in your Aster Atlas account.
                                 </p>
                                 <div className="status-grid" style={{ marginBottom: 22 }}>
                                     <div className="glass-card" style={{ padding: '18px 20px' }}>
@@ -171,7 +175,7 @@ const ClaimStarPage = () => {
                                         </div>
                                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                                             <Link to={preview.starwiki_url} className="primary-button">
-                                                Open public star page
+                                                Open star page
                                             </Link>
                                             <Link to="/auth" className="secondary-button">
                                                 Enter your account

@@ -1,9 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Eye } from 'lucide-react';
 import { getStarAppearance } from '../utils/starAppearance';
-import { useAuth } from '../hooks/useAuth';
-import { getOwnedStarPath, getPublicStarPath } from '../utils/ownership';
 
 const StarTilePreview = React.memo(({ star }) => {
     const palette = useMemo(() => {
@@ -142,11 +139,9 @@ const formatPrice = (price) => {
 
 const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
     const [isHovered, setIsHovered] = useState(false);
-    const { user } = useAuth();
     const isClaimed = star.is_bought;
     const displayName = star.common_name || star.display_name || star.scientific_name;
     const secondaryName = star.common_name && star.scientific_name ? star.scientific_name : null;
-    const canOpenOwnershipPage = Boolean(isClaimed && star.registration_id && user?.id === star.current_owner_user_id);
 
     return (
         <div
@@ -265,27 +260,6 @@ const StarTile = React.memo(({ star, onClick, scale = 1 }) => {
                     Available for registration.
                 </div>
             )}
-
-            {isClaimed ? (
-                <div style={{ display: 'grid', gap: `${Math.round(10 * scale)}px` }}>
-                    <Link
-                        to={getPublicStarPath(star)}
-                        className="secondary-button"
-                        style={{ width: '100%', textAlign: 'center' }}
-                    >
-                        Open StarWiki page
-                    </Link>
-                    {canOpenOwnershipPage ? (
-                        <Link
-                            to={getOwnedStarPath(star)}
-                            className="secondary-button"
-                            style={{ width: '100%', textAlign: 'center' }}
-                        >
-                            Open ownership page
-                        </Link>
-                    ) : null}
-                </div>
-            ) : null}
 
             <button
                 onClick={() => onClick(star)}

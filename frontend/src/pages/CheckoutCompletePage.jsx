@@ -154,7 +154,7 @@ const CheckoutCompletePage = () => {
                                             {checkoutData.recipient_name || checkoutData.owner_name}&rsquo;s star has been registered.
                                         </h1>
                                         <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 28 }}>
-                                            Your registration is complete, the private registry record has been issued, and your certificate access is ready. This star now appears in your Aster Atlas account with its public StarWiki page and private ownership page.
+                                            Your registration is complete, the private registry record has been issued, and your certificate access is ready. This star now appears in your Aster Atlas account with its main star page and private ownership page.
                                         </p>
                                         {warning ? (
                                             <div className="status-banner" style={{ marginBottom: 20 }}>{warning}</div>
@@ -182,8 +182,8 @@ const CheckoutCompletePage = () => {
                                                     Open certificate
                                                 </Link>
                                             ) : null}
-                                            <Link to={checkoutData.public_page_slug ? `/starwiki/${checkoutData.public_page_slug}` : (order ? getPublicStarPath(order.star) : '/search')} className="secondary-button" style={actionStyle}>
-                                                Open StarWiki page
+                                            <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button" style={actionStyle}>
+                                                Open star page
                                             </Link>
                                         </div>
 
@@ -238,8 +238,8 @@ const CheckoutCompletePage = () => {
                                             <div className="eyebrow" style={{ marginBottom: 10 }}>What happens next</div>
                                             <p className="muted-copy">
                                                 {checkoutData.registration_type === 'gift'
-                                                    ? 'Your StarWiki page and private ownership page stay available in your account. The recipient can view the gift first and claim it later.'
-                                                    : 'Your StarWiki page and private ownership page stay available in your account. If you ever want to hand this star over later, you can prepare a claim link from the ownership page.'}
+                                                    ? 'The main star page and private ownership page stay available in your account. The recipient can view the gift first and claim it later.'
+                                                    : 'The main star page and private ownership page stay available in your account. If you ever want to hand this star over later, you can prepare a claim link from the ownership page.'}
                                             </p>
                                         </div>
                                     </aside>
@@ -328,8 +328,8 @@ const CheckoutCompletePage = () => {
                                                 </Link>
                                             ) : null}
                                             {checkoutData.public_page_slug ? (
-                                                <Link to={`/starwiki/${checkoutData.public_page_slug}`} className="secondary-button">
-                                                    Open public star page
+                                                <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button">
+                                                    Open star page
                                                 </Link>
                                             ) : null}
                                             <Link to="/account?section=stars" className="secondary-button">

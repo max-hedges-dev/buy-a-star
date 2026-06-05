@@ -15,15 +15,26 @@ export const getStarDisplayName = (star) => (
 export const getStarSlug = (star) => slugifyStarName(getStarDisplayName(star));
 
 export const getPublicStarPath = (starOrRegistration) => {
+    const star = starOrRegistration?.star || starOrRegistration;
+    const explicitStarSlug = starOrRegistration?.star_slug || star?.star_slug;
+    if (explicitStarSlug) {
+        return `/search/${explicitStarSlug}`;
+    }
+    const starSlug = getStarSlug(star);
+    if (starSlug && starSlug !== 'registered-star') {
+        return `/search/${starSlug}`;
+    }
+
     const publicSlug = starOrRegistration?.public_page_slug || starOrRegistration?.publicRegistration?.public_page_slug;
     if (publicSlug) {
         return `/starwiki/${publicSlug}`;
     }
-    return `/search/${getStarSlug(starOrRegistration?.star || starOrRegistration)}`;
+
+    return '/search';
 };
 
 export const getOwnedStarPath = (registrationOrOrderOrStar) => {
-    const registrationId = registrationOrOrderOrStar?.registration_id || registrationOrOrderOrStar?.id;
+    const registrationId = registrationOrOrderOrStar?.registration_id || registrationOrOrderOrStar?.star?.registration_id;
     if (registrationId) {
         return `/account/registrations/${registrationId}`;
     }

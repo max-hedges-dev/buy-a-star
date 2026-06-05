@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, UserCircle2, X } from 'lucide-react';
+import { LogOut, Menu, ShoppingCart, UserCircle2, X } from 'lucide-react';
 import fullLogoLeftWhite from '../assets/AA Full Logo Left White.png';
 import symbolWhite from '../assets/AA Symbol White.png';
 
@@ -26,6 +26,8 @@ const Navbar = () => {
     }));
     const navigate = useNavigate();
     const { isAuthenticated, isLoadingUser, logout } = useAuth();
+    const cartTarget = isAuthenticated ? '/account/cart' : '/auth?next=%2Faccount%2Fcart';
+    const accountTarget = isAuthenticated ? '/account' : '/auth';
 
     useEffect(() => {
         const onScroll = () => setIsScrolled(window.scrollY > 16);
@@ -187,11 +189,22 @@ const Navbar = () => {
                 ) : null}
 
                 <div style={{ display: 'flex', gap: `${authGap}px`, zIndex: 1, alignItems: 'center', marginLeft: 'auto' }}>
+                    <div className="nav-action-tooltip">
+                        <Link
+                            to={cartTarget}
+                            aria-label="My cart"
+                            style={navActionButtonStyle}
+                        >
+                            <ShoppingCart size={actionIconSize} />
+                        </Link>
+                        <span className="nav-action-tooltip__label">Cart</span>
+                    </div>
+
                     {!isLoadingUser && isAuthenticated ? (
                         <>
                             <div className="nav-action-tooltip">
                                 <Link
-                                    to="/account"
+                                    to={accountTarget}
                                     aria-label="My account"
                                     style={navActionButtonStyle}
                                 >
@@ -223,21 +236,33 @@ const Navbar = () => {
                     ) : null}
 
                     {!isLoadingUser && !isAuthenticated ? (
-                        <Link
-                            to="/auth"
-                            style={{
-                                padding: `${Math.round(clamp(10 * navScale, 8, 10))}px ${Math.round(clamp(16 * navScale, 10, 16))}px`,
-                                borderRadius: 999,
-                                background: 'rgba(255,255,255,0.04)',
-                                border: '1px solid rgba(245,239,226,0.08)',
-                                color: 'var(--text-color)',
-                                fontSize: actionFontSize,
-                                cursor: 'pointer',
-                                pointerEvents: 'auto',
-                            }}
-                        >
-                            Sign in
-                        </Link>
+                        <>
+                            <div className="nav-action-tooltip">
+                                <Link
+                                    to={accountTarget}
+                                    aria-label="Sign in or open account"
+                                    style={navActionButtonStyle}
+                                >
+                                    <UserCircle2 size={actionIconSize} />
+                                </Link>
+                                <span className="nav-action-tooltip__label">Account</span>
+                            </div>
+                            <Link
+                                to="/auth"
+                                style={{
+                                    padding: `${Math.round(clamp(10 * navScale, 8, 10))}px ${Math.round(clamp(16 * navScale, 10, 16))}px`,
+                                    borderRadius: 999,
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(245,239,226,0.08)',
+                                    color: 'var(--text-color)',
+                                    fontSize: actionFontSize,
+                                    cursor: 'pointer',
+                                    pointerEvents: 'auto',
+                                }}
+                            >
+                                Sign in
+                            </Link>
+                        </>
                     ) : null}
                 </div>
             </nav>

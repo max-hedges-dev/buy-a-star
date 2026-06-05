@@ -218,6 +218,33 @@ export async function prepareRegistrationClaim(registrationId) {
     });
 }
 
+export async function addStarToCart({
+    starId,
+    registrationType = 'self',
+    ownerName,
+    recipientName,
+    recipientEmail,
+    dedication,
+    giftMessage,
+    certificateType,
+    countryCode,
+}) {
+    return apiRequest('/checkout/cart', {
+        method: 'POST',
+        body: {
+            star_id: starId,
+            registration_type: registrationType,
+            owner_name: ownerName,
+            recipient_name: recipientName,
+            recipient_email: recipientEmail,
+            dedication,
+            gift_message: giftMessage,
+            certificate_type: certificateType,
+            country_code: countryCode,
+        },
+    });
+}
+
 export async function previewRegistrationClaim(claimToken) {
     return apiRequest(`/registrations/claim/${encodeURIComponent(claimToken)}`);
 }

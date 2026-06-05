@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +17,7 @@ from app.schemas.account import (
     AccountStarSummary,
 )
 from app.services.certificate_options import certificate_label
+from app.api.v1.endpoints.stars import get_star_slug
 
 
 def _current_star_price(star: Star) -> float:
@@ -28,6 +31,18 @@ router = APIRouter()
 
 def _star_display_name(star: Star) -> str:
     return star.common_name or star.display_name or star.scientific_name
+
+
+def _is_cart_like_status(transaction: Transaction) -> bool:
+    return transaction.status in {"checkout_created", "expired", "payment_failed"}
+
+
+def _hold_active(transaction: Transaction) -> bool:
+    return bool(
+        _is_cart_like_status(transaction)
+        and transaction.checkout_expires_at
+        and transaction.checkout_expires_at > datetime.now(timezone.utc)
+    )
 
 
 def _holder_label(current_user: User, registration: Registration) -> str:
@@ -47,6 +62,7 @@ def _star_summary(
 ) -> AccountStarSummary:
     return AccountStarSummary(
         id=star.id,
+        star_slug=get_star_slug(star),
         registration_id=registration.id if registration else None,
         transaction_id=transaction.id,
         public_page_slug=registration.public_page_slug if registration else None,
@@ -88,6 +104,7 @@ def _order_summary(
         status=transaction.status,
         owner_name=transaction.owner_name,
         recipient_name=(registration.recipient_name if registration else None) or transaction.recipient_name,
+        recipient_email=transaction.recipient_email,
         dedication=(registration.dedication if registration else None) or transaction.dedication,
         gift_message=(registration.gift_message if registration else None) or transaction.gift_message,
         registration_type=transaction.registration_type,
@@ -104,6 +121,8 @@ def _order_summary(
         transaction_type=transaction.transaction_type,
         created_at=transaction.created_at,
         fulfilled_at=transaction.fulfilled_at,
+        hold_expires_at=transaction.checkout_expires_at,
+        hold_active=_hold_active(transaction),
         star=_star_summary(star, transaction, registration, current_user, holder_username),
     )
 
@@ -123,10 +142,12 @@ async def read_account_overview(
     )
     rows = result.all()
 
-    orders = [
+    all_summaries = [
         _order_summary(transaction, star, registration, current_user, holder_username)
         for transaction, star, registration, holder_username in rows
     ]
+    orders = [summary for summary in all_summaries if summary.status == "fulfilled"]
+    cart_items = [summary for summary in all_summaries if summary.status in {"checkout_created", "expired", "payment_failed"}]
 
     owned_result = await db.execute(
         select(Star, Transaction, Registration, User.username)
@@ -151,7 +172,7 @@ async def read_account_overview(
         seen_star_ids.add(star.id)
         stars.append(_star_summary(star, transaction, registration, current_user, holder_username))
 
-    return AccountOverviewResponse(orders=orders, stars=stars)
+    return AccountOverviewResponse(orders=orders, cart_items=cart_items, stars=stars)
 
 
 @router.get("/orders/{transaction_id}", response_model=AccountOrderDetail)

@@ -3,6 +3,18 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class CartUpsertRequest(BaseModel):
+    star_id: int
+    registration_type: str = "self"
+    owner_name: str
+    recipient_name: str | None = None
+    recipient_email: str | None = None
+    dedication: str | None = None
+    gift_message: str | None = None
+    certificate_type: str = "digital"
+    country_code: str = "GB"
+
+
 class CheckoutSessionCreateRequest(BaseModel):
     star_id: int
     registration_type: str = "self"
@@ -96,3 +108,15 @@ class CheckoutFulfillmentResult(BaseModel):
     certificate_label: str
     shipping_required: bool
     fulfilled_at: datetime | None = None
+
+
+class CartItemResponse(BaseModel):
+    transaction_id: int
+    star_id: int
+    star_name: str
+    owner_name: str | None = None
+    registration_type: str = "self"
+    recipient_name: str | None = None
+    hold_expires_at: datetime | None = None
+    hold_active: bool = False
+    status: str

@@ -4,7 +4,7 @@ import { Stars } from '@react-three/drei';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
 import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2, Truck } from 'lucide-react';
-import { createCheckoutSession, fetchCheckoutOptions, fetchStarById } from '../services/api';
+import { addStarToCart, claimRegistration, createCheckoutSession, fetchAccountOrder, fetchCheckoutOptions, fetchStarById, previewRegistrationClaim } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 import { getColorFamily, getSpectralDisplay } from '../utils/starAppearance';
@@ -911,7 +911,7 @@ const ObservatoryBackdrop = ({ starLayout, hoveredInstrument }) => {
     );
 };
 
-const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
+const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null, resumeCartId = null, openCheckout = false }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const { isAuthenticated, isLoadingUser } = useAuth();
@@ -932,12 +932,19 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const [showCountrySelector, setShowCountrySelector] = useState(!detectedCountryCode);
     const [checkoutOptionsStatus, setCheckoutOptionsStatus] = useState('loading');
     const [processing, setProcessing] = useState(false);
+    const [cartProcessing, setCartProcessing] = useState(false);
+    const [cartFeedback, setCartFeedback] = useState(null);
     const [error, setError] = useState(null);
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [starDetail, setStarDetail] = useState(star);
     const [starDetailStatus, setStarDetailStatus] = useState('idle');
+    const [isOwnerRecordOpen, setIsOwnerRecordOpen] = useState(false);
+    const [claimPreview, setClaimPreview] = useState(null);
+    const [claimPreviewStatus, setClaimPreviewStatus] = useState('idle');
+    const [claimingStar, setClaimingStar] = useState(false);
+    const [resumeCartStatus, setResumeCartStatus] = useState('idle');
     const [layoutEditMode, setLayoutEditMode] = useState(false);
     const [isObservatoryModalOpen, setIsObservatoryModalOpen] = useState(false);
     const [isObservatoryModalClosing, setIsObservatoryModalClosing] = useState(false);
@@ -977,6 +984,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         []
     );
     const activeStar = starDetail || star;
+    const ownerRecord = activeStar.public_registration;
+    const ownerDisplayName = ownerRecord?.current_holder_username || activeStar.current_holder_username || activeStar.owner_name || 'Aster Atlas holder';
+    const hasOwnerRecord = Boolean(activeStar.is_bought && ownerRecord);
     const spectralDisplay = useMemo(() => getSpectralDisplay(activeStar), [activeStar]);
     const gaiaIdentifier = useMemo(() => getGaiaIdentifier(activeStar), [activeStar]);
     const spectralBand = useMemo(() => getSpectralBandKey(activeStar, spectralDisplay), [activeStar, spectralDisplay]);
@@ -1024,6 +1034,88 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
     const hasAge = typeof activeStar.age_flame === 'number';
     const hasDistance = typeof activeStar.distance_ly === 'number';
     const hasSpectral = Boolean(spectralDisplay);
+
+    useEffect(() => {
+        setIsOwnerRecordOpen(false);
+    }, [activeStar.id]);
+
+    useEffect(() => {
+        if (!claimToken) {
+            setClaimPreview(null);
+            setClaimPreviewStatus('idle');
+            return;
+        }
+
+        let isActive = true;
+        setClaimPreviewStatus('loading');
+        previewRegistrationClaim(claimToken)
+            .then((response) => {
+                if (!isActive) return;
+                if (response?.star?.id !== activeStar.id) {
+                    setClaimPreview(null);
+                    setClaimPreviewStatus('mismatch');
+                    return;
+                }
+                setClaimPreview(response);
+                setClaimPreviewStatus('ready');
+            })
+            .catch((requestError) => {
+                if (!isActive) return;
+                setError(requestError.message);
+                setClaimPreview(null);
+                setClaimPreviewStatus('error');
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [activeStar.id, claimToken]);
+
+    useEffect(() => {
+        if (!resumeCartId || !isAuthenticated) {
+            setResumeCartStatus('idle');
+            return;
+        }
+
+        let isActive = true;
+        setResumeCartStatus('loading');
+
+        fetchAccountOrder(resumeCartId)
+            .then((order) => {
+                if (!isActive || order?.star?.id !== activeStar.id) {
+                    return;
+                }
+
+                setRegistrationType(order.registration_type || 'self');
+                setOwnerName(order.owner_name || '');
+                setRecipientName(order.recipient_name || '');
+                setRecipientEmail(order.recipient_email || '');
+                setDedication(order.dedication || '');
+                setGiftMessage(order.gift_message || '');
+                setCertificateType(order.certificate_type || 'digital');
+                setCartFeedback(
+                    order.hold_active
+                        ? 'Resumed from your cart. Your one-hour hold is still active while you complete payment.'
+                        : 'Resumed from your cart. Your hold has expired, so complete payment soon if you still want this star.'
+                );
+                if (openCheckout) {
+                    setAcceptedTerms(true);
+                    setAcceptedPrivacy(true);
+                    setIsCheckoutOpen(true);
+                }
+                setResumeCartStatus('ready');
+            })
+            .catch(() => {
+                if (!isActive) {
+                    return;
+                }
+                setResumeCartStatus('error');
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [activeStar.id, isAuthenticated, openCheckout, resumeCartId]);
 
     const visibleInstrumentKeys = useMemo(
         () => ([
@@ -1393,7 +1485,59 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         }
 
         setError(null);
+        setCartFeedback(null);
         setIsCheckoutOpen(true);
+    };
+
+    const handleAddToCart = async () => {
+        if (!isAuthenticated) {
+            navigate(`/auth?next=${encodeURIComponent(location.pathname)}`);
+            return;
+        }
+
+        if (!ownerName.trim()) {
+            setError('Please enter the registered display name before adding this star to your cart.');
+            return;
+        }
+        if (registrationType === 'gift' && !recipientName.trim()) {
+            setError('Please enter the recipient name for this gift.');
+            return;
+        }
+        if (!selectedCertificateOption) {
+            setError('Certificate options are still loading. Please try again in a moment.');
+            return;
+        }
+
+        try {
+            setCartProcessing(true);
+            setError(null);
+            setCartFeedback(null);
+            const response = await addStarToCart({
+                starId: star.id,
+                registrationType,
+                ownerName,
+                recipientName,
+                recipientEmail,
+                dedication,
+                giftMessage,
+                certificateType,
+                countryCode: selectedCountryCode,
+            });
+            setCartFeedback(
+                response.hold_active
+                    ? 'Added to your cart. This star is now held for you for one hour.'
+                    : 'Added to your cart.'
+            );
+            navigate('/account/cart', {
+                state: {
+                    justAdded: true,
+                },
+            });
+        } catch (requestError) {
+            setError(requestError.message);
+        } finally {
+            setCartProcessing(false);
+        }
     };
 
     const createStripeSession = useCallback(async () => {
@@ -1430,6 +1574,27 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
         setError(message);
         setIsCheckoutOpen(false);
     }, []);
+
+    const handleClaimStar = async () => {
+        if (!claimToken) {
+            return;
+        }
+        if (!isAuthenticated) {
+            navigate(`/auth?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+            return;
+        }
+
+        try {
+            setClaimingStar(true);
+            setError(null);
+            const response = await claimRegistration(claimToken);
+            navigate(`/account/registrations/${response.registration_id}`);
+        } catch (requestError) {
+            setError(requestError.message);
+        } finally {
+            setClaimingStar(false);
+        }
+    };
 
     const handleOpenObservatoryModal = useCallback(() => {
         if (modalCloseTimeoutRef.current) {
@@ -1593,6 +1758,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
             >
                 <div
                     style={{
+                        position: 'relative',
                         minWidth: 0,
                         minHeight: 0,
                         height: '100%',
@@ -1606,6 +1772,116 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                         overflow: 'hidden',
                     }}
                 >
+                    {hasOwnerRecord ? (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setIsOwnerRecordOpen((value) => !value)}
+                                aria-expanded={isOwnerRecordOpen}
+                                aria-label={isOwnerRecordOpen ? 'Hide owner page' : 'Show owner page'}
+                                style={{
+                                    position: 'absolute',
+                                    top: scalePx(132),
+                                    right: 0,
+                                    zIndex: 4,
+                                    width: scalePx(42),
+                                    minHeight: scalePx(158),
+                                    padding: `${scalePx(18)} ${scalePx(8)}`,
+                                    border: '1px solid rgba(216,168,95,0.28)',
+                                    borderRight: 'none',
+                                    borderTopLeftRadius: scalePx(18),
+                                    borderBottomLeftRadius: scalePx(18),
+                                    background: isOwnerRecordOpen
+                                        ? 'linear-gradient(180deg, rgba(216,168,95,0.22) 0%, rgba(184,107,94,0.16) 100%)'
+                                        : 'linear-gradient(180deg, rgba(28,21,18,0.92) 0%, rgba(16,18,23,0.96) 100%)',
+                                    color: 'var(--text-primary)',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 16px 34px rgba(0,0,0,0.22)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    writingMode: 'vertical-rl',
+                                    textOrientation: 'mixed',
+                                    letterSpacing: '0.18em',
+                                    textTransform: 'uppercase',
+                                    fontSize: scaleRem(0.72),
+                                    fontWeight: 700,
+                                }}
+                            >
+                                Owner page
+                            </button>
+
+                            <aside
+                                style={{
+                                    position: 'absolute',
+                                    top: scalePx(24),
+                                    right: 0,
+                                    bottom: scalePx(24),
+                                    width: 'min(420px, 86%)',
+                                    padding: `${scalePx(26)} ${scalePx(24)} ${scalePx(28)}`,
+                                    background: 'linear-gradient(180deg, rgba(12,14,18,0.98) 0%, rgba(18,12,8,0.94) 100%)',
+                                    borderLeft: '1px solid rgba(216,168,95,0.22)',
+                                    boxShadow: '-24px 0 48px rgba(0,0,0,0.34)',
+                                    transform: isOwnerRecordOpen ? 'translateX(0%)' : 'translateX(104%)',
+                                    transition: 'transform 260ms ease',
+                                    zIndex: 3,
+                                    overflowY: 'auto',
+                                }}
+                            >
+                                <div style={{ display: 'grid', gap: scalePx(18) }}>
+                                    <div>
+                                        <div style={{ color: 'var(--primary-strong)', fontSize: scaleRem(0.78), letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, marginBottom: scalePx(10) }}>
+                                            Owner page
+                                        </div>
+                                        <h2 style={{ fontSize: scaleRem(2.08), lineHeight: 1.02, marginBottom: scalePx(12), fontFamily: 'serif', color: 'var(--text-primary)' }}>
+                                            A private record tucked inside the star page.
+                                        </h2>
+                                        <p style={{ color: 'var(--text-secondary)', lineHeight: 1.72, margin: 0 }}>
+                                            This panel holds the ownership-facing story for the star, so the public record and the observatory view now live together in one place.
+                                        </p>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gap: scalePx(12) }}>
+                                        <div style={{ padding: scalePx(16), borderRadius: scalePx(18), background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ color: 'var(--text-faint)', fontSize: scaleRem(0.72), letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: scalePx(6) }}>Ownership</div>
+                                            <strong style={{ color: 'var(--text-primary)', fontSize: scaleRem(1.12) }}>{ownerDisplayName}</strong>
+                                        </div>
+                                        <div style={{ padding: scalePx(16), borderRadius: scalePx(18), background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ color: 'var(--text-faint)', fontSize: scaleRem(0.72), letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: scalePx(6) }}>Registered to</div>
+                                            <strong style={{ color: 'var(--text-primary)', fontSize: scaleRem(1.08) }}>{ownerRecord?.registered_display_name || activeStar.owner_name}</strong>
+                                        </div>
+                                        {ownerRecord?.registration_number ? (
+                                            <div style={{ padding: scalePx(16), borderRadius: scalePx(18), background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                                <div style={{ color: 'var(--text-faint)', fontSize: scaleRem(0.72), letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: scalePx(6) }}>Registration number</div>
+                                                <strong style={{ color: 'var(--text-primary)', fontSize: scaleRem(1.08) }}>{ownerRecord.registration_number}</strong>
+                                            </div>
+                                        ) : null}
+                                    </div>
+
+                                    {ownerRecord?.dedication ? (
+                                        <div style={{ padding: scalePx(18), borderRadius: scalePx(20), background: 'rgba(28,21,18,0.92)', border: '1px solid rgba(216,168,95,0.16)' }}>
+                                            <div style={{ color: 'var(--primary-strong)', fontSize: scaleRem(0.72), letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: scalePx(8) }}>Dedication</div>
+                                            <p style={{ margin: 0, color: 'var(--text-primary)', lineHeight: 1.8 }}>{ownerRecord.dedication}</p>
+                                        </div>
+                                    ) : (
+                                        <div style={{ padding: scalePx(18), borderRadius: scalePx(20), background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ color: 'var(--primary-strong)', fontSize: scaleRem(0.72), letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: scalePx(8) }}>Owner story</div>
+                                            <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.72 }}>
+                                                This star has already been claimed inside Aster Atlas. As the record grows, this tucked-away page can carry the meaning, dedication, and ownership context behind it.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div style={{ padding: scalePx(18), borderRadius: scalePx(20), background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <div style={{ color: 'var(--primary-strong)', fontSize: scaleRem(0.72), letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: scalePx(8) }}>Why it lives here</div>
+                                        <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.72 }}>
+                                            Instead of sending ownership context to a separate destination, Aster Atlas now keeps the emotional record close to the scientific view of the star itself.
+                                        </p>
+                                    </div>
+                                </div>
+                            </aside>
+                        </>
+                    ) : null}
                     <div style={{ flex: 1, overflowY: 'auto', padding: `${scalePx(18)} ${scalePx(18)} ${scalePx(24)}` }}>
                         <div style={{ display: 'grid', gap: scalePx(22) }}>
                             <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
@@ -1637,6 +1913,41 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                         </div>
                             </div>
 
+                        {claimToken && claimPreviewStatus !== 'mismatch' ? (
+                            <div
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(216,168,95,0.26) 0%, rgba(184,107,94,0.18) 100%)',
+                                    border: '1px solid rgba(216,168,95,0.32)',
+                                    padding: `${scalePx(22)} ${scalePx(22)} ${scalePx(20)}`,
+                                    borderRadius: scalePx(22),
+                                    color: 'white',
+                                    marginBottom: scalePx(24),
+                                    boxShadow: '0 18px 40px rgba(200,121,58,0.16)',
+                                }}
+                            >
+                                <div style={{ color: 'var(--primary-strong)', fontSize: scaleRem(0.76), letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, marginBottom: scalePx(8) }}>
+                                    Claim this star
+                                </div>
+                                <div style={{ fontSize: scaleRem(1.7), fontFamily: 'serif', marginBottom: scalePx(10), lineHeight: 1.05 }}>
+                                    This registered star is ready to be claimed into your account.
+                                </div>
+                                <div style={{ color: '#f0dfcc', lineHeight: 1.72, fontSize: scaleRem(0.95), marginBottom: scalePx(16) }}>
+                                    {claimPreview?.gift_message || claimPreview?.dedication
+                                        ? 'Review the star details here, then claim it when you are ready.'
+                                        : 'You can claim it directly from this page and become the current holder in Aster Atlas.'}
+                                </div>
+                                <button
+                                    type="button"
+                                    className="primary-button"
+                                    onClick={handleClaimStar}
+                                    disabled={claimingStar || claimPreviewStatus === 'loading'}
+                                    style={{ width: '100%', minHeight: scalePx(56), fontSize: scaleRem(1) }}
+                                >
+                                    {claimingStar ? 'Claiming this star...' : isAuthenticated ? 'Claim this star now' : 'Sign in to claim this star now'}
+                                </button>
+                            </div>
+                        ) : null}
+
                         {activeStar.is_bought ? (
                             <div
                                 style={{
@@ -1661,9 +1972,9 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap', color: '#9aa89a', fontSize: '0.9rem' }}>
                                     <div>
                                             <span style={{ color: '#6f8a73', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.74rem', display: 'block', marginBottom: '4px' }}>
-                                                Registry State
+                                                Ownership
                                             </span>
-                                        Registered and preserved in Aster Atlas
+                                        {ownerDisplayName}
                                     </div>
                                     {activeStar.purchase_date ? (
                                         <div>
@@ -2016,7 +2327,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                 <p className="muted-copy" style={{ margin: 0 }}>
                                     You are preparing a private Aster Atlas registry record for <strong style={{ color: 'var(--text-primary)' }}>{ownerName || 'this star'}</strong>
                                     {registrationType === 'gift' && recipientName ? `, intended for ${recipientName}` : ''}.
-                                    {dedication ? ' The dedication will appear with the record when made public.' : ' You can return later to expand the public StarWiki page.'}
+                                    {dedication ? ' The dedication will appear with the record when made public.' : ' You can return later to expand the owner-facing story on the star page.'}
                                 </p>
                             </div>
 
@@ -2048,31 +2359,63 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy }) => {
                                         </label>
                                     </div>
 
+                                    {cartFeedback ? (
+                                        <div className="status-banner" style={{ marginBottom: '16px' }}>
+                                            {cartFeedback}
+                                        </div>
+                                    ) : null}
+
                                     <button
-                                        onClick={handlePurchase}
-                                        disabled={processing || isLoadingUser || checkoutOptionsStatus !== 'ready'}
+                                        type="button"
+                                        onClick={handleAddToCart}
+                                        disabled={cartProcessing || processing || isLoadingUser || checkoutOptionsStatus !== 'ready'}
                                         style={{
                                             width: '100%',
                                             padding: '18px',
-                                            background: 'var(--primary)',
-                                            color: 'white',
+                                            background: 'var(--cta-gradient)',
+                                            color: '#070a11',
                                             fontSize: '1.1rem',
                                             fontWeight: 'bold',
-                                            textTransform: 'uppercase',
                                             borderRadius: '12px',
-                                            border: 'none',
-                                            cursor: (processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 'not-allowed' : 'pointer',
+                                            border: '1px solid rgba(255,255,255,0.14)',
+                                            cursor: (cartProcessing || processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 'not-allowed' : 'pointer',
                                             display: 'flex',
                                             justifyContent: 'center',
                                             alignItems: 'center',
                                             gap: '10px',
-                                            opacity: (processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 0.7 : 1,
+                                            opacity: (cartProcessing || processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 0.7 : 1,
+                                            transition: 'all 0.2s',
+                                            boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
+                                            marginBottom: '12px',
+                                        }}
+                                    >
+                                        {cartProcessing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
+                                        {cartProcessing ? 'Adding to cart...' : isAuthenticated ? 'Add to cart' : 'Sign in to add to cart'}
+                                    </button>
+                                    <button
+                                        onClick={handlePurchase}
+                                        disabled={processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready'}
+                                        style={{
+                                            width: '100%',
+                                            padding: '18px',
+                                            background: 'var(--cta-gradient)',
+                                            color: '#070a11',
+                                            fontSize: '1.1rem',
+                                            fontWeight: 'bold',
+                                            borderRadius: '12px',
+                                            border: '1px solid rgba(255,255,255,0.14)',
+                                            cursor: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            opacity: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 0.7 : 1,
                                             transition: 'all 0.2s',
                                             boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
                                         }}
                                     >
-                                        {processing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
-                                        {processing ? 'Starting registration...' : isAuthenticated ? 'Complete Registration' : 'Sign in to continue'}
+                                        {processing ? <Loader2 className="spinner" size={20} /> : null}
+                                        {processing ? 'Starting registration...' : isAuthenticated ? 'Register now' : 'Sign in to continue'}
                                     </button>
                                     {!isAuthenticated ? (
                                         <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>

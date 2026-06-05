@@ -120,6 +120,10 @@ const GalaxyLoadingIndicator = ({ label = 'Loading the Atlas...' }) => (
 const SearchPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const searchParams = new URLSearchParams(location.search);
+    const claimToken = searchParams.get('claim');
+    const resumeCartId = searchParams.get('cart');
+    const openCheckout = searchParams.get('checkout') === '1';
     const isBuyRoute = location.pathname.startsWith('/buy');
     const baseRoute = isBuyRoute ? '/buy' : '/search';
     const starSlug = location.pathname.startsWith(`${baseRoute}/`)
@@ -642,6 +646,9 @@ const SearchPage = () => {
                                 alert("Star Purchased!");
                             }}
                             onViewInGalaxy={handleViewInGalaxy}
+                            claimToken={claimToken}
+                            resumeCartId={resumeCartId}
+                            openCheckout={openCheckout}
                         />
                     </Suspense>
                 </div>

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class AccountStarSummary(BaseModel):
     id: int
+    star_slug: str | None = None
     registration_id: int | None = None
     transaction_id: int | None = None
     public_page_slug: str | None = None
@@ -38,6 +39,7 @@ class AccountOrderSummary(BaseModel):
     status: str
     owner_name: str | None = None
     recipient_name: str | None = None
+    recipient_email: str | None = None
     dedication: str | None = None
     gift_message: str | None = None
     registration_type: str = "self"
@@ -54,6 +56,8 @@ class AccountOrderSummary(BaseModel):
     transaction_type: str = "primary"
     created_at: datetime | None = None
     fulfilled_at: datetime | None = None
+    hold_expires_at: datetime | None = None
+    hold_active: bool = False
     star: AccountStarSummary
 
 
@@ -63,4 +67,5 @@ class AccountOrderDetail(AccountOrderSummary):
 
 class AccountOverviewResponse(BaseModel):
     orders: list[AccountOrderSummary]
+    cart_items: list[AccountOrderSummary]
     stars: list[AccountStarSummary]

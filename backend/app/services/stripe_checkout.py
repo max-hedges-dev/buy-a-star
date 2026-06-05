@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 import stripe
@@ -30,6 +30,7 @@ CHECKOUT_STATUS_FULFILLED = "fulfilled"
 CHECKOUT_STATUS_PAYMENT_FAILED = "payment_failed"
 CHECKOUT_STATUS_EXPIRED = "expired"
 CHECKOUT_STATUS_CONFLICT = "conflict"
+CART_HOLD_WINDOW = timedelta(hours=1)
 
 stripe.api_key = settings.STRIPE_SECRET_KEY or None
 
@@ -84,6 +85,97 @@ def _money_to_minor_units(value: Decimal | float | int) -> int:
 
 def _decimal_amount(amount_minor_units: int, currency: str) -> Decimal:
     return major_amount_from_minor_units(amount_minor_units, currency).quantize(Decimal("0.01"))
+
+
+def _cart_hold_expires_at(now: datetime) -> datetime:
+    return now + CART_HOLD_WINDOW
+
+
+def _is_hold_active(transaction: Transaction, now: datetime) -> bool:
+    return bool(
+        transaction.status == CHECKOUT_STATUS_CREATED
+        and transaction.checkout_expires_at
+        and transaction.checkout_expires_at > now
+    )
+
+
+async def _find_other_active_hold(
+    db: AsyncSession,
+    *,
+    star_id: int,
+    user_id: int,
+    now: datetime,
+) -> Transaction | None:
+    result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.star_id == star_id,
+            Transaction.user_id != user_id,
+            Transaction.status == CHECKOUT_STATUS_CREATED,
+            Transaction.checkout_expires_at.is_not(None),
+            Transaction.checkout_expires_at > now,
+        )
+        .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+    )
+    return result.scalars().first()
+
+
+async def _find_user_cart_transaction(
+    db: AsyncSession,
+    *,
+    star_id: int,
+    user_id: int,
+) -> Transaction | None:
+    result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.star_id == star_id,
+            Transaction.user_id == user_id,
+            Transaction.status.in_([CHECKOUT_STATUS_CREATED, CHECKOUT_STATUS_EXPIRED, CHECKOUT_STATUS_PAYMENT_FAILED]),
+        )
+        .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+    )
+    return result.scalars().first()
+
+
+def _apply_checkout_transaction_fields(
+    transaction: Transaction,
+    *,
+    owner_name: str,
+    registration_type: str,
+    recipient_name: str | None,
+    recipient_email: str | None,
+    dedication: str | None,
+    gift_message: str | None,
+    certificate_type: str,
+    quote_currency: str,
+    shipping_required: bool,
+    shipping_amount: Decimal,
+    amount: Decimal,
+    is_demo: bool,
+    payment_provider: str,
+    now: datetime,
+) -> None:
+    transaction.owner_name = owner_name
+    transaction.registration_type = registration_type
+    transaction.recipient_name = (recipient_name or "").strip() or None
+    transaction.recipient_email = (recipient_email or "").strip() or None
+    transaction.dedication = (dedication or "").strip() or None
+    transaction.gift_message = (gift_message or "").strip() or None
+    transaction.is_gift = registration_type == "gift"
+    transaction.is_demo = is_demo
+    transaction.payment_provider = payment_provider
+    transaction.payment_status = "pending" if payment_provider == "stripe" else transaction.payment_status
+    transaction.amount = amount
+    transaction.currency = quote_currency
+    transaction.includes_certificate = True
+    transaction.certificate_type = certificate_type
+    transaction.shipping_required = shipping_required
+    transaction.shipping_amount = shipping_amount
+    transaction.transaction_type = "primary"
+    transaction.status = CHECKOUT_STATUS_CREATED if payment_provider == "stripe" else transaction.status
+    transaction.accepted_terms_at = now
+    transaction.accepted_privacy_at = now
 
 
 async def _run_stripe_call(func, *args, **kwargs):
@@ -175,41 +267,69 @@ async def create_embedded_checkout_session(
     if star.is_bought:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This star has already been registered.")
 
+    now = datetime.now(timezone.utc)
+    active_hold = await _find_other_active_hold(db, star_id=star.id, user_id=user.id, now=now)
+    if active_hold is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This star is currently being held in another cart. Please try again later.",
+        )
+
     option = get_certificate_option(certificate_type)
     normalized_country = normalize_country_code(country_code)
     quote = pricing_quote_for_country(normalized_country)
     star_name = _star_display_name(star)
     clean_owner_name = owner_name.strip()
-    now = datetime.now(timezone.utc)
-    transaction = Transaction(
-        star_id=star.id,
-        user_id=user.id,
+    transaction = await _find_user_cart_transaction(db, star_id=star.id, user_id=user.id)
+    if transaction is None:
+        transaction = Transaction(
+            star_id=star.id,
+            user_id=user.id,
+            owner_name=clean_owner_name,
+            registration_type=registration_type,
+            recipient_name=(recipient_name or "").strip() or None,
+            recipient_email=(recipient_email or "").strip() or None,
+            dedication=(dedication or "").strip() or None,
+            gift_message=(gift_message or "").strip() or None,
+            is_gift=registration_type == "gift",
+            is_demo=False,
+            payment_provider="stripe",
+            payment_status="pending",
+            amount=_decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency),
+            currency=quote.currency,
+            includes_certificate=True,
+            certificate_type=option.code,
+            shipping_required=option.shipping_required,
+            shipping_amount=_decimal_amount(
+                quote.shipping_price.amount_minor_units if option.shipping_required else 0,
+                quote.currency,
+            ),
+            transaction_type="primary",
+            status=CHECKOUT_STATUS_CREATED,
+        )
+        db.add(transaction)
+        await db.flush()
+
+    _apply_checkout_transaction_fields(
+        transaction,
         owner_name=clean_owner_name,
         registration_type=registration_type,
-        recipient_name=(recipient_name or "").strip() or None,
-        recipient_email=(recipient_email or "").strip() or None,
-        dedication=(dedication or "").strip() or None,
-        gift_message=(gift_message or "").strip() or None,
-        is_gift=registration_type == "gift",
-        is_demo=False,
-        payment_provider="stripe",
-        payment_status="pending",
-        amount=_decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency),
-        currency=quote.currency,
-        includes_certificate=True,
+        recipient_name=recipient_name,
+        recipient_email=recipient_email,
+        dedication=dedication,
+        gift_message=gift_message,
         certificate_type=option.code,
+        quote_currency=quote.currency,
         shipping_required=option.shipping_required,
         shipping_amount=_decimal_amount(
             quote.shipping_price.amount_minor_units if option.shipping_required else 0,
             quote.currency,
         ),
-        transaction_type="primary",
-        status=CHECKOUT_STATUS_CREATED,
-        accepted_terms_at=now,
-        accepted_privacy_at=now,
+        amount=_decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency),
+        is_demo=False,
+        payment_provider="stripe",
+        now=now,
     )
-    db.add(transaction)
-    await db.flush()
 
     frontend_origin = _frontend_origin().rstrip("/")
     metadata = {
@@ -273,11 +393,103 @@ async def create_embedded_checkout_session(
     transaction.checkout_expires_at = (
         datetime.fromtimestamp(session_expires_at, tz=timezone.utc)
         if session_expires_at
-        else None
+        else _cart_hold_expires_at(now)
     )
 
     await db.commit()
     return _stripe_value(session, "client_secret"), _stripe_value(session, "id")
+
+
+async def add_star_to_cart(
+    db: AsyncSession,
+    *,
+    star_id: int,
+    user: User,
+    owner_name: str,
+    registration_type: str,
+    recipient_name: str | None,
+    recipient_email: str | None,
+    dedication: str | None,
+    gift_message: str | None,
+    certificate_type: str,
+    country_code: str,
+) -> Transaction:
+    result = await db.execute(select(Star).where(Star.id == star_id).with_for_update())
+    star = result.scalars().first()
+
+    if star is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Star not found.")
+    if star.is_bought:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This star has already been registered.")
+
+    now = datetime.now(timezone.utc)
+    active_hold = await _find_other_active_hold(db, star_id=star.id, user_id=user.id, now=now)
+    if active_hold is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This star is currently being held in another cart. Please try again later.",
+        )
+
+    option = get_certificate_option(certificate_type)
+    normalized_country = normalize_country_code(country_code)
+    quote = pricing_quote_for_country(normalized_country)
+    clean_owner_name = owner_name.strip()
+    transaction = await _find_user_cart_transaction(db, star_id=star.id, user_id=user.id)
+    if transaction is None:
+        transaction = Transaction(
+            star_id=star.id,
+            user_id=user.id,
+            owner_name=clean_owner_name,
+            registration_type=registration_type,
+            recipient_name=(recipient_name or "").strip() or None,
+            recipient_email=(recipient_email or "").strip() or None,
+            dedication=(dedication or "").strip() or None,
+            gift_message=(gift_message or "").strip() or None,
+            is_gift=registration_type == "gift",
+            is_demo=bool(user.is_demo),
+            payment_provider="stripe",
+            payment_status="pending",
+            amount=_decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency),
+            currency=quote.currency,
+            includes_certificate=True,
+            certificate_type=option.code,
+            shipping_required=option.shipping_required,
+            shipping_amount=_decimal_amount(
+                quote.shipping_price.amount_minor_units if option.shipping_required else 0,
+                quote.currency,
+            ),
+            transaction_type="primary",
+            status=CHECKOUT_STATUS_CREATED,
+        )
+        db.add(transaction)
+        await db.flush()
+
+    transaction.owner_name = clean_owner_name
+    transaction.registration_type = registration_type
+    transaction.recipient_name = (recipient_name or "").strip() or None
+    transaction.recipient_email = (recipient_email or "").strip() or None
+    transaction.dedication = (dedication or "").strip() or None
+    transaction.gift_message = (gift_message or "").strip() or None
+    transaction.is_gift = registration_type == "gift"
+    transaction.is_demo = bool(user.is_demo)
+    transaction.payment_provider = "stripe"
+    transaction.payment_status = "pending"
+    transaction.amount = _decimal_amount(_transaction_amount_minor_units(star, option.code, normalized_country), quote.currency)
+    transaction.currency = quote.currency
+    transaction.includes_certificate = True
+    transaction.certificate_type = option.code
+    transaction.shipping_required = option.shipping_required
+    transaction.shipping_amount = _decimal_amount(
+        quote.shipping_price.amount_minor_units if option.shipping_required else 0,
+        quote.currency,
+    )
+    transaction.transaction_type = "primary"
+    transaction.status = CHECKOUT_STATUS_CREATED
+    transaction.checkout_expires_at = _cart_hold_expires_at(now)
+
+    await db.commit()
+    await db.refresh(transaction)
+    return transaction
 
 
 async def retrieve_checkout_session(session_id: str):

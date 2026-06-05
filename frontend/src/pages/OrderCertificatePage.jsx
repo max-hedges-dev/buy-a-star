@@ -30,6 +30,21 @@ const sectionCardStyle = {
     border: '1px solid rgba(255,255,255,0.08)',
 };
 
+const primaryButtonStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: '15px 20px',
+    borderRadius: 999,
+    background: 'var(--cta-gradient)',
+    color: '#070a11',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    border: '1px solid rgba(255,255,255,0.14)',
+    boxShadow: '0 18px 40px rgba(255,91,22,0.22)',
+};
+
 const OrderCertificatePage = () => {
     const { transactionId } = useParams();
     const [order, setOrder] = useState(null);
@@ -40,6 +55,8 @@ const OrderCertificatePage = () => {
     const pagePaddingX = px(isNarrow ? 18 : 24);
     const heroPadding = `${px(34)}px ${px(36)}px`;
     const cardPadding = `${px(28)}px ${px(30)}px`;
+    const isPendingCheckout = order?.status === 'checkout_created';
+    const resumeCheckoutPath = order ? `/search/${order.star.star_slug}?checkout=1&cart=${order.id}` : '/account/cart';
     const actionStyle = {
         width: isNarrow ? '100%' : 'fit-content',
         minWidth: isNarrow ? 0 : 220,
@@ -98,13 +115,30 @@ const OrderCertificatePage = () => {
                                             Order record for {order.star.display_name}
                                         </h1>
                                         <p className="muted-copy" style={{ maxWidth: 760, marginBottom: 24 }}>
-                                            This page combines the certificate preview, registry details, and purchase record for registration {order.registration_number}.
+                                            {isPendingCheckout
+                                                ? 'This star is still in your cart and waiting for payment. Complete checkout to turn this hold into a finished registration.'
+                                                : `This page combines the certificate preview, registry details, and purchase record for registration ${order.registration_number}.`}
                                         </p>
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                                            <Link to={getOwnedStarPath(order)} className="secondary-button" style={actionStyle}>
+                                            {isPendingCheckout ? (
+                                                <Link to={resumeCheckoutPath} style={primaryButtonStyle}>
+                                                    Proceed to payment
+                                                </Link>
+                                            ) : null}
+                                            <Link to={getPublicStarPath(order.star)} className="secondary-button" style={actionStyle}>
                                                 Open star page
                                             </Link>
-                                            <Link to={getPublicStarPath(order.star)} className="secondary-button" style={actionStyle}>
+                                            <Link
+                                                to="/search"
+                                                state={{
+                                                    preserveTarget: true,
+                                                    focusStarSlug: order.star.star_slug,
+                                                    macroFlyInMode: true,
+                                                    targetZoomScale: 0.2,
+                                                }}
+                                                className="secondary-button"
+                                                style={actionStyle}
+                                            >
                                                 View in atlas
                                             </Link>
                                         </div>
@@ -141,7 +175,7 @@ const OrderCertificatePage = () => {
                         ) : null}
                     </section>
 
-                    {status === 'ready' && order ? (
+                    {status === 'ready' && order && !isPendingCheckout ? (
                         <section style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.08fr 0.92fr', gap: px(28) }}>
                             <div className="glass-card" style={{ padding: heroPadding }}>
                                 <p className="eyebrow" style={{ marginBottom: 16 }}>Certificate Preview</p>

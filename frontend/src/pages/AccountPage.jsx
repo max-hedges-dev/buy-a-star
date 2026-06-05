@@ -129,8 +129,7 @@ const AccountPage = () => {
     const activeSection = SECTION_CONFIG.some((section) => section.id === sectionParam) ? sectionParam : 'stars';
     const [status, setStatus] = useState('loading');
     const [error, setError] = useState('');
-    const [overview, setOverview] = useState({ orders: [], stars: [] });
-    const [downloadingOrderId, setDownloadingOrderId] = useState(null);
+    const [overview, setOverview] = useState({ orders: [], cart_items: [], stars: [] });
     const [usernameDraft, setUsernameDraft] = useState('');
     const [usernameStatus, setUsernameStatus] = useState('');
     const [isSavingUsername, setIsSavingUsername] = useState(false);
@@ -190,27 +189,13 @@ const AccountPage = () => {
         setSearchParams({ section: sectionId });
     };
 
-    const handleDownloadCertificate = async (order) => {
-        if (!order) {
-            return;
-        }
-
-        try {
-            setDownloadingOrderId(order.id);
-            const { downloadCertificate } = await import('../utils/certificateDownload');
-            await downloadCertificate(order);
-        } finally {
-            setDownloadingOrderId(null);
-        }
-    };
-
     const handleUsernameSave = async (event) => {
         event.preventDefault();
         try {
             setIsSavingUsername(true);
             setUsernameStatus('');
             await updateProfile({ username: usernameDraft });
-            setUsernameStatus('Username saved. Aster Atlas can now use it for ownership and StarWiki references.');
+            setUsernameStatus('Username saved. Aster Atlas can now use it anywhere ownership is shown.');
         } catch (requestError) {
             setUsernameStatus(requestError.message);
         } finally {
@@ -281,23 +266,8 @@ const AccountPage = () => {
                                 <Link to={getOwnedStarPath(star)} style={primaryButtonStyle}>
                                     Open ownership page
                                 </Link>
-                                {order ? (
-                                    <button
-                                        type="button"
-                                        className="secondary-button"
-                                        style={actionStyle}
-                                        onClick={() => handleDownloadCertificate(order)}
-                                    >
-                                        {downloadingOrderId === order.id ? 'Preparing download...' : 'Download certificate'}
-                                    </button>
-                                ) : null}
-                                {order ? (
-                                    <Link to={getOrderPath(order.id)} className="secondary-button" style={actionStyle}>
-                                        Open order & certificate
-                                    </Link>
-                                ) : null}
                                 <Link to={getPublicStarPath(star)} className="secondary-button" style={actionStyle}>
-                                    Open StarWiki page
+                                    Open star page
                                 </Link>
                             </div>
                         </article>
@@ -324,9 +294,6 @@ const AccountPage = () => {
             <section className="glass-card" style={{ padding: cardPadding }}>
                 <div style={{ display: 'grid', gap: 18 }}>
                     {orders.map((order) => {
-                        const canOpenOwnershipPage = order.status === 'fulfilled'
-                            && (order.claim_status === 'claimable' || order.star.current_holder_label === 'You');
-
                         return (
                         <article key={order.id} style={{ ...recordCardStyle, padding: `${px(24)}px ${px(24)}px ${px(22)}px` }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
@@ -364,11 +331,11 @@ const AccountPage = () => {
                                 </Link>
                                 {order.status === 'fulfilled' ? (
                                     <Link
-                                        to={canOpenOwnershipPage ? getOwnedStarPath(order) : getPublicStarPath(order.star)}
+                                        to={getPublicStarPath(order.star)}
                                         className="secondary-button"
                                         style={actionStyle}
                                     >
-                                        {canOpenOwnershipPage ? 'Open ownership page' : 'Open StarWiki page'}
+                                        Open star page
                                     </Link>
                                 ) : null}
                             </div>
@@ -455,7 +422,7 @@ const AccountPage = () => {
                                         Pick the name Aster Atlas will use for ownership.
                                     </h2>
                                     <p className="muted-copy" style={{ maxWidth: 760 }}>
-                                        Public ownership on StarWiki pages should refer to a stable Aster Atlas username rather than an email address or temporary account label. Choose a unique username once and we&apos;ll use it anywhere ownership is shown.
+                                        Public ownership should refer to a stable Aster Atlas username rather than an email address or temporary account label. Choose a unique username once and we&apos;ll use it anywhere ownership is shown.
                                     </p>
                                 </div>
                                 <form onSubmit={handleUsernameSave} style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
@@ -518,7 +485,11 @@ const AccountPage = () => {
                         </section>
                     ) : null}
 
-                    {status === 'ready' ? (activeSection === 'orders' ? renderOrdersSection() : renderStarsSection()) : null}
+                    {status === 'ready'
+                        ? (activeSection === 'orders'
+                            ? renderOrdersSection()
+                            : renderStarsSection())
+                        : null}
                 </div>
             </main>
             <Footer />

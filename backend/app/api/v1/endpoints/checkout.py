@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,8 @@ from app.models.registration import Registration
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.checkout import (
+    CartItemResponse,
+    CartUpsertRequest,
     CheckoutOptionRead,
     CheckoutOptionsResponse,
     CheckoutSessionCreateRequest,
@@ -24,6 +28,7 @@ from app.services.pricing import pricing_quote_for_country, star_price_for_count
 from app.services.registration_records import build_claim_token
 from app.services.stripe_checkout import (
     _stripe_value,
+    add_star_to_cart,
     complete_demo_checkout,
     create_embedded_checkout_session,
     fulfill_checkout_session,
@@ -109,6 +114,49 @@ async def create_session(
             detail=exc.user_message or str(exc),
         ) from exc
     return CheckoutSessionCreateResponse(client_secret=client_secret, session_id=session_id)
+
+
+@router.post("/cart", response_model=CartItemResponse)
+async def add_to_cart(
+    payload: CartUpsertRequest,
+    current_user: User = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CartItemResponse:
+    if not payload.owner_name.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Registered display name is required.")
+    if payload.registration_type not in {"self", "gift", "decide_later"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid registration type.")
+    if payload.registration_type == "gift" and not (payload.recipient_name or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recipient name is required for a gift registration.")
+
+    transaction = await add_star_to_cart(
+        db=db,
+        star_id=payload.star_id,
+        user=current_user,
+        owner_name=payload.owner_name,
+        registration_type=payload.registration_type,
+        recipient_name=payload.recipient_name,
+        recipient_email=payload.recipient_email,
+        dedication=payload.dedication,
+        gift_message=payload.gift_message,
+        certificate_type=payload.certificate_type,
+        country_code=payload.country_code,
+    )
+
+    result = await db.execute(select(Star).where(Star.id == transaction.star_id))
+    star = result.scalars().first()
+
+    return CartItemResponse(
+        transaction_id=transaction.id,
+        star_id=transaction.star_id,
+        star_name=star.common_name or star.display_name or star.scientific_name,
+        owner_name=transaction.owner_name,
+        registration_type=transaction.registration_type,
+        recipient_name=transaction.recipient_name,
+        hold_expires_at=transaction.checkout_expires_at,
+        hold_active=bool(transaction.checkout_expires_at and transaction.checkout_expires_at > datetime.now(timezone.utc)),
+        status=transaction.status,
+    )
 
 
 @router.post("/demo-complete", response_model=CheckoutSessionStatusResponse)

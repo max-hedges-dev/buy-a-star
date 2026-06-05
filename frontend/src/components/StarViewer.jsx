@@ -3,9 +3,10 @@ import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import DetailedStar from './DetailedStar';
-import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2, Truck } from 'lucide-react';
-import { addStarToCart, claimRegistration, createCheckoutSession, fetchAccountOrder, fetchCheckoutOptions, fetchStarById, previewRegistrationClaim } from '../services/api';
+import { ArrowLeft, CheckCircle2, FileText, ShoppingCart, Loader2, Truck, UserCircle2 } from 'lucide-react';
+import { addStarToCart, claimRegistration, createCheckoutSession, fetchAccountOrder, fetchAccountOverview, fetchCheckoutOptions, fetchStarById, notifyCartUpdated, previewRegistrationClaim } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import { useCartCount } from '../hooks/useCartCount';
 import EmbeddedStripeCheckout from './EmbeddedStripeCheckout';
 import { getColorFamily, getSpectralDisplay } from '../utils/starAppearance';
 import { DEMO_MODE } from '../config/appEnv';
@@ -18,6 +19,25 @@ const formatMaybeNumber = (value, digits = 2) => {
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const HOLD_REFRESH_MS = 1000;
+
+const getHoldCountdownLabel = (holdExpiresAt, now = Date.now()) => {
+    if (!holdExpiresAt) return null;
+
+    const remainingMs = new Date(holdExpiresAt).getTime() - now;
+    if (remainingMs <= 0) return null;
+
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return `Held for ${hours}h ${minutes}m ${seconds}s`;
+    }
+    return `Held for ${minutes}m ${seconds}s`;
+};
 
 const OBSERVATORY_LAYOUT_STORAGE_KEY = 'aster-atlas-observatory-layout-v4';
 const OBSERVATORY_STAR_STORAGE_KEY = 'aster-atlas-observatory-star-v3';
@@ -915,6 +935,7 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
     const location = useLocation();
     const navigate = useNavigate();
     const { isAuthenticated, isLoadingUser } = useAuth();
+    const cartCount = useCartCount();
     const [viewportSize, setViewportSize] = useState(() => ({
         width: typeof window !== 'undefined' ? window.innerWidth : 1720,
         height: typeof window !== 'undefined' ? window.innerHeight : 980,
@@ -987,6 +1008,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
     const ownerRecord = activeStar.public_registration;
     const ownerDisplayName = ownerRecord?.current_holder_username || activeStar.current_holder_username || activeStar.owner_name || 'Aster Atlas holder';
     const hasOwnerRecord = Boolean(activeStar.is_bought && ownerRecord);
+    const [cartState, setCartState] = useState({ transactionId: null, holdActive: false });
+    const [holdNow, setHoldNow] = useState(Date.now());
+    const currentCartTransactionId = activeStar.current_user_cart_transaction_id ?? cartState.transactionId;
+    const isInCurrentUsersCart = Boolean(currentCartTransactionId);
+    const currentCartHoldActive = Boolean(activeStar.current_user_cart_hold_active ?? cartState.holdActive);
+    const anotherUserCurrentlyHoldingStar = Boolean(activeStar.held_in_another_cart);
+    const otherHoldCountdownLabel = getHoldCountdownLabel(activeStar.active_hold_expires_at, holdNow);
+    const shouldBlockRegistrationForHold = anotherUserCurrentlyHoldingStar && Boolean(otherHoldCountdownLabel);
     const spectralDisplay = useMemo(() => getSpectralDisplay(activeStar), [activeStar]);
     const gaiaIdentifier = useMemo(() => getGaiaIdentifier(activeStar), [activeStar]);
     const spectralBand = useMemo(() => getSpectralBandKey(activeStar, spectralDisplay), [activeStar, spectralDisplay]);
@@ -1008,7 +1037,18 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
     const isLandscapeLayout = viewportSize.width >= 1180;
     const usesObservatoryModal = isPortraitLayout || !isLandscapeLayout;
     const isPortraitObservatoryOpen = usesObservatoryModal && isObservatoryModalOpen;
+
+    useEffect(() => {
+        const intervalId = window.setInterval(() => {
+            setHoldNow(Date.now());
+        }, HOLD_REFRESH_MS);
+
+        return () => window.clearInterval(intervalId);
+    }, []);
     const canArrangeObservatory = isLandscapeLayout && !usesObservatoryModal;
+    const cartBadgeLabel = cartCount > 99 ? '99+' : cartCount;
+    const cartTarget = isAuthenticated ? '/account/cart' : '/auth?next=%2Faccount%2Fcart';
+    const accountTarget = isAuthenticated ? '/account' : '/auth';
     const leftUiScale = clamp(Math.min(viewportSize.width / 1680, viewportSize.height / 980), 0.82, 1.04);
     const observatoryDesignWidth = 980;
     const observatoryDesignHeight = 920;
@@ -1094,11 +1134,15 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
                 setGiftMessage(order.gift_message || '');
                 setCertificateType(order.certificate_type || 'digital');
                 setCartFeedback(
-                    order.hold_active
-                        ? 'Resumed from your cart. Your one-hour hold is still active while you complete payment.'
+                    order.can_proceed_to_payment
+                        ? (order.hold_active
+                            ? 'Resumed from your cart. Your one-hour hold is still active while you complete payment.'
+                            : 'Resumed from your cart. Your hold has expired, so complete payment soon if you still want this star.')
+                        : order.star?.held_in_another_cart
+                            ? 'This star is currently being held in another cart. You can keep it in your cart, but you cannot complete payment unless that hold expires.'
                         : 'Resumed from your cart. Your hold has expired, so complete payment soon if you still want this star.'
                 );
-                if (openCheckout) {
+                if (openCheckout && order.can_proceed_to_payment && (order.owner_name || '').trim()) {
                     setAcceptedTerms(true);
                     setAcceptedPrivacy(true);
                     setIsCheckoutOpen(true);
@@ -1457,6 +1501,54 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
     const shippingPrice = selectedCertificateOption?.shipping_amount || 0;
     const total = basePrice + certificatePrice + shippingPrice;
 
+    useEffect(() => {
+        let isActive = true;
+
+        if (!isAuthenticated || !activeStar?.id) {
+            setCartState({ transactionId: null, holdActive: false });
+            return undefined;
+        }
+
+        const syncCartState = async () => {
+            try {
+                const overview = await fetchAccountOverview();
+                if (!isActive) return;
+
+                const matchingItem = (overview?.cart_items || []).find((item) => item?.star?.id === activeStar.id);
+                setCartState({
+                    transactionId: matchingItem?.id ?? null,
+                    holdActive: Boolean(matchingItem?.hold_active),
+                });
+            } catch {
+                if (!isActive) return;
+                setCartState({
+                    transactionId: activeStar.current_user_cart_transaction_id ?? null,
+                    holdActive: Boolean(activeStar.current_user_cart_hold_active),
+                });
+            }
+        };
+
+        syncCartState();
+
+        const handleCartUpdated = () => {
+            syncCartState();
+        };
+
+        window.addEventListener('aster-atlas-cart-updated', handleCartUpdated);
+        window.addEventListener('focus', handleCartUpdated);
+
+        return () => {
+            isActive = false;
+            window.removeEventListener('aster-atlas-cart-updated', handleCartUpdated);
+            window.removeEventListener('focus', handleCartUpdated);
+        };
+    }, [
+        activeStar?.current_user_cart_hold_active,
+        activeStar?.current_user_cart_transaction_id,
+        activeStar?.id,
+        isAuthenticated,
+    ]);
+
     const handlePurchase = async () => {
         if (!isAuthenticated) {
             navigate(`/auth?next=${encodeURIComponent(location.pathname)}`);
@@ -1495,19 +1587,6 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
             return;
         }
 
-        if (!ownerName.trim()) {
-            setError('Please enter the registered display name before adding this star to your cart.');
-            return;
-        }
-        if (registrationType === 'gift' && !recipientName.trim()) {
-            setError('Please enter the recipient name for this gift.');
-            return;
-        }
-        if (!selectedCertificateOption) {
-            setError('Certificate options are still loading. Please try again in a moment.');
-            return;
-        }
-
         try {
             setCartProcessing(true);
             setError(null);
@@ -1528,6 +1607,11 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
                     ? 'Added to your cart. This star is now held for you for one hour.'
                     : 'Added to your cart.'
             );
+            setCartState({
+                transactionId: response.transaction_id,
+                holdActive: Boolean(response.hold_active),
+            });
+            notifyCartUpdated();
             navigate('/account/cart', {
                 state: {
                     justAdded: true,
@@ -2364,37 +2448,62 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
                                             {cartFeedback}
                                         </div>
                                     ) : null}
+                                    {shouldBlockRegistrationForHold ? (
+                                        <div className="status-banner" style={{ marginBottom: '16px', background: 'rgba(200,121,58,0.12)', borderColor: 'rgba(216,168,95,0.22)' }}>
+                                            {`${activeStar.hold_owner_name || 'Another collector'} is currently holding this star. ${otherHoldCountdownLabel} remaining before it becomes available again.`}
+                                        </div>
+                                    ) : null}
 
-                                    <button
-                                        type="button"
-                                        onClick={handleAddToCart}
-                                        disabled={cartProcessing || processing || isLoadingUser || checkoutOptionsStatus !== 'ready'}
-                                        style={{
-                                            width: '100%',
-                                            padding: '18px',
-                                            background: 'var(--cta-gradient)',
-                                            color: '#070a11',
-                                            fontSize: '1.1rem',
-                                            fontWeight: 'bold',
-                                            borderRadius: '12px',
-                                            border: '1px solid rgba(255,255,255,0.14)',
-                                            cursor: (cartProcessing || processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 'not-allowed' : 'pointer',
-                                            display: 'flex',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            gap: '10px',
-                                            opacity: (cartProcessing || processing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 0.7 : 1,
-                                            transition: 'all 0.2s',
-                                            boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
-                                            marginBottom: '12px',
-                                        }}
-                                    >
-                                        {cartProcessing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
-                                        {cartProcessing ? 'Adding to cart...' : isAuthenticated ? 'Add to cart' : 'Sign in to add to cart'}
-                                    </button>
+                                    {isInCurrentUsersCart ? (
+                                        <Link
+                                            to={`/account/cart${currentCartTransactionId ? `?highlight=${currentCartTransactionId}` : ''}`}
+                                            className="secondary-button"
+                                            style={{
+                                                width: '100%',
+                                                minWidth: 0,
+                                                marginBottom: '12px',
+                                            }}
+                                        >
+                                            {currentCartHoldActive ? 'Already in your cart' : 'Open cart for this star'}
+                                        </Link>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddToCart}
+                                            disabled={cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold}
+                                            style={{
+                                                width: '100%',
+                                                padding: '18px',
+                                                background: 'var(--cta-gradient)',
+                                                color: '#070a11',
+                                                fontSize: '1.1rem',
+                                                fontWeight: 'bold',
+                                                borderRadius: '12px',
+                                                border: '1px solid rgba(255,255,255,0.14)',
+                                                cursor: (cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold) ? 'not-allowed' : 'pointer',
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                gap: '10px',
+                                                opacity: (cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold) ? 0.7 : 1,
+                                                transition: 'all 0.2s',
+                                                boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
+                                                marginBottom: '12px',
+                                            }}
+                                        >
+                                            {cartProcessing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
+                                            {cartProcessing
+                                                ? 'Adding to cart...'
+                                                : shouldBlockRegistrationForHold
+                                                    ? (otherHoldCountdownLabel || 'Temporarily held')
+                                                    : isAuthenticated
+                                                        ? 'Add to cart'
+                                                        : 'Sign in to add to cart'}
+                                        </button>
+                                    )}
                                     <button
                                         onClick={handlePurchase}
-                                        disabled={processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready'}
+                                        disabled={processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold}
                                         style={{
                                             width: '100%',
                                             padding: '18px',
@@ -2404,18 +2513,24 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
                                             fontWeight: 'bold',
                                             borderRadius: '12px',
                                             border: '1px solid rgba(255,255,255,0.14)',
-                                            cursor: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 'not-allowed' : 'pointer',
+                                            cursor: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold) ? 'not-allowed' : 'pointer',
                                             display: 'flex',
                                             justifyContent: 'center',
                                             alignItems: 'center',
                                             gap: '10px',
-                                            opacity: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready') ? 0.7 : 1,
+                                            opacity: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold) ? 0.7 : 1,
                                             transition: 'all 0.2s',
                                             boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
                                         }}
                                     >
                                         {processing ? <Loader2 className="spinner" size={20} /> : null}
-                                        {processing ? 'Starting registration...' : isAuthenticated ? 'Register now' : 'Sign in to continue'}
+                                        {processing
+                                            ? 'Starting registration...'
+                                            : shouldBlockRegistrationForHold
+                                                ? (otherHoldCountdownLabel || 'Temporarily held')
+                                                : isAuthenticated
+                                                    ? 'Register now'
+                                                    : 'Sign in to continue'}
                                     </button>
                                     {!isAuthenticated ? (
                                         <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>
@@ -2644,44 +2759,74 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
                                 display: 'flex',
                                 justifyContent: 'flex-end',
                                 gap: scalePx(10),
-                                pointerEvents: canEditActiveObservatory ? 'auto' : 'none',
-                                opacity: canEditActiveObservatory ? 1 : 0,
+                                alignItems: 'center',
+                                pointerEvents: 'auto',
                             }}
                         >
-                            <button
-                                type="button"
-                                onClick={() => setLayoutEditMode((current) => !current)}
+                            <Link
+                                to={cartTarget}
+                                aria-label="Open cart"
                                 style={{
-                                    padding: `${scalePx(10)} ${scalePx(14)}`,
-                                    borderRadius: '999px',
-                                    border: `1px solid ${layoutEditMode ? 'rgba(255,122,64,0.45)' : 'rgba(255,255,255,0.12)'}`,
-                                    background: layoutEditMode ? 'rgba(255,122,64,0.16)' : 'rgba(9,13,22,0.55)',
-                                    color: 'white',
-                                    fontSize: scaleRem(0.82),
-                                    fontWeight: 'bold',
-                                    letterSpacing: '0.04em',
-                                    backdropFilter: 'blur(12px)',
-                                }}
-                            >
-                                {layoutEditMode ? 'Done Arranging' : 'Arrange Modules'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleResetObservatoryLayout}
-                                style={{
-                                    padding: `${scalePx(10)} ${scalePx(14)}`,
+                                    position: 'relative',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: scalePx(46),
+                                    height: scalePx(46),
                                     borderRadius: '999px',
                                     border: '1px solid rgba(255,255,255,0.12)',
                                     background: 'rgba(9,13,22,0.55)',
-                                    color: '#d7dae7',
-                                    fontSize: scaleRem(0.82),
-                                    fontWeight: 'bold',
-                                    letterSpacing: '0.04em',
+                                    color: 'white',
                                     backdropFilter: 'blur(12px)',
+                                    textDecoration: 'none',
                                 }}
                             >
-                                Reset Layout
-                            </button>
+                                <ShoppingCart size={18 * leftUiScale} />
+                                {cartCount > 0 ? (
+                                    <span
+                                        style={{
+                                            position: 'absolute',
+                                            top: scalePx(-5),
+                                            right: scalePx(-5),
+                                            minWidth: scalePx(22),
+                                            height: scalePx(22),
+                                            padding: `0 ${scalePx(6)}px`,
+                                            borderRadius: '999px',
+                                            background: 'linear-gradient(135deg, #d8a85f 0%, #c8793a 55%, #b86b5e 100%)',
+                                            color: '#070a11',
+                                            border: '1px solid rgba(245,239,226,0.24)',
+                                            boxShadow: '0 10px 24px rgba(200,121,58,0.28)',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: scaleRem(0.68),
+                                            fontWeight: 800,
+                                            lineHeight: 1,
+                                        }}
+                                    >
+                                        {cartBadgeLabel}
+                                    </span>
+                                ) : null}
+                            </Link>
+                            <Link
+                                to={accountTarget}
+                                aria-label="Open account"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: scalePx(46),
+                                    height: scalePx(46),
+                                    borderRadius: '999px',
+                                    border: '1px solid rgba(255,255,255,0.12)',
+                                    background: 'rgba(9,13,22,0.55)',
+                                    color: 'white',
+                                    backdropFilter: 'blur(12px)',
+                                    textDecoration: 'none',
+                                }}
+                            >
+                                <UserCircle2 size={18 * leftUiScale} />
+                            </Link>
                         </div>
                     </div>
 

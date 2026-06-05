@@ -123,7 +123,7 @@ const EmptyState = ({ eyebrow, title, body, actionTo, actionLabel }) => (
 );
 
 const AccountPage = () => {
-    const { updateProfile, user } = useAuth();
+    const { logout, updateProfile, user } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const sectionParam = searchParams.get('section');
     const activeSection = SECTION_CONFIG.some((section) => section.id === sectionParam) ? sectionParam : 'stars';
@@ -201,6 +201,10 @@ const AccountPage = () => {
         } finally {
             setIsSavingUsername(false);
         }
+    };
+
+    const handleLogout = async () => {
+        await logout();
     };
 
     const renderStarsSection = () => {
@@ -406,8 +410,18 @@ const AccountPage = () => {
                                     </div>
                                     <div>
                                         <span>Latest order</span>
-                                <strong>{latestOrder ? formatDate(latestOrder.created_at) : 'None yet'}</strong>
+                                        <strong>{latestOrder ? formatDate(latestOrder.created_at) : 'None yet'}</strong>
                                     </div>
+                                </div>
+                                <div style={{ marginTop: 18 }}>
+                                    <button
+                                        type="button"
+                                        onClick={handleLogout}
+                                        className="secondary-button"
+                                        style={{ width: '100%' }}
+                                    >
+                                        Log out
+                                    </button>
                                 </div>
                             </aside>
                         </div>

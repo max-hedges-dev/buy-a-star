@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import { fetchStarBySlug, fetchStars } from '../services/api';
+import { fetchAccountOverview, fetchStarBySlug, fetchStars } from '../services/api';
 import { Search } from 'lucide-react';
 import BuyAStarGrid from '../components/BuyAStarGrid';
 
@@ -328,7 +328,31 @@ const SearchPage = () => {
         setStarRouteLoading(true);
         setViewMode(VIEW_MODE.DISPLAY);
 
-        fetchStarBySlug(starSlug)
+        const loadStarBySlug = async () => {
+            try {
+                return await fetchStarBySlug(starSlug);
+            } catch (requestError) {
+                const fallbackStars = await fetchStars({ limit: 20000 });
+                const matchingStar = fallbackStars.find((candidate) => getStarSlug(candidate) === starSlug);
+                if (!matchingStar) {
+                    throw requestError;
+                }
+
+                try {
+                    const overview = await fetchAccountOverview();
+                    const cartItem = (overview?.cart_items || []).find((item) => item?.star?.id === matchingStar.id);
+                    return {
+                        ...matchingStar,
+                        current_user_cart_transaction_id: cartItem?.id ?? null,
+                        current_user_cart_hold_active: Boolean(cartItem?.hold_active),
+                    };
+                } catch {
+                    return matchingStar;
+                }
+            }
+        };
+
+        loadStarBySlug()
             .then((star) => {
                 if (!isActive) return;
                 setPreviousViewMode(baseRoute === '/buy' ? VIEW_MODE.GRID : VIEW_MODE.MAP);

@@ -63,6 +63,11 @@ class StarBase(BaseModel):
     registration_id: Optional[int] = None
     public_page_slug: Optional[str] = None
     current_holder_username: Optional[str] = None
+    current_user_cart_transaction_id: Optional[int] = None
+    current_user_cart_hold_active: Optional[bool] = None
+    active_hold_expires_at: Optional[datetime] = None
+    held_in_another_cart: bool = False
+    hold_owner_name: Optional[str] = None
 
 
 class StarListRead(StarBase):

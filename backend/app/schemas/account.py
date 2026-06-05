@@ -29,6 +29,10 @@ class AccountStarSummary(BaseModel):
     purchase_date: datetime | None = None
     registration_number: str | None = None
     is_current_owner: bool = True
+    is_bought: bool = False
+    active_hold_expires_at: datetime | None = None
+    held_in_another_cart: bool = False
+    hold_owner_name: str | None = None
 
 
 class AccountOrderSummary(BaseModel):
@@ -58,6 +62,8 @@ class AccountOrderSummary(BaseModel):
     fulfilled_at: datetime | None = None
     hold_expires_at: datetime | None = None
     hold_active: bool = False
+    can_proceed_to_payment: bool = False
+    is_star_still_available: bool = True
     star: AccountStarSummary
 
 

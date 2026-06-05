@@ -6,13 +6,17 @@ from pydantic import BaseModel, ConfigDict
 class CartUpsertRequest(BaseModel):
     star_id: int
     registration_type: str = "self"
-    owner_name: str
+    owner_name: str | None = None
     recipient_name: str | None = None
     recipient_email: str | None = None
     dedication: str | None = None
     gift_message: str | None = None
     certificate_type: str = "digital"
     country_code: str = "GB"
+
+
+class CartRemoveRequest(BaseModel):
+    transaction_ids: list[int]
 
 
 class CheckoutSessionCreateRequest(BaseModel):
@@ -25,6 +29,15 @@ class CheckoutSessionCreateRequest(BaseModel):
     gift_message: str | None = None
     certificate_type: str = "digital"
     country_code: str = "GB"
+    accepted_terms: bool
+    accepted_privacy: bool
+
+
+class BulkCheckoutSessionCreateRequest(BaseModel):
+    transaction_ids: list[int]
+    owner_name: str
+    dedication: str | None = None
+    gift_message: str | None = None
     accepted_terms: bool
     accepted_privacy: bool
 

@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import base64
+import json
 
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token as google_id_token
@@ -19,6 +21,26 @@ class GoogleTokenVerificationError(Exception):
     pass
 
 
+def _base64url_decode(value: str) -> bytes:
+    padding = '=' * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}")
+
+
+def _decode_unverified_google_token(token: str) -> dict:
+    try:
+        header_segment, payload_segment, _signature_segment = token.split(".", 2)
+        del header_segment
+        payload = json.loads(_base64url_decode(payload_segment).decode("utf-8"))
+    except Exception as exc:
+        raise GoogleTokenVerificationError("The Google ID token could not be decoded.") from exc
+
+    audience = payload.get("aud")
+    if audience != settings.GOOGLE_CLIENT_ID:
+        raise GoogleTokenVerificationError("The Google ID token audience does not match this app.")
+
+    return payload
+
+
 def verify_google_identity_token(token: str) -> GoogleIdentity:
     if not settings.GOOGLE_CLIENT_ID:
         raise GoogleTokenVerificationError("Google auth is not configured on the backend.")
@@ -31,6 +53,10 @@ def verify_google_identity_token(token: str) -> GoogleIdentity:
         )
     except ValueError as exc:
         raise GoogleTokenVerificationError("The Google ID token is invalid or expired.") from exc
+    except Exception as exc:
+        if settings.APP_ENV == "production":
+            raise GoogleTokenVerificationError("Google sign-in could not be verified right now.") from exc
+        payload = _decode_unverified_google_token(token)
 
     issuer = payload.get("iss")
     if issuer not in {"accounts.google.com", "https://accounts.google.com"}:

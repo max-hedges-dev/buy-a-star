@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, ShoppingCart, UserCircle2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Menu, ShoppingCart, UserCircle2, X } from 'lucide-react';
 import fullLogoLeftWhite from '../assets/AA Full Logo Left White.png';
 import symbolWhite from '../assets/AA Symbol White.png';
 
 import { useAuth } from '../hooks/useAuth';
+import { useCartCount } from '../hooks/useCartCount';
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -24,10 +25,11 @@ const Navbar = () => {
         width: typeof window !== 'undefined' ? window.innerWidth : 1440,
         height: typeof window !== 'undefined' ? window.innerHeight : 900,
     }));
-    const navigate = useNavigate();
-    const { isAuthenticated, isLoadingUser, logout } = useAuth();
+    const { isAuthenticated, isLoadingUser } = useAuth();
+    const cartCount = useCartCount();
     const cartTarget = isAuthenticated ? '/account/cart' : '/auth?next=%2Faccount%2Fcart';
     const accountTarget = isAuthenticated ? '/account' : '/auth';
+    const cartBadgeLabel = cartCount > 99 ? '99+' : cartCount;
 
     useEffect(() => {
         const onScroll = () => setIsScrolled(window.scrollY > 16);
@@ -46,12 +48,6 @@ const Navbar = () => {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    const handleLogout = async () => {
-        setIsMenuOpen(false);
-        await logout();
-        navigate('/');
-    };
-
     const { width: viewportWidth, height: viewportHeight } = viewportSize;
     const navScale = clamp(Math.min(viewportWidth / 1440, viewportHeight / 920), 0.66, 1.04);
     const useSymbolLogo = viewportWidth < 720;
@@ -64,8 +60,8 @@ const Navbar = () => {
     const compactLogoSize = Math.round(clamp(125 * navScale, 86, 130));
     const actionSize = Math.round(clamp(42 * navScale, 34, 42));
     const actionIconSize = Math.round(clamp(22 * navScale, 18, 22));
+    const actionFontSize = `${clamp(0.92 * navScale, 0.82, 0.92).toFixed(3)}rem`;
     const authGap = Math.round(clamp(12 * navScale, 8, 12));
-    const actionFontSize = `${clamp(0.88 * navScale, 0.72, 0.88).toFixed(3)}rem`;
     const resolvedLogoWidth = useSymbolLogo ? compactLogoSize : logoWidth;
     const resolvedLogoHeight = useSymbolLogo ? compactLogoSize : logoHeight;
     const navActionButtonStyle = {
@@ -80,6 +76,7 @@ const Navbar = () => {
         color: 'var(--text-color)',
         cursor: 'pointer',
         pointerEvents: 'auto',
+        position: 'relative',
     };
     const navLinkStyle = {
         color: 'var(--text-color)',
@@ -196,6 +193,31 @@ const Navbar = () => {
                             style={navActionButtonStyle}
                         >
                             <ShoppingCart size={actionIconSize} />
+                            {cartCount > 0 ? (
+                                <span
+                                    style={{
+                                        position: 'absolute',
+                                        top: -6,
+                                        right: -6,
+                                        minWidth: 22,
+                                        height: 22,
+                                        padding: '0 6px',
+                                        borderRadius: 999,
+                                        background: 'linear-gradient(135deg, #d8a85f 0%, #c8793a 55%, #b86b5e 100%)',
+                                        color: '#070a11',
+                                        border: '1px solid rgba(245,239,226,0.24)',
+                                        boxShadow: '0 10px 24px rgba(200,121,58,0.28)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 800,
+                                        lineHeight: 1,
+                                    }}
+                                >
+                                    {cartBadgeLabel}
+                                </span>
+                            ) : null}
                         </Link>
                         <span className="nav-action-tooltip__label">Cart</span>
                     </div>
@@ -212,41 +234,11 @@ const Navbar = () => {
                                 </Link>
                                 <span className="nav-action-tooltip__label">Account</span>
                             </div>
-                            <button
-                                onClick={handleLogout}
-                                style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: Math.round(clamp(8 * navScale, 6, 8)),
-                                    padding: `${Math.round(clamp(10 * navScale, 8, 10))}px ${Math.round(clamp(14 * navScale, 10, 14))}px`,
-                                    borderRadius: 999,
-                                    background: 'rgba(255,255,255,0.04)',
-                                    border: '1px solid rgba(245,239,226,0.08)',
-                                    color: 'var(--text-color)',
-                                    fontSize: actionFontSize,
-                                    cursor: 'pointer',
-                                    pointerEvents: 'auto',
-                                }}
-                                type="button"
-                            >
-                                <LogOut size={Math.round(clamp(16 * navScale, 13, 16))} />
-                                Log out
-                            </button>
                         </>
                     ) : null}
 
                     {!isLoadingUser && !isAuthenticated ? (
                         <>
-                            <div className="nav-action-tooltip">
-                                <Link
-                                    to={accountTarget}
-                                    aria-label="Sign in or open account"
-                                    style={navActionButtonStyle}
-                                >
-                                    <UserCircle2 size={actionIconSize} />
-                                </Link>
-                                <span className="nav-action-tooltip__label">Account</span>
-                            </div>
                             <Link
                                 to="/auth"
                                 style={{

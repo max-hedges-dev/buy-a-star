@@ -14,7 +14,9 @@ from app.models.registration import Registration
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.checkout import (
+    BulkCheckoutSessionCreateRequest,
     CartItemResponse,
+    CartRemoveRequest,
     CartUpsertRequest,
     CheckoutOptionRead,
     CheckoutOptionsResponse,
@@ -29,12 +31,15 @@ from app.services.registration_records import build_claim_token
 from app.services.stripe_checkout import (
     _stripe_value,
     add_star_to_cart,
+    create_bulk_embedded_checkout_session,
     complete_demo_checkout,
+    remove_cart_transactions,
     create_embedded_checkout_session,
     fulfill_checkout_session,
     mark_checkout_session_failed,
     mark_checkout_session_expired,
     retrieve_checkout_session,
+    get_effective_hold_expires_at,
 )
 
 router = APIRouter()
@@ -122,12 +127,8 @@ async def add_to_cart(
     current_user: User = Depends(require_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CartItemResponse:
-    if not payload.owner_name.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Registered display name is required.")
     if payload.registration_type not in {"self", "gift", "decide_later"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid registration type.")
-    if payload.registration_type == "gift" and not (payload.recipient_name or "").strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recipient name is required for a gift registration.")
 
     transaction = await add_star_to_cart(
         db=db,
@@ -153,10 +154,58 @@ async def add_to_cart(
         owner_name=transaction.owner_name,
         registration_type=transaction.registration_type,
         recipient_name=transaction.recipient_name,
-        hold_expires_at=transaction.checkout_expires_at,
-        hold_active=bool(transaction.checkout_expires_at and transaction.checkout_expires_at > datetime.now(timezone.utc)),
+        hold_expires_at=get_effective_hold_expires_at(transaction),
+        hold_active=bool(
+            get_effective_hold_expires_at(transaction)
+            and get_effective_hold_expires_at(transaction) > datetime.now(timezone.utc)
+        ),
         status=transaction.status,
     )
+
+
+@router.post("/cart/remove")
+async def remove_from_cart(
+    payload: CartRemoveRequest,
+    current_user: User = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    removed = await remove_cart_transactions(
+        db=db,
+        transaction_ids=payload.transaction_ids,
+        user=current_user,
+    )
+    return {"removed": removed}
+
+
+@router.post("/bulk-session", response_model=CheckoutSessionCreateResponse)
+async def create_bulk_session(
+    payload: BulkCheckoutSessionCreateRequest,
+    current_user: User = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CheckoutSessionCreateResponse:
+    if not payload.accepted_terms:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You must accept the Terms & Conditions.")
+    if not payload.accepted_privacy:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You must accept the Privacy Notice.")
+    if not payload.owner_name.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Registered display name is required.")
+
+    try:
+        client_secret, session_id = await create_bulk_embedded_checkout_session(
+            db=db,
+            transaction_ids=payload.transaction_ids,
+            user=current_user,
+            owner_name=payload.owner_name,
+            dedication=payload.dedication,
+            gift_message=payload.gift_message,
+        )
+    except stripe.error.StripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.user_message or str(exc),
+        ) from exc
+
+    return CheckoutSessionCreateResponse(client_secret=client_secret, session_id=session_id)
 
 
 @router.post("/demo-complete", response_model=CheckoutSessionStatusResponse)

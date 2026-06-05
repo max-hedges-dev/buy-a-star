@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.registration import Registration
 from app.models.star import Star
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -91,11 +92,25 @@ def _cart_hold_expires_at(now: datetime) -> datetime:
     return now + CART_HOLD_WINDOW
 
 
+def get_effective_hold_expires_at(transaction: Transaction) -> datetime | None:
+    created_at = transaction.created_at
+    checkout_expires_at = transaction.checkout_expires_at
+
+    if created_at is not None:
+        created_at_limit = created_at + CART_HOLD_WINDOW
+        if checkout_expires_at is None:
+            return created_at_limit
+        return min(checkout_expires_at, created_at_limit)
+
+    return checkout_expires_at
+
+
 def _is_hold_active(transaction: Transaction, now: datetime) -> bool:
+    effective_expires_at = get_effective_hold_expires_at(transaction)
     return bool(
         transaction.status == CHECKOUT_STATUS_CREATED
-        and transaction.checkout_expires_at
-        and transaction.checkout_expires_at > now
+        and effective_expires_at
+        and effective_expires_at > now
     )
 
 
@@ -112,12 +127,13 @@ async def _find_other_active_hold(
             Transaction.star_id == star_id,
             Transaction.user_id != user_id,
             Transaction.status == CHECKOUT_STATUS_CREATED,
-            Transaction.checkout_expires_at.is_not(None),
-            Transaction.checkout_expires_at > now,
         )
         .order_by(Transaction.created_at.desc(), Transaction.id.desc())
     )
-    return result.scalars().first()
+    for transaction in result.scalars().all():
+        if _is_hold_active(transaction, now):
+            return transaction
+    return None
 
 
 async def _find_user_cart_transaction(
@@ -237,6 +253,25 @@ def _line_items_for_star(star: Star, certificate_type: str, country_code: str) -
     )
 
     return line_items
+
+
+async def _stars_by_ids(db: AsyncSession, star_ids: list[int]) -> dict[int, Star]:
+    result = await db.execute(select(Star).where(Star.id.in_(star_ids)))
+    return {star.id: star for star in result.scalars().all()}
+
+
+async def _transactions_by_ids_for_user(
+    db: AsyncSession,
+    *,
+    transaction_ids: list[int],
+    user_id: int,
+) -> dict[int, Transaction]:
+    result = await db.execute(
+        select(Transaction)
+        .where(Transaction.id.in_(transaction_ids), Transaction.user_id == user_id)
+        .with_for_update()
+    )
+    return {transaction.id: transaction for transaction in result.scalars().all()}
 
 
 async def create_embedded_checkout_session(
@@ -391,7 +426,10 @@ async def create_embedded_checkout_session(
     session_expires_at = _stripe_value(session, "expires_at")
     transaction.stripe_checkout_session_id = _stripe_value(session, "id")
     transaction.checkout_expires_at = (
-        datetime.fromtimestamp(session_expires_at, tz=timezone.utc)
+        min(
+            datetime.fromtimestamp(session_expires_at, tz=timezone.utc),
+            _cart_hold_expires_at(now),
+        )
         if session_expires_at
         else _cart_hold_expires_at(now)
     )
@@ -405,7 +443,7 @@ async def add_star_to_cart(
     *,
     star_id: int,
     user: User,
-    owner_name: str,
+    owner_name: str | None,
     registration_type: str,
     recipient_name: str | None,
     recipient_email: str | None,
@@ -433,7 +471,7 @@ async def add_star_to_cart(
     option = get_certificate_option(certificate_type)
     normalized_country = normalize_country_code(country_code)
     quote = pricing_quote_for_country(normalized_country)
-    clean_owner_name = owner_name.strip()
+    clean_owner_name = (owner_name or "").strip() or None
     transaction = await _find_user_cart_transaction(db, star_id=star.id, user_id=user.id)
     if transaction is None:
         transaction = Transaction(
@@ -492,6 +530,145 @@ async def add_star_to_cart(
     return transaction
 
 
+async def remove_cart_transactions(
+    db: AsyncSession,
+    *,
+    transaction_ids: list[int],
+    user: User,
+) -> int:
+    if not transaction_ids:
+        return 0
+
+    transactions = await _transactions_by_ids_for_user(
+        db,
+        transaction_ids=transaction_ids,
+        user_id=user.id,
+    )
+    removable_statuses = {CHECKOUT_STATUS_CREATED, CHECKOUT_STATUS_EXPIRED, CHECKOUT_STATUS_PAYMENT_FAILED}
+    removed = 0
+    for transaction_id in transaction_ids:
+        transaction = transactions.get(transaction_id)
+        if transaction is None:
+            continue
+        if transaction.status not in removable_statuses:
+            continue
+        await db.delete(transaction)
+        removed += 1
+
+    await db.commit()
+    return removed
+
+
+async def create_bulk_embedded_checkout_session(
+    db: AsyncSession,
+    *,
+    transaction_ids: list[int],
+    user: User,
+    owner_name: str,
+    dedication: str | None,
+    gift_message: str | None,
+) -> tuple[str, str]:
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stripe is not configured on the backend.",
+        )
+
+    if not transaction_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one cart item.")
+
+    unique_transaction_ids = list(dict.fromkeys(transaction_ids))
+    transactions_by_id = await _transactions_by_ids_for_user(
+        db,
+        transaction_ids=unique_transaction_ids,
+        user_id=user.id,
+    )
+
+    if len(transactions_by_id) != len(unique_transaction_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more cart items could not be found.")
+
+    now = datetime.now(timezone.utc)
+    transactions = [transactions_by_id[transaction_id] for transaction_id in unique_transaction_ids]
+    removable_statuses = {CHECKOUT_STATUS_CREATED, CHECKOUT_STATUS_EXPIRED, CHECKOUT_STATUS_PAYMENT_FAILED}
+    for transaction in transactions:
+        if transaction.status not in removable_statuses:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only unpaid cart items can be checked out together.")
+
+    star_ids = [transaction.star_id for transaction in transactions]
+    stars_by_id = await _stars_by_ids(db, star_ids)
+    if len(stars_by_id) != len(star_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more stars could not be found.")
+
+    line_items: list[dict] = []
+    primary_transaction = transactions[0]
+
+    for transaction in transactions:
+        star = stars_by_id[transaction.star_id]
+        if star.is_bought:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{_star_display_name(star)} has already been registered.")
+
+        active_hold = await _find_other_active_hold(db, star_id=star.id, user_id=user.id, now=now)
+        if active_hold is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{_star_display_name(star)} is currently being held in another cart.",
+            )
+
+        line_items.extend(_line_items_for_star(star, transaction.certificate_type, "GB"))
+        transaction.owner_name = owner_name.strip()
+        transaction.dedication = (dedication or "").strip() or None
+        transaction.gift_message = (gift_message or "").strip() or None
+        transaction.payment_provider = "stripe"
+        transaction.payment_status = "pending"
+        transaction.status = CHECKOUT_STATUS_CREATED
+        transaction.accepted_terms_at = now
+        transaction.accepted_privacy_at = now
+        transaction.checkout_expires_at = _cart_hold_expires_at(now)
+        transaction.amount = _decimal_amount(
+            _transaction_amount_minor_units(star, transaction.certificate_type, "GB"),
+            transaction.currency,
+        )
+
+    primary_transaction.stripe_checkout_session_id = None
+
+    metadata = {
+        "bulk_checkout": "true",
+        "internal_order_ids": ",".join(str(transaction.id) for transaction in transactions),
+        "internal_order_id": str(primary_transaction.id),
+        "owner_name": owner_name.strip(),
+        "bulk_count": str(len(transactions)),
+    }
+    frontend_origin = _frontend_origin().rstrip("/")
+    session = await _run_stripe_call(
+        stripe.checkout.Session.create,
+        mode="payment",
+        ui_mode="embedded_page",
+        return_url=f"{frontend_origin}/checkout/complete?session_id={{CHECKOUT_SESSION_ID}}",
+        customer_email=user.email,
+        line_items=line_items,
+        metadata=metadata,
+        payment_intent_data={
+            "description": f"Aster Atlas bulk registration ({len(transactions)} stars)",
+            "metadata": metadata,
+        },
+    )
+
+    session_id = _stripe_value(session, "id")
+    session_expires_at = _stripe_value(session, "expires_at")
+    primary_transaction.stripe_checkout_session_id = session_id
+    primary_transaction.checkout_expires_at = (
+        min(
+            datetime.fromtimestamp(session_expires_at, tz=timezone.utc),
+            _cart_hold_expires_at(now),
+        )
+        if session_expires_at
+        else _cart_hold_expires_at(now)
+    )
+
+    await db.commit()
+    return _stripe_value(session, "client_secret"), session_id
+
+
 async def retrieve_checkout_session(session_id: str):
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(
@@ -500,6 +677,104 @@ async def retrieve_checkout_session(session_id: str):
         )
 
     return await _run_stripe_call(stripe.checkout.Session.retrieve, session_id)
+
+
+async def _fulfill_paid_transaction(
+    db: AsyncSession,
+    *,
+    session,
+    transaction: Transaction,
+) -> tuple[CheckoutFulfillmentResult, Registration]:
+    payment_intent_id = _stripe_id(_stripe_value(session, "payment_intent"))
+    star_result = await db.execute(select(Star).where(Star.id == transaction.star_id).with_for_update())
+    star = star_result.scalars().first()
+
+    if star is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Star not found.")
+
+    if star.is_bought and transaction.status != CHECKOUT_STATUS_FULFILLED:
+        transaction.status = CHECKOUT_STATUS_CONFLICT
+        transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
+        return CheckoutFulfillmentResult(
+            fulfilled=False,
+            transaction_status=transaction.status,
+            registration_id=None,
+            public_page_slug=None,
+            star_id=star.id,
+            star_name=_star_display_name(star),
+            owner_name=transaction.owner_name,
+            registration_type=transaction.registration_type,
+            recipient_name=transaction.recipient_name,
+            claim_status=None,
+            claim_url=None,
+            is_demo=transaction.is_demo,
+            includes_certificate=transaction.includes_certificate,
+            certificate_type=transaction.certificate_type,
+            certificate_label=certificate_label(transaction.certificate_type),
+            shipping_required=transaction.shipping_required,
+            fulfilled_at=transaction.fulfilled_at,
+            transaction_id=transaction.id,
+            registration_number=transaction.registration_number,
+        ), None
+
+    now = datetime.now(timezone.utc)
+    star.is_bought = True
+    star.current_owner_user_id = transaction.user_id
+    star.owner_name = transaction.owner_name
+    star.purchase_date = now
+
+    transaction.status = CHECKOUT_STATUS_FULFILLED
+    transaction.payment_status = "paid"
+    transaction.registration_number = _ensure_registration_number(transaction, now)
+    transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
+    transaction.fulfilled_at = now
+    transaction.checkout_expires_at = None
+
+    if transaction.stripe_checkout_session_id == _stripe_value(session, "id"):
+        transaction.shipping_rate_id = _stripe_id(_stripe_value(_stripe_value(session, "shipping_cost"), "shipping_rate"))
+        transaction.shipping_amount = _decimal_amount(
+            _stripe_value(_stripe_value(session, "shipping_cost"), "amount_total", 0) or 0,
+            transaction.currency,
+        )
+        shipping_details = _stripe_value(session, "shipping_details")
+        transaction.shipping_name = _stripe_value(shipping_details, "name")
+        transaction.shipping_phone = _stripe_value(shipping_details, "phone") or _stripe_value(
+            _stripe_value(session, "customer_details"),
+            "phone",
+        )
+        transaction.shipping_address = _serialize_shipping_address(_stripe_value(shipping_details, "address"))
+
+    purchaser_result = await db.execute(select(User).where(User.id == transaction.user_id))
+    purchaser = purchaser_result.scalars().first()
+    registration, claim_token = await ensure_registration_for_transaction(
+        db,
+        transaction=transaction,
+        star=star,
+        purchaser=purchaser,
+        issued_at=now,
+    )
+
+    return CheckoutFulfillmentResult(
+        fulfilled=True,
+        transaction_status=transaction.status,
+        registration_id=registration.id,
+        public_page_slug=registration.public_page_slug,
+        star_id=star.id,
+        star_name=_star_display_name(star),
+        owner_name=transaction.owner_name,
+        registration_type=transaction.registration_type,
+        recipient_name=transaction.recipient_name,
+        claim_status=registration.claim_status,
+        claim_url=f"{_frontend_origin().rstrip('/')}/claim/{claim_token or build_claim_token(registration.id)}" if registration.claim_status == "claimable" else None,
+        is_demo=transaction.is_demo,
+        includes_certificate=transaction.includes_certificate,
+        certificate_type=transaction.certificate_type,
+        certificate_label=certificate_label(transaction.certificate_type),
+        shipping_required=transaction.shipping_required,
+        fulfilled_at=transaction.fulfilled_at,
+        transaction_id=transaction.id,
+        registration_number=transaction.registration_number,
+    ), registration
 
 
 async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> CheckoutFulfillmentResult:
@@ -525,6 +800,66 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
 
         if transaction.stripe_checkout_session_id and transaction.stripe_checkout_session_id != session_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Checkout session mismatch.")
+
+    metadata = _stripe_value(session, "metadata") or {}
+    bulk_order_ids = [
+        int(value)
+        for value in (_stripe_value(metadata, "internal_order_ids", "") or "").split(",")
+        if value.strip().isdigit()
+    ]
+    if bulk_order_ids:
+        transactions_by_id = await _transactions_by_ids_for_user(
+            db,
+            transaction_ids=bulk_order_ids,
+            user_id=transaction.user_id,
+        )
+        ordered_transactions = [transactions_by_id[transaction_id] for transaction_id in bulk_order_ids if transaction_id in transactions_by_id]
+        if len(ordered_transactions) != len(bulk_order_ids):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more bulk cart items could not be found.")
+
+        primary_result = None
+        session_status = _stripe_value(session, "status")
+        payment_status = _stripe_value(session, "payment_status")
+        payment_intent_id = _stripe_id(_stripe_value(session, "payment_intent"))
+
+        if session_status != "complete" or payment_status != "paid":
+            for bulk_transaction in ordered_transactions:
+                bulk_transaction.status = CHECKOUT_STATUS_PAYMENT_FAILED if payment_status == "unpaid" else bulk_transaction.status
+                bulk_transaction.stripe_payment_intent_id = payment_intent_id or bulk_transaction.stripe_payment_intent_id
+                bulk_transaction.payment_status = payment_status or bulk_transaction.payment_status
+            await db.commit()
+            star = await db.scalar(select(Star).where(Star.id == ordered_transactions[0].star_id))
+            return CheckoutFulfillmentResult(
+                fulfilled=False,
+                transaction_status=ordered_transactions[0].status,
+                registration_id=None,
+                public_page_slug=None,
+                star_id=ordered_transactions[0].star_id,
+                star_name=_star_display_name(star),
+                owner_name=ordered_transactions[0].owner_name,
+                registration_type=ordered_transactions[0].registration_type,
+                recipient_name=ordered_transactions[0].recipient_name,
+                claim_status=None,
+                claim_url=None,
+                is_demo=ordered_transactions[0].is_demo,
+                includes_certificate=ordered_transactions[0].includes_certificate,
+                certificate_type=ordered_transactions[0].certificate_type,
+                certificate_label=certificate_label(ordered_transactions[0].certificate_type),
+                shipping_required=ordered_transactions[0].shipping_required,
+                fulfilled_at=ordered_transactions[0].fulfilled_at,
+                transaction_id=ordered_transactions[0].id,
+                registration_number=ordered_transactions[0].registration_number,
+            )
+
+        for index, bulk_transaction in enumerate(ordered_transactions):
+            if index == 0:
+                bulk_transaction.stripe_checkout_session_id = session_id
+            result, _ = await _fulfill_paid_transaction(db, session=session, transaction=bulk_transaction)
+            if primary_result is None:
+                primary_result = result
+
+        await db.commit()
+        return primary_result
 
     if transaction.status == CHECKOUT_STATUS_FULFILLED:
         star_result = await db.execute(select(Star).where(Star.id == transaction.star_id))
@@ -597,95 +932,9 @@ async def fulfill_checkout_session(db: AsyncSession, session_id: str) -> Checkou
             registration_number=transaction.registration_number,
         )
 
-    star_result = await db.execute(select(Star).where(Star.id == transaction.star_id).with_for_update())
-    star = star_result.scalars().first()
-
-    if star is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Star not found.")
-
-    if star.is_bought and transaction.status != CHECKOUT_STATUS_FULFILLED:
-        transaction.status = CHECKOUT_STATUS_CONFLICT
-        transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
-        await db.commit()
-        return CheckoutFulfillmentResult(
-            fulfilled=False,
-            transaction_status=transaction.status,
-            registration_id=None,
-            public_page_slug=None,
-            star_id=star.id,
-            star_name=_star_display_name(star),
-            owner_name=transaction.owner_name,
-            registration_type=transaction.registration_type,
-            recipient_name=transaction.recipient_name,
-            claim_status=None,
-            claim_url=None,
-            is_demo=transaction.is_demo,
-            includes_certificate=transaction.includes_certificate,
-            certificate_type=transaction.certificate_type,
-            certificate_label=certificate_label(transaction.certificate_type),
-            shipping_required=transaction.shipping_required,
-            fulfilled_at=transaction.fulfilled_at,
-            transaction_id=transaction.id,
-            registration_number=transaction.registration_number,
-        )
-
-    now = datetime.now(timezone.utc)
-    star.is_bought = True
-    star.current_owner_user_id = transaction.user_id
-    star.owner_name = transaction.owner_name
-    star.purchase_date = now
-
-    transaction.status = CHECKOUT_STATUS_FULFILLED
-    transaction.payment_status = "paid"
-    transaction.registration_number = _ensure_registration_number(transaction, now)
-    transaction.stripe_payment_intent_id = payment_intent_id or transaction.stripe_payment_intent_id
-    transaction.fulfilled_at = now
-    transaction.shipping_rate_id = _stripe_id(_stripe_value(_stripe_value(session, "shipping_cost"), "shipping_rate"))
-    transaction.shipping_amount = _decimal_amount(
-        _stripe_value(_stripe_value(session, "shipping_cost"), "amount_total", 0) or 0,
-        transaction.currency,
-    )
-    shipping_details = _stripe_value(session, "shipping_details")
-    transaction.shipping_name = _stripe_value(shipping_details, "name")
-    transaction.shipping_phone = _stripe_value(shipping_details, "phone") or _stripe_value(
-        _stripe_value(session, "customer_details"),
-        "phone",
-    )
-    transaction.shipping_address = _serialize_shipping_address(_stripe_value(shipping_details, "address"))
-
-    purchaser_result = await db.execute(select(User).where(User.id == transaction.user_id))
-    purchaser = purchaser_result.scalars().first()
-    registration, claim_token = await ensure_registration_for_transaction(
-        db,
-        transaction=transaction,
-        star=star,
-        purchaser=purchaser,
-        issued_at=now,
-    )
-
+    result, _ = await _fulfill_paid_transaction(db, session=session, transaction=transaction)
     await db.commit()
-
-    return CheckoutFulfillmentResult(
-        fulfilled=True,
-        transaction_status=transaction.status,
-        registration_id=registration.id,
-        public_page_slug=registration.public_page_slug,
-        star_id=star.id,
-        star_name=_star_display_name(star),
-        owner_name=transaction.owner_name,
-        registration_type=transaction.registration_type,
-        recipient_name=transaction.recipient_name,
-        claim_status=registration.claim_status,
-        claim_url=f"{_frontend_origin().rstrip('/')}/claim/{claim_token or build_claim_token(registration.id)}" if registration.claim_status == "claimable" else None,
-        is_demo=transaction.is_demo,
-        includes_certificate=transaction.includes_certificate,
-        certificate_type=transaction.certificate_type,
-        certificate_label=certificate_label(transaction.certificate_type),
-        shipping_required=transaction.shipping_required,
-        fulfilled_at=transaction.fulfilled_at,
-        transaction_id=transaction.id,
-        registration_number=transaction.registration_number,
-    )
+    return result
 
 
 async def complete_demo_checkout(

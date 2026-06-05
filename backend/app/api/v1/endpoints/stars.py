@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import datetime, timezone
 import math
 import re
 from typing import Optional
@@ -12,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.registration import Registration
 from app.models.star import Star
+from app.models.transaction import Transaction
 from app.models.user import User
+from app.api.deps import get_current_user_optional
 from app.core.config import settings
 from app.schemas.star import (
     StarCatalogueFacetsRead,
@@ -20,6 +23,7 @@ from app.schemas.star import (
     StarDetailRead,
     StarListRead,
 )
+from app.services.stripe_checkout import get_effective_hold_expires_at
 
 
 router = APIRouter()
@@ -131,12 +135,17 @@ async def _usernames_by_id(db: AsyncSession, user_ids: set[int | None]) -> dict[
     return {user_id: username for user_id, username in result.all() if username}
 
 
-async def _serialize_star_collection(db: AsyncSession, stars: list[Star]) -> list[dict]:
+async def _serialize_star_collection(
+    db: AsyncSession,
+    stars: list[Star],
+    current_user: User | None = None,
+) -> list[dict]:
     registrations_by_star = await _latest_registrations_by_star(db, [star.id for star in stars])
     usernames_by_id = await _usernames_by_id(
         db,
         {registration.current_holder_user_id for registration in registrations_by_star.values()},
     )
+    active_holds_by_star = await _active_holds_for_stars(db, star_ids=[star.id for star in stars])
 
     serialized = []
     for star in stars:
@@ -146,6 +155,14 @@ async def _serialize_star_collection(db: AsyncSession, stars: list[Star]) -> lis
             payload["registration_id"] = registration.id
             payload["public_page_slug"] = registration.public_page_slug
             payload["current_holder_username"] = usernames_by_id.get(registration.current_holder_user_id)
+        active_hold = active_holds_by_star.get(star.id)
+        if active_hold is not None:
+            payload["active_hold_expires_at"] = get_effective_hold_expires_at(active_hold)
+            payload["hold_owner_name"] = active_hold.owner_name
+            payload["held_in_another_cart"] = current_user is None or active_hold.user_id != current_user.id
+            if current_user is not None and active_hold.user_id == current_user.id:
+                payload["current_user_cart_transaction_id"] = active_hold.id
+                payload["current_user_cart_hold_active"] = True
         serialized.append(payload)
     return serialized
 
@@ -338,8 +355,53 @@ async def _build_catalogue_facets(db: AsyncSession, status: str | None) -> StarC
         max_price=float(max_price or 0),
     )
 
+async def _current_user_cart_transaction_for_star(
+    db: AsyncSession,
+    *,
+    star_id: int,
+    user_id: int | None,
+) -> Transaction | None:
+    if user_id is None:
+        return None
 
-async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetailRead:
+    result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.star_id == star_id,
+            Transaction.user_id == user_id,
+            Transaction.status.in_(["checkout_created", "expired", "payment_failed"]),
+        )
+        .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+    )
+    return result.scalars().first()
+
+
+async def _active_holds_for_stars(
+    db: AsyncSession,
+    *,
+    star_ids: list[int],
+) -> dict[int, Transaction]:
+    if not star_ids:
+        return {}
+
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.star_id.in_(star_ids),
+            Transaction.status == "checkout_created",
+        )
+        .order_by(Transaction.star_id.asc(), Transaction.created_at.desc(), Transaction.id.desc())
+    )
+    holds_by_star: dict[int, Transaction] = {}
+    for transaction in result.scalars().all():
+        effective_expires_at = get_effective_hold_expires_at(transaction)
+        if effective_expires_at and effective_expires_at > now:
+            holds_by_star.setdefault(transaction.star_id, transaction)
+    return holds_by_star
+
+
+async def build_star_detail_response(star: Star, db: AsyncSession, current_user: User | None = None) -> StarDetailRead:
     registration_result = await db.execute(
         select(Registration).where(Registration.star_id == star.id).order_by(Registration.created_at.desc(), Registration.id.desc())
     )
@@ -367,6 +429,23 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
         detail_payload["public_page_slug"] = registration.public_page_slug
         detail_payload["current_holder_username"] = usernames_by_id.get(registration.current_holder_user_id)
 
+    cart_transaction = await _current_user_cart_transaction_for_star(
+        db,
+        star_id=star.id,
+        user_id=current_user.id if current_user else None,
+    )
+    if cart_transaction is not None:
+        detail_payload["current_user_cart_transaction_id"] = cart_transaction.id
+        detail_payload["current_user_cart_hold_active"] = bool(
+            get_effective_hold_expires_at(cart_transaction)
+            and get_effective_hold_expires_at(cart_transaction) > datetime.now(timezone.utc)
+        )
+    active_hold = (await _active_holds_for_stars(db, star_ids=[star.id])).get(star.id)
+    if active_hold is not None:
+        detail_payload["active_hold_expires_at"] = get_effective_hold_expires_at(active_hold)
+        detail_payload["hold_owner_name"] = active_hold.owner_name
+        detail_payload["held_in_another_cart"] = current_user is None or active_hold.user_id != current_user.id
+
     return StarDetailRead(
         **detail_payload,
         phot_g_mean_mag=star.phot_g_mean_mag,
@@ -390,6 +469,7 @@ async def build_star_detail_response(star: Star, db: AsyncSession) -> StarDetail
 @router.get("/", response_model=list[StarListRead])
 async def read_stars(
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
@@ -403,12 +483,13 @@ async def read_stars(
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     stars = result.scalars().all()
-    return [StarListRead(**payload) for payload in await _serialize_star_collection(db, stars)]
+    return [StarListRead(**payload) for payload in await _serialize_star_collection(db, stars, current_user)]
 
 
 @router.get("/catalogue", response_model=StarCatalogueRead)
 async def read_star_catalogue(
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
     page: int = 1,
     page_size: int = 24,
     search: Optional[str] = None,
@@ -452,7 +533,7 @@ async def read_star_catalogue(
     )
     items_result = await db.execute(items_query)
     stars = items_result.scalars().all()
-    serialized_stars = await _serialize_star_collection(db, stars)
+    serialized_stars = await _serialize_star_collection(db, stars, current_user)
 
     return StarCatalogueRead(
         items=[StarListRead(**payload) for payload in serialized_stars],
@@ -465,21 +546,29 @@ async def read_star_catalogue(
 
 
 @router.get("/slug/{star_slug}", response_model=StarDetailRead)
-async def read_star_by_slug(star_slug: str, db: AsyncSession = Depends(get_db)):
+async def read_star_by_slug(
+    star_slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
     normalized_slug = slugify_star_name(star_slug)
     result = await db.execute(select(Star))
     for star in result.scalars().all():
         if normalized_slug in get_star_slug_candidates(star):
-            return await build_star_detail_response(star, db)
+            return await build_star_detail_response(star, db, current_user)
 
     raise HTTPException(status_code=404, detail="Star not found")
 
 
 @router.get("/{star_id}", response_model=StarDetailRead)
-async def read_star(star_id: int, db: AsyncSession = Depends(get_db)):
+async def read_star(
+    star_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
     result = await db.execute(select(Star).filter(Star.id == star_id))
     star = result.scalars().first()
     if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
 
-    return await build_star_detail_response(star, db)
+    return await build_star_detail_response(star, db, current_user)

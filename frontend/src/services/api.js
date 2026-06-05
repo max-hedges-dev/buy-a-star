@@ -3,6 +3,13 @@ import { apiRequest } from './http';
 const STARS_URL = '/stars/';
 const STARS_CACHE_PREFIX = 'aster-atlas-stars-cache:v3:';
 const STARS_CACHE_TTL_MS = 60 * 1000;
+export const CART_UPDATED_EVENT = 'aster-atlas-cart-updated';
+
+export const notifyCartUpdated = () => {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(CART_UPDATED_EVENT));
+    }
+};
 
 const getStarsCacheKey = (params) => `${STARS_CACHE_PREFIX}${params.toString()}`;
 
@@ -192,6 +199,7 @@ export async function fetchCheckoutSessionStatus(sessionId) {
     const data = await apiRequest(`/checkout/session-status?session_id=${encodeURIComponent(sessionId)}`);
     if (data.fulfilled) {
         clearStarsCache();
+        notifyCartUpdated();
     }
     return data;
 }
@@ -234,13 +242,45 @@ export async function addStarToCart({
         body: {
             star_id: starId,
             registration_type: registrationType,
+            owner_name: ownerName?.trim() || undefined,
+            recipient_name: recipientName?.trim() || undefined,
+            recipient_email: recipientEmail?.trim() || undefined,
+            dedication: dedication?.trim() || undefined,
+            gift_message: giftMessage?.trim() || undefined,
+            certificate_type: certificateType || 'digital',
+            country_code: countryCode,
+        },
+    });
+}
+
+export async function removeCartItems(transactionIds) {
+    const data = await apiRequest('/checkout/cart/remove', {
+        method: 'POST',
+        body: {
+            transaction_ids: transactionIds,
+        },
+    });
+    notifyCartUpdated();
+    return data;
+}
+
+export async function createBulkCheckoutSession({
+    transactionIds,
+    ownerName,
+    dedication,
+    giftMessage,
+    acceptedTerms,
+    acceptedPrivacy,
+}) {
+    return apiRequest('/checkout/bulk-session', {
+        method: 'POST',
+        body: {
+            transaction_ids: transactionIds,
             owner_name: ownerName,
-            recipient_name: recipientName,
-            recipient_email: recipientEmail,
             dedication,
             gift_message: giftMessage,
-            certificate_type: certificateType,
-            country_code: countryCode,
+            accepted_terms: acceptedTerms,
+            accepted_privacy: acceptedPrivacy,
         },
     });
 }

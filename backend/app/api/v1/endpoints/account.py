@@ -17,6 +17,7 @@ from app.schemas.account import (
     AccountStarSummary,
 )
 from app.services.certificate_options import certificate_label
+from app.services.stripe_checkout import get_effective_hold_expires_at
 from app.api.v1.endpoints.stars import get_star_slug
 
 
@@ -38,11 +39,32 @@ def _is_cart_like_status(transaction: Transaction) -> bool:
 
 
 def _hold_active(transaction: Transaction) -> bool:
+    effective_expires_at = get_effective_hold_expires_at(transaction)
     return bool(
         _is_cart_like_status(transaction)
-        and transaction.checkout_expires_at
-        and transaction.checkout_expires_at > datetime.now(timezone.utc)
+        and effective_expires_at
+        and effective_expires_at > datetime.now(timezone.utc)
     )
+
+
+async def _active_holds_by_star(db: AsyncSession, star_ids: list[int]) -> dict[int, Transaction]:
+    if not star_ids:
+        return {}
+
+    result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.star_id.in_(star_ids),
+            Transaction.status == "checkout_created",
+        )
+        .order_by(Transaction.star_id.asc(), Transaction.created_at.desc(), Transaction.id.desc())
+    )
+    holds_by_star: dict[int, Transaction] = {}
+    for transaction in result.scalars().all():
+        effective_expires_at = get_effective_hold_expires_at(transaction)
+        if effective_expires_at and effective_expires_at > datetime.now(timezone.utc):
+            holds_by_star.setdefault(transaction.star_id, transaction)
+    return holds_by_star
 
 
 def _holder_label(current_user: User, registration: Registration) -> str:
@@ -59,6 +81,7 @@ def _star_summary(
     registration: Registration | None,
     current_user: User,
     holder_username: str | None = None,
+    active_hold: Transaction | None = None,
 ) -> AccountStarSummary:
     return AccountStarSummary(
         id=star.id,
@@ -86,6 +109,10 @@ def _star_summary(
         purchase_date=star.purchase_date,
         registration_number=registration.registration_number if registration else transaction.registration_number,
         is_current_owner=star.current_owner_user_id == transaction.user_id,
+        is_bought=bool(star.is_bought),
+        active_hold_expires_at=get_effective_hold_expires_at(active_hold) if active_hold else None,
+        held_in_another_cart=bool(active_hold and active_hold.user_id != current_user.id),
+        hold_owner_name=active_hold.owner_name if active_hold else None,
     )
 
 
@@ -95,7 +122,16 @@ def _order_summary(
     registration: Registration | None,
     current_user: User,
     holder_username: str | None = None,
+    active_hold: Transaction | None = None,
 ) -> AccountOrderSummary:
+    star_still_available = not bool(star.is_bought)
+    hold_owned_by_current_user = bool(active_hold and active_hold.user_id == current_user.id)
+    no_active_hold_exists = active_hold is None
+    can_proceed_to_payment = (
+        _is_cart_like_status(transaction)
+        and star_still_available
+        and (no_active_hold_exists or hold_owned_by_current_user)
+    )
     return AccountOrderSummary(
         id=transaction.id,
         registration_id=registration.id if registration else None,
@@ -121,9 +157,11 @@ def _order_summary(
         transaction_type=transaction.transaction_type,
         created_at=transaction.created_at,
         fulfilled_at=transaction.fulfilled_at,
-        hold_expires_at=transaction.checkout_expires_at,
+        hold_expires_at=get_effective_hold_expires_at(transaction),
         hold_active=_hold_active(transaction),
-        star=_star_summary(star, transaction, registration, current_user, holder_username),
+        can_proceed_to_payment=can_proceed_to_payment,
+        is_star_still_available=star_still_available,
+        star=_star_summary(star, transaction, registration, current_user, holder_username, active_hold),
     )
 
 
@@ -141,9 +179,10 @@ async def read_account_overview(
         .order_by(Transaction.created_at.desc(), Transaction.id.desc())
     )
     rows = result.all()
+    active_holds_by_star = await _active_holds_by_star(db, [star.id for _, star, _, _ in rows])
 
     all_summaries = [
-        _order_summary(transaction, star, registration, current_user, holder_username)
+        _order_summary(transaction, star, registration, current_user, holder_username, active_holds_by_star.get(star.id))
         for transaction, star, registration, holder_username in rows
     ]
     orders = [summary for summary in all_summaries if summary.status == "fulfilled"]
@@ -170,7 +209,7 @@ async def read_account_overview(
         if star.id in seen_star_ids:
             continue
         seen_star_ids.add(star.id)
-        stars.append(_star_summary(star, transaction, registration, current_user, holder_username))
+        stars.append(_star_summary(star, transaction, registration, current_user, holder_username, active_holds_by_star.get(star.id)))
 
     return AccountOverviewResponse(orders=orders, cart_items=cart_items, stars=stars)
 
@@ -196,7 +235,8 @@ async def read_account_order(
     transaction, star, registration, holder_username = row
     if transaction.user_id != current_user.id and (registration is None or registration.current_holder_user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this order.")
-    summary = _order_summary(transaction, star, registration, current_user, holder_username)
+    active_hold = (await _active_holds_by_star(db, [star.id])).get(star.id)
+    summary = _order_summary(transaction, star, registration, current_user, holder_username, active_hold)
 
     return AccountOrderDetail(
         **summary.model_dump(),

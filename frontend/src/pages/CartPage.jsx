@@ -131,15 +131,15 @@ const tooltipStyle = {
 };
 
 const previewShellStyle = {
-    width: 150,
-    minWidth: 150,
-    height: 150,
-    borderRadius: 22,
+    width: 190,
+    minWidth: 190,
+    height: 190,
+    borderRadius: 0,
     overflow: 'hidden',
-    border: '1px solid rgba(245,239,226,0.08)',
-    background: 'radial-gradient(circle at 50% 38%, rgba(255,255,255,0.08), transparent 55%), rgba(0,0,0,0.38)',
+    border: 'none',
+    background: 'transparent',
     position: 'relative',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+    boxShadow: 'none',
 };
 
 const HOLD_REFRESH_MS = 1000;
@@ -585,32 +585,22 @@ const CartPage = () => {
                                                         cursor: 'pointer',
                                                         position: 'relative',
                                                         zIndex: 2,
-                                                        transition: 'transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease',
+                                                        transition: 'transform 0.18s ease, filter 0.18s ease',
                                                     }}
                                                     onMouseEnter={(event) => {
                                                         event.currentTarget.style.transform = 'translateY(-1px)';
-                                                        event.currentTarget.style.borderColor = 'rgba(216,168,95,0.28)';
-                                                        event.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 30px rgba(200,121,58,0.14)';
+                                                        event.currentTarget.style.filter = 'drop-shadow(0 14px 28px rgba(200,121,58,0.16))';
                                                     }}
                                                     onMouseLeave={(event) => {
                                                         event.currentTarget.style.transform = 'translateY(0)';
-                                                        event.currentTarget.style.borderColor = 'rgba(245,239,226,0.08)';
-                                                        event.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.04)';
+                                                        event.currentTarget.style.filter = 'none';
                                                     }}
                                                 >
-                                                    <div
-                                                        style={{
-                                                            position: 'absolute',
-                                                            inset: 0,
-                                                            background: 'radial-gradient(circle at 50% 42%, rgba(255,255,255,0.05), transparent 62%)',
-                                                            pointerEvents: 'none',
-                                                        }}
-                                                    />
                                                     <Canvas camera={{ position: [0, 0, 8], fov: 45 }} style={{ position: 'absolute', inset: 0 }}>
                                                         <ambientLight intensity={0.2} />
                                                         <pointLight position={[10, 5, 10]} intensity={1.5} />
                                                         <pointLight position={[-10, -5, -10]} intensity={0.5} />
-                                                        <group scale={[0.44, 0.44, 0.44]}>
+                                                        <group scale={[0.56, 0.56, 0.56]}>
                                                             <DetailedStar star={item.star} detailLevel="high" />
                                                         </group>
                                                     </Canvas>

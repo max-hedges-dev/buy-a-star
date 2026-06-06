@@ -140,6 +140,9 @@ const previewShellStyle = {
     background: 'transparent',
     position: 'relative',
     boxShadow: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
 };
 
 const HOLD_REFRESH_MS = 1000;
@@ -568,9 +571,10 @@ const CartPage = () => {
                                             <div
                                                 style={{
                                                     display: 'grid',
-                                                    gridTemplateColumns: isNarrow ? '1fr' : '150px minmax(0, 1fr)',
-                                                    gap: 20,
-                                                    alignItems: 'start',
+                                                    gridTemplateColumns: isNarrow ? '1fr' : '190px minmax(0, 1fr)',
+                                                    columnGap: 10,
+                                                    rowGap: 20,
+                                                    alignItems: 'center',
                                                 }}
                                             >
                                                 <Link
@@ -580,6 +584,7 @@ const CartPage = () => {
                                                         ...previewShellStyle,
                                                         width: isNarrow ? '100%' : previewShellStyle.width,
                                                         minWidth: isNarrow ? 0 : previewShellStyle.minWidth,
+                                                        height: isNarrow ? 220 : previewShellStyle.height,
                                                         justifySelf: isNarrow ? 'stretch' : 'start',
                                                         textDecoration: 'none',
                                                         cursor: 'pointer',
@@ -600,7 +605,7 @@ const CartPage = () => {
                                                         <ambientLight intensity={0.2} />
                                                         <pointLight position={[10, 5, 10]} intensity={1.5} />
                                                         <pointLight position={[-10, -5, -10]} intensity={0.5} />
-                                                        <group scale={[0.56, 0.56, 0.56]}>
+                                                        <group scale={[0.96, 0.96, 0.96]}>
                                                             <DetailedStar star={item.star} detailLevel="high" />
                                                         </group>
                                                     </Canvas>

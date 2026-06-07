@@ -199,6 +199,7 @@ const CartPage = () => {
     const [showBulkWarning, setShowBulkWarning] = useState(false);
     const [isRemoving, setIsRemoving] = useState(false);
     const [showBlockedProceedTooltip, setShowBlockedProceedTooltip] = useState(false);
+    const [pendingRemovalItem, setPendingRemovalItem] = useState(null);
     const { isCompact, isNarrow, px } = useResponsiveScale({ compactWidth: 920 });
 
     const loadOverview = async () => {
@@ -249,7 +250,7 @@ const CartPage = () => {
     const allSelected = itemsWithTimers.length > 0 && selectedIds.length === itemsWithTimers.length;
     const hasBlockedSelectedItems = selectedItems.some((item) => !item.can_proceed_to_payment);
     const canBulkProceed = selectedIds.length > 0 && !hasBlockedSelectedItems;
-    const blockedProceedMessage = 'You cannot process payment for the stars that are held for another user or registered already.';
+    const blockedProceedMessage = 'You cannot review checkout for stars that are held for another user or registered already.';
 
     useEffect(() => {
         setSelectedIds((current) => current.filter((id) => cartItems.some((item) => item.id === id)));
@@ -298,19 +299,19 @@ const CartPage = () => {
         }
     };
 
-    const handleRemoveSingle = async (event, transactionId) => {
-        event.preventDefault();
-        event.stopPropagation();
+    const handleConfirmRemoveSingle = async () => {
+        if (!pendingRemovalItem) return;
         try {
             setIsRemoving(true);
-            await removeCartItems([transactionId]);
+            await removeCartItems([pendingRemovalItem.id]);
             notifyCartUpdated();
             setOverview((current) => ({
                 ...current,
-                cart_items: (current.cart_items || []).filter((item) => item.id !== transactionId),
+                cart_items: (current.cart_items || []).filter((item) => item.id !== pendingRemovalItem.id),
             }));
-            setSelectedIds((current) => current.filter((id) => id !== transactionId));
+            setSelectedIds((current) => current.filter((id) => id !== pendingRemovalItem.id));
             await loadOverview();
+            setPendingRemovalItem(null);
         } catch (requestError) {
             setError(requestError.message);
         } finally {
@@ -321,7 +322,7 @@ const CartPage = () => {
     const handleBulkProceed = () => {
         if (!canBulkProceed) return;
         if (selectedIds.length === 1) {
-            navigate(`/search/${selectedItems[0].star.star_slug}?cart=${selectedItems[0].id}`);
+            navigate(`/search/${selectedItems[0].star.star_slug}?checkout=1&cart=${selectedItems[0].id}`);
             return;
         }
         setShowBulkWarning(true);
@@ -514,7 +515,7 @@ const CartPage = () => {
                                                         cursor: canBulkProceed ? 'pointer' : 'not-allowed',
                                                     }}
                                                 >
-                                                    {selectedIds.length > 1 ? `Proceed to payment for ${selectedIds.length} stars` : 'Proceed to payment'}
+                                                    {selectedIds.length > 1 ? `Review checkout for ${selectedIds.length} stars` : 'Review checkout'}
                                                 </button>
                                             </div>
                                         </>
@@ -523,7 +524,7 @@ const CartPage = () => {
                             </div>
                             <div style={{ display: 'grid', gap: 18 }}>
                                 {itemsWithTimers.map((item) => {
-                                    const resumePath = `/search/${item.star.star_slug}?cart=${item.id}`;
+                                    const resumePath = `/search/${item.star.star_slug}?checkout=1&cart=${item.id}`;
                                     const isSelected = selectedIds.includes(item.id);
                                     const isCartLikeStatus = ['checkout_created', 'expired', 'payment_failed'].includes(item.status);
                                     const starAvailable = item.is_star_still_available !== false;
@@ -687,7 +688,7 @@ const CartPage = () => {
                                                                 minWidth: isNarrow ? 0 : 220,
                                                                 fontSize: '0.95rem',
                                                             }}
-                                                            onClick={(event) => handleRemoveSingle(event, item.id)}
+                                                            onClick={() => setPendingRemovalItem(item)}
                                                             disabled={isRemoving}
                                                         >
                                                             {isRemoving ? 'Updating cart...' : 'Remove this star'}
@@ -696,7 +697,7 @@ const CartPage = () => {
                                                             {canProceedToPayment ? (
                                                                 <Link to={resumePath} style={primaryButtonStyle}>
                                                                     <ShoppingCart size={18} />
-                                                                    Proceed to payment
+                                                                    Review checkout
                                                                 </Link>
                                                             ) : anotherUserActiveHold ? (
                                                                 <button
@@ -749,6 +750,51 @@ const CartPage = () => {
                                     </button>
                                     <button type="button" className="secondary-button" onClick={() => setShowBulkWarning(false)}>
                                         Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {pendingRemovalItem ? (
+                        <div
+                            style={{
+                                position: 'fixed',
+                                inset: 0,
+                                background: 'rgba(0,0,0,0.56)',
+                                display: 'grid',
+                                placeItems: 'center',
+                                zIndex: 130,
+                                padding: 24,
+                            }}
+                        >
+                            <div className="glass-card" style={{ maxWidth: 620, width: '100%', padding: heroPadding }}>
+                                <p className="eyebrow" style={{ marginBottom: 16 }}>Remove from cart</p>
+                                <h2 style={{ fontSize: 'clamp(1.8rem, 3vw, 2.6rem)', marginBottom: 14 }}>
+                                    Remove this star from your cart?
+                                </h2>
+                                <p className="muted-copy" style={{ marginBottom: 14 }}>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{getStarDisplayName(pendingRemovalItem.star)}</strong>
+                                </p>
+                                <p className="muted-copy" style={{ marginBottom: 24 }}>
+                                    This exact star may be hard to find again. If you remove it, your hold on this star may be released.
+                                </p>
+                                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                                    <button
+                                        type="button"
+                                        className="secondary-button"
+                                        onClick={() => setPendingRemovalItem(null)}
+                                        disabled={isRemoving}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="primary-button"
+                                        onClick={handleConfirmRemoveSingle}
+                                        disabled={isRemoving}
+                                    >
+                                        {isRemoving ? 'Removing...' : 'Remove star'}
                                     </button>
                                 </div>
                             </div>

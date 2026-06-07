@@ -13,6 +13,7 @@ const BulkCartCheckoutPage = lazy(() => import('./pages/BulkCartCheckoutPage'));
 const OrderCertificatePage = lazy(() => import('./pages/OrderCertificatePage'));
 const OwnedStarPage = lazy(() => import('./pages/OwnedStarPage'));
 const RegistrationOwnershipPage = lazy(() => import('./pages/RegistrationOwnershipPage'));
+const StarStudioPage = lazy(() => import('./pages/StarStudioPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 const StarWikiPage = lazy(() => import('./pages/StarWikiPage'));
 const ClaimAccessPage = lazy(() => import('./pages/ClaimAccessPage'));
@@ -99,6 +100,14 @@ function App() {
                         element={(
                             <ProtectedRoute>
                                 <RegistrationOwnershipPage />
+                            </ProtectedRoute>
+                        )}
+                    />
+                    <Route
+                        path="/account/star-studio"
+                        element={(
+                            <ProtectedRoute>
+                                <StarStudioPage />
                             </ProtectedRoute>
                         )}
                     />

@@ -122,7 +122,7 @@ const OrderCertificatePage = () => {
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
                                             {isPendingCheckout ? (
                                                 <Link to={resumeCheckoutPath} style={primaryButtonStyle}>
-                                                    Proceed to payment
+                                                    Review checkout
                                                 </Link>
                                             ) : null}
                                             <Link to={getPublicStarPath(order.star)} className="secondary-button" style={actionStyle}>

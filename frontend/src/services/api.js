@@ -267,8 +267,8 @@ export async function removeCartItems(transactionIds) {
 export async function createBulkCheckoutSession({
     transactionIds,
     ownerName,
-    dedication,
-    giftMessage,
+    certificateType,
+    countryCode,
     acceptedTerms,
     acceptedPrivacy,
 }) {
@@ -277,8 +277,8 @@ export async function createBulkCheckoutSession({
         body: {
             transaction_ids: transactionIds,
             owner_name: ownerName,
-            dedication,
-            gift_message: giftMessage,
+            certificate_type: certificateType,
+            country_code: countryCode,
             accepted_terms: acceptedTerms,
             accepted_privacy: acceptedPrivacy,
         },

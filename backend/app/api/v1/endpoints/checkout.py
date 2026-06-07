@@ -196,8 +196,8 @@ async def create_bulk_session(
             transaction_ids=payload.transaction_ids,
             user=current_user,
             owner_name=payload.owner_name,
-            dedication=payload.dedication,
-            gift_message=payload.gift_message,
+            certificate_type=payload.certificate_type,
+            country_code=payload.country_code,
         )
     except stripe.error.StripeError as exc:
         raise HTTPException(

@@ -37,8 +37,26 @@ const metaStyle = {
     letterSpacing: '0.01em',
 };
 
-const CertificatePreview = ({ order }) => {
-    const certificateDate = formatCertificateDate(order.fulfilled_at || order.created_at);
+const resolvePreviewData = ({ order, previewData }) => {
+    if (order) {
+        return {
+            ownerName: order.owner_name,
+            starName: order.star.display_name,
+            certificateDate: formatCertificateDate(order.fulfilled_at || order.created_at),
+            registrationNumber: order.registration_number,
+        };
+    }
+
+    return {
+        ownerName: previewData?.ownerName || '[Recipient name]',
+        starName: previewData?.starName || '[Star name]',
+        certificateDate: previewData?.certificateDate || 'After purchase',
+        registrationNumber: previewData?.registrationNumber || 'AA-00000000-EXAMPLE',
+    };
+};
+
+const CertificatePreview = ({ order = null, previewData = null, exampleNote = null }) => {
+    const resolvedPreview = resolvePreviewData({ order, previewData });
     const lineOffset = '1px';
     const scriptLineOffset = '-7px';
 
@@ -69,7 +87,7 @@ const CertificatePreview = ({ order }) => {
                     lineHeight: 1,
                 }}
             >
-                {order.owner_name}
+                {resolvedPreview.ownerName}
             </div>
 
             <div
@@ -83,7 +101,7 @@ const CertificatePreview = ({ order }) => {
                     lineHeight: 1,
                 }}
             >
-                {order.star.display_name}
+                {resolvedPreview.starName}
             </div>
 
             <div
@@ -96,7 +114,7 @@ const CertificatePreview = ({ order }) => {
                     fontSize: 'clamp(0.8rem, 1.2vw, 1.08rem)',
                 }}
             >
-                {certificateDate}
+                {resolvedPreview.certificateDate}
             </div>
 
             <div
@@ -109,8 +127,29 @@ const CertificatePreview = ({ order }) => {
                     fontSize: 'clamp(0.76rem, 1.16vw, 1.02rem)',
                 }}
             >
-                {order.registration_number}
+                {resolvedPreview.registrationNumber}
             </div>
+
+            {exampleNote ? (
+                <div
+                    style={{
+                        position: 'absolute',
+                        left: '50%',
+                        bottom: '5.5%',
+                        transform: 'translateX(-50%)',
+                        padding: '8px 12px',
+                        borderRadius: '999px',
+                        background: 'rgba(255, 248, 237, 0.86)',
+                        color: '#574231',
+                        fontSize: 'clamp(0.68rem, 1vw, 0.84rem)',
+                        fontWeight: 600,
+                        letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    {exampleNote}
+                </div>
+            ) : null}
         </div>
     );
 };

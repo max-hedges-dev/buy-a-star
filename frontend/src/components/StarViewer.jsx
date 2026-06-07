@@ -958,7 +958,8 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
     const [error, setError] = useState(null);
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
-    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [isCheckoutOpen, setIsCheckoutOpen] = useState(Boolean(openCheckout));
+    const [isRegistrationModalOpen, setIsRegistrationModalOpen] = useState(Boolean(openCheckout));
     const [starDetail, setStarDetail] = useState(star);
     const [starDetailStatus, setStarDetailStatus] = useState('idle');
     const [isOwnerRecordOpen, setIsOwnerRecordOpen] = useState(false);
@@ -1142,9 +1143,10 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
                             ? 'This star is currently being held in another cart. You can keep it in your cart, but you cannot complete payment unless that hold expires.'
                         : 'Resumed from your cart. Your hold has expired, so complete payment soon if you still want this star.'
                 );
-                if (openCheckout && order.can_proceed_to_payment && (order.owner_name || '').trim()) {
+                if (openCheckout && order.can_proceed_to_payment) {
                     setAcceptedTerms(true);
                     setAcceptedPrivacy(true);
+                    setIsRegistrationModalOpen(true);
                     setIsCheckoutOpen(true);
                 }
                 setResumeCartStatus('ready');
@@ -1578,8 +1580,14 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
 
         setError(null);
         setCartFeedback(null);
+        setIsRegistrationModalOpen(true);
         setIsCheckoutOpen(true);
     };
+
+    const closeRegistrationModal = useCallback(() => {
+        setIsRegistrationModalOpen(false);
+        setIsCheckoutOpen(false);
+    }, []);
 
     const handleAddToCart = async () => {
         if (!isAuthenticated) {
@@ -2179,405 +2187,473 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
                         </div>
 
                     {activeStar.is_bought ? null : (
-                        <div
-                            style={{
-                                background: 'rgba(20, 20, 30, 0.8)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                padding: '30px',
-                                borderRadius: '16px',
-                                color: 'white',
-                            }}
-                        >
-                            <h2 style={{ fontSize: '1.5rem', margin: '0 0 20px 0', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' }}>
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsRegistrationModalOpen(true);
+                                    setIsCheckoutOpen(false);
+                                }}
+                                className="primary-button"
+                                style={{ width: '100%', minWidth: 0, marginBottom: scalePx(28) }}
+                            >
                                 Register this star
-                            </h2>
+                            </button>
 
-                            {error && (
-                                <div style={{ color: '#ff6666', marginBottom: '15px', padding: '10px', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>
-                                    {error}
-                                </div>
-                            )}
-
-                            <div style={{ marginBottom: '25px' }}>
-                                {showCountrySelector ? (
-                                    <>
-                                        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
-                                            Country
-                                        </label>
-                                        <select
-                                            value={selectedCountryCode}
-                                            onChange={(event) => setSelectedCountryCode(event.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                maxWidth: '100%',
-                                                boxSizing: 'border-box',
-                                                padding: '15px',
-                                                borderRadius: '8px',
-                                                border: '1px solid rgba(255,255,255,0.2)',
-                                                background: 'rgba(0,0,0,0.5)',
-                                                color: 'white',
-                                                fontSize: '1rem',
-                                                marginBottom: '16px',
-                                            }}
-                                        >
-                                            {supportedCountries.map((countryCode) => (
-                                                <option key={countryCode} value={countryCode}>
-                                                    {regionNames?.of(countryCode) || countryCode}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </>
-                                ) : null}
-                                <div style={{ marginBottom: '18px' }}>
-                                    <div style={{ color: '#ffb08a', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '10px' }}>
-                                        Step 2 · Who is this for?
-                                    </div>
-                                    <div style={{ display: 'grid', gap: '10px' }}>
-                                        {[
-                                            { value: 'self', label: 'For myself', body: 'Attach the registration to your account as the current holder.' },
-                                            { value: 'gift', label: 'For someone else', body: 'Prepare the gift now. The recipient can view it first and claim it later.' },
-                                            { value: 'decide_later', label: 'I will decide later', body: 'Register it to your account for now and keep future gifting open.' },
-                                        ].map((option) => {
-                                            const isSelected = registrationType === option.value;
-                                            return (
-                                                <button
-                                                    key={option.value}
-                                                    type="button"
-                                                    onClick={() => setRegistrationType(option.value)}
-                                                    style={{
-                                                        display: 'grid',
-                                                        gap: '6px',
-                                                        width: '100%',
-                                                        padding: '16px',
-                                                        borderRadius: '14px',
-                                                        border: `1px solid ${isSelected ? 'var(--border-gold)' : 'rgba(255,255,255,0.1)'}`,
-                                                        background: isSelected ? 'rgba(200,121,58,0.12)' : 'rgba(0,0,0,0.28)',
-                                                        color: 'white',
-                                                        textAlign: 'left',
-                                                    }}
-                                                >
-                                                    <strong>{option.label}</strong>
-                                                    <span style={{ color: '#b7b3ab', fontSize: '0.92rem', lineHeight: 1.6 }}>{option.body}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                <div style={{ color: '#ffb08a', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '10px' }}>
-                                    Step 3 · Registration details
-                                </div>
-                                <div style={{ display: 'grid', gap: '14px' }}>
-                                    {registrationType === 'gift' ? (
-                                        <>
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
-                                                    Recipient name
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={recipientName}
-                                                    onChange={(e) => setRecipientName(e.target.value)}
-                                                    placeholder="e.g. Amelia"
-                                                    style={inputStyle}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
-                                                    Recipient email (optional)
-                                                </label>
-                                                <input
-                                                    type="email"
-                                                    value={recipientEmail}
-                                                    onChange={(e) => setRecipientEmail(e.target.value)}
-                                                    placeholder="For a later claim invitation"
-                                                    style={inputStyle}
-                                                />
-                                            </div>
-                                        </>
-                                    ) : null}
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
-                                            Registered display name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={ownerName}
-                                            onChange={(e) => setOwnerName(e.target.value)}
-                                            placeholder={registrationType === 'gift' ? 'e.g. Amelia Rose' : 'e.g. John Doe'}
-                                            style={inputStyle}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
-                                            Dedication (optional)
-                                        </label>
-                                        <textarea
-                                            value={dedication}
-                                            onChange={(e) => setDedication(e.target.value)}
-                                            rows={3}
-                                            placeholder="A short dedication or why this star matters."
-                                            style={{ ...inputStyle, resize: 'vertical', minHeight: '108px' }}
-                                        />
-                                    </div>
-                                    {registrationType === 'gift' ? (
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
-                                                Gift message (optional)
-                                            </label>
-                                            <textarea
-                                                value={giftMessage}
-                                                onChange={(e) => setGiftMessage(e.target.value)}
-                                                rows={3}
-                                                placeholder="A note for the recipient."
-                                                style={{ ...inputStyle, resize: 'vertical', minHeight: '108px' }}
-                                            />
-                                        </div>
-                                    ) : null}
-                                </div>
-                            </div>
-
-                            <div style={{ marginBottom: '30px' }}>
-                                <div style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '12px' }}>Certificate option</div>
-                                {checkoutOptionsStatus === 'loading' ? (
-                                    <div style={{ color: '#888' }}>Loading certificate options...</div>
-                                ) : (
-                                    <div style={{ display: 'grid', gap: '12px' }}>
-                                        {checkoutOptions.map((option) => {
-                                            const isSelected = option.code === certificateType;
-                                            return (
-                                                <button
-                                                    key={option.code}
-                                                    type="button"
-                                                    onClick={() => setCertificateType(option.code)}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'flex-start',
-                                                        justifyContent: 'space-between',
-                                                        gap: '18px',
-                                                        width: '100%',
-                                                        padding: '16px',
-                                                        borderRadius: '14px',
-                                                        border: `1px solid ${isSelected ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}`,
-                                                        background: isSelected ? 'rgba(255, 77, 0, 0.1)' : 'rgba(0,0,0,0.3)',
-                                                        color: 'white',
-                                                        textAlign: 'left',
-                                                    }}
-                                                >
-                                                    <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-                                                        {option.shipping_required ? (
-                                                            <Truck color={isSelected ? 'var(--primary)' : '#888'} style={{ marginTop: '2px', flexShrink: 0 }} />
-                                                        ) : (
-                                                            <FileText color={isSelected ? 'var(--primary)' : '#888'} style={{ marginTop: '2px', flexShrink: 0 }} />
-                                                        )}
-                                                        <div>
-                                                            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{option.label}</div>
-                                                            <div style={{ fontSize: '0.86rem', color: '#9a9aa6', lineHeight: 1.6 }}>{option.description}</div>
-                                                        </div>
-                                                    </div>
-                                                    <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', color: isSelected ? 'white' : '#c9c9d2' }}>
-                                                        {formatMoney(option.price, pricingCurrency)}
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div style={{ display: 'grid', gap: '10px', marginBottom: '20px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ color: '#aaa' }}>Registry record</span>
-                                    <span style={{ color: 'white' }}>{formatMoney(basePrice, pricingCurrency)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ color: '#aaa' }}>{selectedCertificateOption?.label || 'Certificate'}</span>
-                                    <span style={{ color: 'white' }}>{formatMoney(certificatePrice, pricingCurrency)}</span>
-                                </div>
-                                {selectedCertificateOption?.shipping_required ? (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ color: '#aaa' }}>Shipping</span>
-                                        <span style={{ color: 'white' }}>{formatMoney(shippingPrice, pricingCurrency)}</span>
-                                    </div>
-                                ) : null}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                                    <span style={{ color: '#aaa' }}>Total to complete registration</span>
-                                    <span style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{formatMoney(total, pricingCurrency)}</span>
-                                </div>
-                            </div>
-
-                            <div className="glass-card" style={{ padding: '18px 18px', marginBottom: '20px' }}>
-                                <div className="eyebrow" style={{ marginBottom: '8px' }}>Step 4 · Preview</div>
-                                <p className="muted-copy" style={{ margin: 0 }}>
-                                    You are preparing a private Aster Atlas registry record for <strong style={{ color: 'var(--text-primary)' }}>{ownerName || 'this star'}</strong>
-                                    {registrationType === 'gift' && recipientName ? `, intended for ${recipientName}` : ''}.
-                                    {dedication ? ' The dedication will appear with the record when made public.' : ' You can return later to expand the owner-facing story on the star page.'}
-                                </p>
-                            </div>
-
-                            {!isCheckoutOpen ? (
-                                <>
-                                    <div style={{ display: 'grid', gap: '12px', marginBottom: '24px' }}>
-                                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: '#d7d7de', lineHeight: 1.6, cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={acceptedTerms}
-                                                onChange={(event) => setAcceptedTerms(event.target.checked)}
-                                                style={{ marginTop: '3px' }}
-                                            />
-                                            <span>
-                                                I accept the <Link to="/terms" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>Terms &amp; Conditions</Link>.
-                                            </span>
-                                        </label>
-
-                                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: '#d7d7de', lineHeight: 1.6, cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={acceptedPrivacy}
-                                                onChange={(event) => setAcceptedPrivacy(event.target.checked)}
-                                                style={{ marginTop: '3px' }}
-                                            />
-                                            <span>
-                                                I accept the <Link to="/privacy" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>Privacy Notice</Link>.
-                                            </span>
-                                        </label>
-                                    </div>
-
-                                    {cartFeedback ? (
-                                        <div className="status-banner" style={{ marginBottom: '16px' }}>
-                                            {cartFeedback}
-                                        </div>
-                                    ) : null}
-                                    {shouldBlockRegistrationForHold ? (
-                                        <div className="status-banner" style={{ marginBottom: '16px', background: 'rgba(200,121,58,0.12)', borderColor: 'rgba(216,168,95,0.22)' }}>
-                                            {`${activeStar.hold_owner_name || 'Another collector'} is currently holding this star. ${otherHoldCountdownLabel} remaining before it becomes available again.`}
-                                        </div>
-                                    ) : null}
-
-                                    {isInCurrentUsersCart ? (
-                                        <Link
-                                            to={`/account/cart${currentCartTransactionId ? `?highlight=${currentCartTransactionId}` : ''}`}
-                                            className="secondary-button"
-                                            style={{
-                                                width: '100%',
-                                                minWidth: 0,
-                                                marginBottom: '12px',
-                                            }}
-                                        >
-                                            {currentCartHoldActive ? 'Already in your cart' : 'Open cart for this star'}
-                                        </Link>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            onClick={handleAddToCart}
-                                            disabled={cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold}
-                                            style={{
-                                                width: '100%',
-                                                padding: '18px',
-                                                background: 'var(--cta-gradient)',
-                                                color: '#070a11',
-                                                fontSize: '1.1rem',
-                                                fontWeight: 'bold',
-                                                borderRadius: '12px',
-                                                border: '1px solid rgba(255,255,255,0.14)',
-                                                cursor: (cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold) ? 'not-allowed' : 'pointer',
-                                                display: 'flex',
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                                gap: '10px',
-                                                opacity: (cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold) ? 0.7 : 1,
-                                                transition: 'all 0.2s',
-                                                boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
-                                                marginBottom: '12px',
-                                            }}
-                                        >
-                                            {cartProcessing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
-                                            {cartProcessing
-                                                ? 'Adding to cart...'
-                                                : shouldBlockRegistrationForHold
-                                                    ? (otherHoldCountdownLabel || 'Temporarily held')
-                                                    : isAuthenticated
-                                                        ? 'Add to cart'
-                                                        : 'Sign in to add to cart'}
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={handlePurchase}
-                                        disabled={processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold}
+                            {isRegistrationModalOpen ? (
+                                <div
+                                    style={{
+                                        position: 'fixed',
+                                        inset: 0,
+                                        background: 'rgba(2,3,5,0.74)',
+                                        display: 'grid',
+                                        placeItems: 'center',
+                                        padding: 24,
+                                        zIndex: 60,
+                                    }}
+                                    onClick={closeRegistrationModal}
+                                >
+                                    <div
                                         style={{
-                                            width: '100%',
-                                            padding: '18px',
-                                            background: 'var(--cta-gradient)',
-                                            color: '#070a11',
-                                            fontSize: '1.1rem',
-                                            fontWeight: 'bold',
-                                            borderRadius: '12px',
-                                            border: '1px solid rgba(255,255,255,0.14)',
-                                            cursor: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold) ? 'not-allowed' : 'pointer',
-                                            display: 'flex',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            gap: '10px',
-                                            opacity: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold) ? 0.7 : 1,
-                                            transition: 'all 0.2s',
-                                            boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
+                                            background: 'rgba(20, 20, 30, 0.8)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            padding: '30px',
+                                            borderRadius: '16px',
+                                            color: 'white',
+                                            width: 'min(860px, 100%)',
+                                            maxHeight: '88vh',
+                                            overflowY: 'auto',
+                                            boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
                                         }}
+                                        onClick={(event) => event.stopPropagation()}
                                     >
-                                        {processing ? <Loader2 className="spinner" size={20} /> : null}
-                                        {processing
-                                            ? 'Starting registration...'
-                                            : shouldBlockRegistrationForHold
-                                                ? (otherHoldCountdownLabel || 'Temporarily held')
-                                                : isAuthenticated
-                                                    ? 'Register now'
-                                                    : 'Sign in to continue'}
-                                    </button>
-                                    {!isAuthenticated ? (
-                                        <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>
-                                            You&apos;ll be redirected to sign in before saving this star to your account.
-                                        </p>
-                                    ) : null}
-                                    <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
-                                        {DEMO_MODE
-                                            ? 'Demo sign-in is active for this environment. After sign-in, checkout uses Stripe test mode just like a real account.'
-                                            : 'Secure payment via Stripe sandbox checkout. Aster Atlas remains a private registry built around real catalogued stars.'}
-                                    </p>
-                                </>
-                            ) : (
-                                <div style={{ display: 'grid', gap: '18px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <div>
-                                            <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Secure payment</div>
-                                            <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete your registration below using Stripe&apos;s sandbox checkout.</div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsCheckoutOpen(false)}
+                                        <div
                                             style={{
-                                                padding: '10px 16px',
-                                                borderRadius: '999px',
-                                                background: 'rgba(255,255,255,0.06)',
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                color: 'white',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                gap: '14px',
+                                                alignItems: 'center',
+                                                flexWrap: 'wrap',
+                                                margin: '0 0 20px 0',
+                                                borderBottom: '1px solid rgba(255,255,255,0.1)',
+                                                paddingBottom: '15px',
                                             }}
                                         >
-                                            Edit registration
-                                        </button>
-                                    </div>
+                                            <h2 style={{ fontSize: '1.5rem', margin: 0 }}>
+                                                {isCheckoutOpen ? 'Review checkout' : 'Register this star'}
+                                            </h2>
+                                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={isCheckoutOpen ? () => setIsCheckoutOpen(false) : closeRegistrationModal}
+                                                    className="secondary-button"
+                                                    style={{ width: 'fit-content', minWidth: 0, paddingInline: '18px' }}
+                                                >
+                                                    {isCheckoutOpen ? 'Back to details' : 'Back to star'}
+                                                </button>
+                                                {!isCheckoutOpen ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={closeRegistrationModal}
+                                                        className="secondary-button"
+                                                        style={{ width: 'fit-content', minWidth: 0, paddingInline: '18px' }}
+                                                    >
+                                                        Close
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                        </div>
 
-                                    <div style={{ background: '#ffffff', borderRadius: '18px', overflow: 'hidden', padding: '8px' }}>
-                                        <EmbeddedStripeCheckout
-                                            createSession={createStripeSession}
-                                            onComplete={handleCheckoutComplete}
-                                            onError={handleCheckoutError}
-                                        />
+                                        {error ? (
+                                            <div style={{ color: '#ff6666', marginBottom: '15px', padding: '10px', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>
+                                                {error}
+                                            </div>
+                                        ) : null}
+
+                                        <div style={{ marginBottom: '25px', display: isCheckoutOpen ? 'none' : 'block' }}>
+                                            {showCountrySelector ? (
+                                                <>
+                                                    <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                        Country
+                                                    </label>
+                                                    <select
+                                                        value={selectedCountryCode}
+                                                        onChange={(event) => setSelectedCountryCode(event.target.value)}
+                                                        style={{
+                                                            width: '100%',
+                                                            maxWidth: '100%',
+                                                            boxSizing: 'border-box',
+                                                            padding: '15px',
+                                                            borderRadius: '8px',
+                                                            border: '1px solid rgba(255,255,255,0.2)',
+                                                            background: 'rgba(0,0,0,0.5)',
+                                                            color: 'white',
+                                                            fontSize: '1rem',
+                                                            marginBottom: '16px',
+                                                        }}
+                                                    >
+                                                        {supportedCountries.map((countryCode) => (
+                                                            <option key={countryCode} value={countryCode}>
+                                                                {regionNames?.of(countryCode) || countryCode}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </>
+                                            ) : null}
+
+                                            <div style={{ marginBottom: '18px' }}>
+                                                <div style={{ color: '#ffb08a', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '10px' }}>
+                                                    Step 1 · Who is this for?
+                                                </div>
+                                                <div style={{ display: 'grid', gap: '10px' }}>
+                                                    {[
+                                                        { value: 'self', label: 'For myself', body: 'Attach the registration to your account as the current holder.' },
+                                                        { value: 'gift', label: 'For someone else', body: 'Prepare the gift now. The recipient can view it first and claim it later.' },
+                                                        { value: 'decide_later', label: 'I will decide later', body: 'Register it to your account for now and keep future gifting open.' },
+                                                    ].map((option) => {
+                                                        const isSelected = registrationType === option.value;
+                                                        return (
+                                                            <button
+                                                                key={option.value}
+                                                                type="button"
+                                                                onClick={() => setRegistrationType(option.value)}
+                                                                style={{
+                                                                    display: 'grid',
+                                                                    gap: '6px',
+                                                                    width: '100%',
+                                                                    padding: '16px',
+                                                                    borderRadius: '14px',
+                                                                    border: `1px solid ${isSelected ? 'var(--border-gold)' : 'rgba(255,255,255,0.1)'}`,
+                                                                    background: isSelected ? 'rgba(200,121,58,0.12)' : 'rgba(0,0,0,0.28)',
+                                                                    color: 'white',
+                                                                    textAlign: 'left',
+                                                                }}
+                                                            >
+                                                                <strong>{option.label}</strong>
+                                                                <span style={{ color: '#b7b3ab', fontSize: '0.92rem', lineHeight: 1.6 }}>{option.body}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            <div style={{ color: '#ffb08a', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '10px' }}>
+                                                Step 2 · Registration details
+                                            </div>
+                                            <div style={{ display: 'grid', gap: '14px' }}>
+                                                {registrationType === 'gift' ? (
+                                                    <>
+                                                        <div>
+                                                            <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                                Recipient name
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={recipientName}
+                                                                onChange={(e) => setRecipientName(e.target.value)}
+                                                                placeholder="e.g. Amelia"
+                                                                style={inputStyle}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                                Recipient email (optional)
+                                                            </label>
+                                                            <input
+                                                                type="email"
+                                                                value={recipientEmail}
+                                                                onChange={(e) => setRecipientEmail(e.target.value)}
+                                                                placeholder="For a later claim invitation"
+                                                                style={inputStyle}
+                                                            />
+                                                        </div>
+                                                    </>
+                                                ) : null}
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                        Registered display name
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={ownerName}
+                                                        onChange={(e) => setOwnerName(e.target.value)}
+                                                        placeholder={registrationType === 'gift' ? 'e.g. Amelia Rose' : 'e.g. John Doe'}
+                                                        style={inputStyle}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                        Dedication (optional)
+                                                    </label>
+                                                    <textarea
+                                                        value={dedication}
+                                                        onChange={(e) => setDedication(e.target.value)}
+                                                        rows={3}
+                                                        placeholder="A short dedication or why this star matters."
+                                                        style={{ ...inputStyle, resize: 'vertical', minHeight: '108px' }}
+                                                    />
+                                                </div>
+                                                {registrationType === 'gift' ? (
+                                                    <div>
+                                                        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                                            Gift message (optional)
+                                                        </label>
+                                                        <textarea
+                                                            value={giftMessage}
+                                                            onChange={(e) => setGiftMessage(e.target.value)}
+                                                            rows={3}
+                                                            placeholder="A note for the recipient."
+                                                            style={{ ...inputStyle, resize: 'vertical', minHeight: '108px' }}
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ marginBottom: '30px', display: isCheckoutOpen ? 'none' : 'block' }}>
+                                            <div style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '12px' }}>Certificate option</div>
+                                            {checkoutOptionsStatus === 'loading' ? (
+                                                <div style={{ color: '#888' }}>Loading certificate options...</div>
+                                            ) : (
+                                                <div style={{ display: 'grid', gap: '12px' }}>
+                                                    {checkoutOptions.map((option) => {
+                                                        const isSelected = option.code === certificateType;
+                                                        return (
+                                                            <button
+                                                                key={option.code}
+                                                                type="button"
+                                                                onClick={() => setCertificateType(option.code)}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'flex-start',
+                                                                    justifyContent: 'space-between',
+                                                                    gap: '18px',
+                                                                    width: '100%',
+                                                                    padding: '16px',
+                                                                    borderRadius: '14px',
+                                                                    border: `1px solid ${isSelected ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}`,
+                                                                    background: isSelected ? 'rgba(255, 77, 0, 0.1)' : 'rgba(0,0,0,0.3)',
+                                                                    color: 'white',
+                                                                    textAlign: 'left',
+                                                                }}
+                                                            >
+                                                                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                                                                    {option.shipping_required ? (
+                                                                        <Truck color={isSelected ? 'var(--primary)' : '#888'} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                                                    ) : (
+                                                                        <FileText color={isSelected ? 'var(--primary)' : '#888'} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                                                    )}
+                                                                    <div>
+                                                                        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{option.label}</div>
+                                                                        <div style={{ fontSize: '0.86rem', color: '#9a9aa6', lineHeight: 1.6 }}>{option.description}</div>
+                                                                    </div>
+                                                                </div>
+                                                                <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', color: isSelected ? 'white' : '#c9c9d2' }}>
+                                                                    {formatMoney(option.price, pricingCurrency)}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div style={{ display: isCheckoutOpen ? 'none' : 'grid', gap: '10px', marginBottom: '20px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ color: '#aaa' }}>Registry record</span>
+                                                <span style={{ color: 'white' }}>{formatMoney(basePrice, pricingCurrency)}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ color: '#aaa' }}>{selectedCertificateOption?.label || 'Certificate'}</span>
+                                                <span style={{ color: 'white' }}>{formatMoney(certificatePrice, pricingCurrency)}</span>
+                                            </div>
+                                            {selectedCertificateOption?.shipping_required ? (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ color: '#aaa' }}>Shipping</span>
+                                                    <span style={{ color: 'white' }}>{formatMoney(shippingPrice, pricingCurrency)}</span>
+                                                </div>
+                                            ) : null}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                                <span style={{ color: '#aaa' }}>Total to complete registration</span>
+                                                <span style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{formatMoney(total, pricingCurrency)}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="glass-card" style={{ padding: '18px 18px', marginBottom: '20px', display: isCheckoutOpen ? 'none' : 'block' }}>
+                                            <div className="eyebrow" style={{ marginBottom: '8px' }}>Step 3 · Preview</div>
+                                            <p className="muted-copy" style={{ margin: 0 }}>
+                                                You are preparing a private Aster Atlas registry record for <strong style={{ color: 'var(--text-primary)' }}>{ownerName || 'this star'}</strong>
+                                                {registrationType === 'gift' && recipientName ? `, intended for ${recipientName}` : ''}.
+                                                {dedication ? ' The dedication will appear with the record when made public.' : ' You can return later to expand the owner-facing story on the star page.'}
+                                            </p>
+                                        </div>
+
+                                        {!isCheckoutOpen ? (
+                                            <>
+                                                <div style={{ display: 'grid', gap: '12px', marginBottom: '24px' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: '#d7d7de', lineHeight: 1.6, cursor: 'pointer' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={acceptedTerms}
+                                                            onChange={(event) => setAcceptedTerms(event.target.checked)}
+                                                            style={{ marginTop: '3px' }}
+                                                        />
+                                                        <span>
+                                                            I accept the <Link to="/terms" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>Terms &amp; Conditions</Link>.
+                                                        </span>
+                                                    </label>
+
+                                                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: '#d7d7de', lineHeight: 1.6, cursor: 'pointer' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={acceptedPrivacy}
+                                                            onChange={(event) => setAcceptedPrivacy(event.target.checked)}
+                                                            style={{ marginTop: '3px' }}
+                                                        />
+                                                        <span>
+                                                            I accept the <Link to="/privacy" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>Privacy Notice</Link>.
+                                                        </span>
+                                                    </label>
+                                                </div>
+
+                                                {cartFeedback ? (
+                                                    <div className="status-banner" style={{ marginBottom: '16px' }}>
+                                                        {cartFeedback}
+                                                    </div>
+                                                ) : null}
+                                                {shouldBlockRegistrationForHold ? (
+                                                    <div className="status-banner" style={{ marginBottom: '16px', background: 'rgba(200,121,58,0.12)', borderColor: 'rgba(216,168,95,0.22)' }}>
+                                                        {`${activeStar.hold_owner_name || 'Another collector'} is currently holding this star. ${otherHoldCountdownLabel} remaining before it becomes available again.`}
+                                                    </div>
+                                                ) : null}
+
+                                                {isInCurrentUsersCart ? (
+                                                    <Link
+                                                        to={`/account/cart${currentCartTransactionId ? `?highlight=${currentCartTransactionId}` : ''}`}
+                                                        className="secondary-button"
+                                                        style={{
+                                                            width: '100%',
+                                                            minWidth: 0,
+                                                            marginBottom: '12px',
+                                                        }}
+                                                    >
+                                                        {currentCartHoldActive ? 'Already in your cart' : 'Open cart for this star'}
+                                                    </Link>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAddToCart}
+                                                        disabled={cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold}
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '18px',
+                                                            background: 'var(--cta-gradient)',
+                                                            color: '#070a11',
+                                                            fontSize: '1.1rem',
+                                                            fontWeight: 'bold',
+                                                            borderRadius: '12px',
+                                                            border: '1px solid rgba(255,255,255,0.14)',
+                                                            cursor: (cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold) ? 'not-allowed' : 'pointer',
+                                                            display: 'flex',
+                                                            justifyContent: 'center',
+                                                            alignItems: 'center',
+                                                            gap: '10px',
+                                                            opacity: (cartProcessing || processing || isLoadingUser || shouldBlockRegistrationForHold) ? 0.7 : 1,
+                                                            transition: 'all 0.2s',
+                                                            boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
+                                                            marginBottom: '12px',
+                                                        }}
+                                                    >
+                                                        {cartProcessing ? <Loader2 className="spinner" size={20} /> : <ShoppingCart size={20} />}
+                                                        {cartProcessing
+                                                            ? 'Adding to cart...'
+                                                            : shouldBlockRegistrationForHold
+                                                                ? (otherHoldCountdownLabel || 'Temporarily held')
+                                                                : isAuthenticated
+                                                                    ? 'Add to cart'
+                                                                    : 'Sign in to add to cart'}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={handlePurchase}
+                                                    disabled={processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '18px',
+                                                        background: 'var(--cta-gradient)',
+                                                        color: '#070a11',
+                                                        fontSize: '1.1rem',
+                                                        fontWeight: 'bold',
+                                                        borderRadius: '12px',
+                                                        border: '1px solid rgba(255,255,255,0.14)',
+                                                        cursor: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold) ? 'not-allowed' : 'pointer',
+                                                        display: 'flex',
+                                                        justifyContent: 'center',
+                                                        alignItems: 'center',
+                                                        gap: '10px',
+                                                        opacity: (processing || cartProcessing || isLoadingUser || checkoutOptionsStatus !== 'ready' || shouldBlockRegistrationForHold) ? 0.7 : 1,
+                                                        transition: 'all 0.2s',
+                                                        boxShadow: '0 10px 20px rgba(255,77,0,0.2)',
+                                                    }}
+                                                >
+                                                    {processing ? <Loader2 className="spinner" size={20} /> : null}
+                                                    {processing
+                                                        ? 'Starting registration...'
+                                                        : shouldBlockRegistrationForHold
+                                                            ? (otherHoldCountdownLabel || 'Temporarily held')
+                                                            : isAuthenticated
+                                                                ? 'Review checkout'
+                                                                : 'Sign in to continue'}
+                                                </button>
+                                                {!isAuthenticated ? (
+                                                    <p style={{ textAlign: 'center', color: '#aaa', fontSize: '0.85rem', marginTop: '14px' }}>
+                                                        You&apos;ll be redirected to sign in before saving this star to your account.
+                                                    </p>
+                                                ) : null}
+                                                <p style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem', marginTop: '15px' }}>
+                                                    {DEMO_MODE
+                                                        ? 'Demo sign-in is active for this environment. After sign-in, checkout uses Stripe test mode just like a real account.'
+                                                        : 'Secure payment via Stripe sandbox checkout. Aster Atlas remains a private registry built around real catalogued stars.'}
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <div style={{ display: 'grid', gap: '18px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Pay now</div>
+                                                        <div style={{ color: '#aaa', fontSize: '0.9rem' }}>Complete your registration below using Stripe&apos;s sandbox checkout.</div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsCheckoutOpen(false)}
+                                                        style={{
+                                                            padding: '10px 16px',
+                                                            borderRadius: '999px',
+                                                            background: 'rgba(255,255,255,0.06)',
+                                                            border: '1px solid rgba(255,255,255,0.1)',
+                                                            color: 'white',
+                                                        }}
+                                                    >
+                                                        Back to details
+                                                    </button>
+                                                </div>
+
+                                                <div style={{ background: '#ffffff', borderRadius: '18px', overflow: 'hidden', padding: '8px' }}>
+                                                    <EmbeddedStripeCheckout
+                                                        createSession={createStripeSession}
+                                                        onComplete={handleCheckoutComplete}
+                                                        onError={handleCheckoutError}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                            ) : null}
+                        </>
                     )}
-                        </div>
                     </div>
+                </div>
                 </div>
 
                 {usesObservatoryModal && (!isObservatoryModalOpen || isObservatoryModalClosing) ? (
@@ -3043,3 +3119,4 @@ const StarViewer = ({ star, onBack, onSuccess, onViewInGalaxy, claimToken = null
 };
 
 export default StarViewer;
+

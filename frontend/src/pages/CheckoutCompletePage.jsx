@@ -15,6 +15,10 @@ import {
     getPublicStarPath,
 } from '../utils/ownership';
 
+const getStarStudioPath = (registrationId) => (
+    registrationId ? `/account/star-studio?registration=${registrationId}` : '/account/star-studio'
+);
+
 const pageStyle = {
     padding: 'calc(var(--nav-height) + 48px) 24px 110px',
     minHeight: '100vh',
@@ -131,7 +135,7 @@ const CheckoutCompletePage = () => {
                     {status === 'loading' ? (
                         <section className="glass-card" style={{ padding: heroPadding, textAlign: 'center' }}>
                             <div style={{ width: '72px', height: '1px', margin: '0 auto 28px', background: 'rgba(255,255,255,0.78)' }} />
-                            <div className="eyebrow" style={{ marginBottom: 18 }}>Registration Confirmation</div>
+                            <div className="eyebrow" style={{ marginBottom: 18 }}>Purchase confirmation</div>
                             <h1 style={{ fontSize: 'clamp(2.4rem, 5vw, 4.2rem)', marginBottom: 16 }}>
                                 Finalising your registry record
                             </h1>
@@ -146,15 +150,15 @@ const CheckoutCompletePage = () => {
                             <section className="glass-card" style={{ padding: heroPadding }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.25fr 0.95fr', gap: px(28), alignItems: 'start' }}>
                                     <div>
-                                        <div className="eyebrow" style={{ marginBottom: 18 }}>Registration Confirmed</div>
+                                        <div className="eyebrow" style={{ marginBottom: 18 }}>Purchase complete</div>
                                         {checkoutData.is_demo ? (
                                             <div className="eyebrow" style={{ marginBottom: 12, color: 'var(--primary-strong)' }}>Demo registration</div>
                                         ) : null}
                                         <h1 style={{ fontSize: 'clamp(2.6rem, 5.4vw, 4.8rem)', lineHeight: 0.94, marginBottom: 16 }}>
-                                            {checkoutData.recipient_name || checkoutData.owner_name}&rsquo;s star has been registered.
+                                            Your star has been saved
                                         </h1>
                                         <p className="muted-copy" style={{ maxWidth: 720, marginBottom: 28 }}>
-                                            Your registration is complete, the private registry record has been issued, and your certificate access is ready. This star now appears in your Aster Atlas account with its main star page and private ownership page.
+                                            Your purchase is confirmed. You can now view your star, manage it in My Stars, or continue to Star Studio to create certificates, dedication text, gift materials, and shareable assets.
                                         </p>
                                         {warning ? (
                                             <div className="status-banner" style={{ marginBottom: 20 }}>{warning}</div>
@@ -172,24 +176,22 @@ const CheckoutCompletePage = () => {
                                         ) : null}
 
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
-                                            {ownedStarPath ? (
-                                                <Link to={ownedStarPath} style={primaryButtonStyle}>
-                                                    Open ownership page
+                                            {checkoutData.registration_id ? (
+                                                <Link to={getStarStudioPath(checkoutData.registration_id)} style={primaryButtonStyle}>
+                                                    Open Star Studio
                                                 </Link>
                                             ) : null}
-                                            {checkoutData.transaction_id ? (
-                                                <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={actionStyle}>
-                                                    Open certificate
-                                                </Link>
-                                            ) : null}
+                                            <Link to="/account?section=stars" className="secondary-button" style={actionStyle}>
+                                                View My Stars
+                                            </Link>
                                             <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button" style={actionStyle}>
-                                                Open star page
+                                                View Star Page
                                             </Link>
                                         </div>
 
                                         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                                            <Link to="/account?section=overview" className="secondary-button" style={actionStyle}>
-                                                Enter account
+                                            <Link to={checkoutData.registration_id ? getStarStudioPath(checkoutData.registration_id) : '/account/star-studio'} className="secondary-button" style={actionStyle}>
+                                                Customise later
                                             </Link>
                                             {absoluteClaimUrl ? (
                                                 <>
@@ -201,11 +203,9 @@ const CheckoutCompletePage = () => {
                                                     </a>
                                                 </>
                                             ) : null}
-                                            {checkoutData.transaction_id ? (
-                                                <Link to={getOrderPath(checkoutData.transaction_id)} className="secondary-button" style={actionStyle}>
-                                                    View Receipt
-                                                </Link>
-                                            ) : null}
+                                            <Link to="/account?section=overview" className="secondary-button" style={actionStyle}>
+                                                Enter account
+                                            </Link>
                                         </div>
                                     </div>
 
@@ -227,8 +227,8 @@ const CheckoutCompletePage = () => {
                                             </div>
                                         </div>
                                         <div style={tileStyle}>
-                                            <div className="eyebrow" style={{ marginBottom: 10 }}>Certificate</div>
-                                            <div style={{ fontSize: '1.32rem', fontWeight: 700 }}>{checkoutData.certificate_label}</div>
+                                            <div className="eyebrow" style={{ marginBottom: 10 }}>Star Studio</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>Ready whenever you are</div>
                                         </div>
                                         <div style={tileStyle}>
                                             <div className="eyebrow" style={{ marginBottom: 10 }}>Delivery</div>
@@ -238,8 +238,8 @@ const CheckoutCompletePage = () => {
                                             <div className="eyebrow" style={{ marginBottom: 10 }}>What happens next</div>
                                             <p className="muted-copy">
                                                 {checkoutData.registration_type === 'gift'
-                                                    ? 'The main star page and private ownership page stay available in your account. The recipient can view the gift first and claim it later.'
-                                                    : 'The main star page and private ownership page stay available in your account. If you ever want to hand this star over later, you can prepare a claim link from the ownership page.'}
+                                                    ? 'The star is saved now. You can continue in Star Studio whenever you want to shape the gift materials, while the recipient can claim it later.'
+                                                    : 'The star is saved now. You can return in Star Studio whenever you want to shape certificates, story, or shareable materials.'}
                                             </p>
                                         </div>
                                     </aside>
@@ -248,18 +248,18 @@ const CheckoutCompletePage = () => {
 
                             <section style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.08fr 0.92fr', gap: px(26) }}>
                                 <div className="glass-card" style={{ padding: `${px(34)}px ${px(36)}px` }}>
-                                    <p className="eyebrow" style={{ marginBottom: 16 }}>Certificate Access</p>
+                                    <p className="eyebrow" style={{ marginBottom: 16 }}>Star Studio handoff</p>
                                     <h2 style={{ fontSize: 'clamp(1.9rem, 3vw, 3rem)', marginBottom: 14 }}>
-                                        Your certificate is part of the registry record
+                                        Your creative materials can wait until you are ready
                                     </h2>
                                     <p className="muted-copy" style={{ marginBottom: 26, maxWidth: 760 }}>
-                                        Use the star page as your main home for this record, then return to the certificate and receipt whenever you need to revisit the purchase, confirm fulfilment, or share the registration.
+                                        Use the star page as the home for the record today, then move into Star Studio later to create certificate wording, gift presentation, and shareable assets without pressure right after payment.
                                     </p>
 
                                     {order ? (
-                                        <CertificatePreview order={order} />
+                                        <CertificatePreview order={order} exampleNote="Example preview" />
                                     ) : (
-                                        <div className="status-banner">Your certificate preview will appear here once the order details finish loading.</div>
+                                        <div className="status-banner">A certificate example will appear here once the order details finish loading.</div>
                                     )}
                                 </div>
 
@@ -323,21 +323,18 @@ const CheckoutCompletePage = () => {
                                         <p className="eyebrow" style={{ marginBottom: 16 }}>Next Actions</p>
                                         <div style={{ display: 'grid', gap: 12 }}>
                                             {ownedStarPath ? (
-                                                <Link to={ownedStarPath} className="secondary-button">
-                                                    Open star page
-                                                </Link>
-                                            ) : null}
-                                            {checkoutData.public_page_slug ? (
-                                                <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button">
-                                                    Open star page
+                                                <Link to={getStarStudioPath(checkoutData.registration_id)} className="secondary-button">
+                                                    Open Star Studio
                                                 </Link>
                                             ) : null}
                                             <Link to="/account?section=stars" className="secondary-button">
-                                                Browse my stars
+                                                View My Stars
                                             </Link>
-                                            <Link to="/account?section=orders" className="secondary-button">
-                                                View orders and receipts
-                                            </Link>
+                                            {checkoutData.public_page_slug || order ? (
+                                                <Link to={order ? getPublicStarPath(order.star) : '/search'} className="secondary-button">
+                                                    View Star Page
+                                                </Link>
+                                            ) : null}
                                         </div>
                                     </section>
                                 </div>

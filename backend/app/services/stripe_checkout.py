@@ -565,8 +565,8 @@ async def create_bulk_embedded_checkout_session(
     transaction_ids: list[int],
     user: User,
     owner_name: str,
-    dedication: str | None,
-    gift_message: str | None,
+    certificate_type: str,
+    country_code: str,
 ) -> tuple[str, str]:
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(
@@ -590,6 +590,9 @@ async def create_bulk_embedded_checkout_session(
     now = datetime.now(timezone.utc)
     transactions = [transactions_by_id[transaction_id] for transaction_id in unique_transaction_ids]
     removable_statuses = {CHECKOUT_STATUS_CREATED, CHECKOUT_STATUS_EXPIRED, CHECKOUT_STATUS_PAYMENT_FAILED}
+    option = get_certificate_option(certificate_type)
+    normalized_country = normalize_country_code(country_code)
+    quote = pricing_quote_for_country(normalized_country)
     for transaction in transactions:
         if transaction.status not in removable_statuses:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only unpaid cart items can be checked out together.")
@@ -614,10 +617,10 @@ async def create_bulk_embedded_checkout_session(
                 detail=f"{_star_display_name(star)} is currently being held in another cart.",
             )
 
-        line_items.extend(_line_items_for_star(star, transaction.certificate_type, "GB"))
+        line_items.extend(_line_items_for_star(star, option.code, normalized_country))
         transaction.owner_name = owner_name.strip()
-        transaction.dedication = (dedication or "").strip() or None
-        transaction.gift_message = (gift_message or "").strip() or None
+        transaction.dedication = None
+        transaction.gift_message = None
         transaction.payment_provider = "stripe"
         transaction.payment_status = "pending"
         transaction.status = CHECKOUT_STATUS_CREATED
@@ -625,8 +628,14 @@ async def create_bulk_embedded_checkout_session(
         transaction.accepted_privacy_at = now
         transaction.checkout_expires_at = _cart_hold_expires_at(now)
         transaction.amount = _decimal_amount(
-            _transaction_amount_minor_units(star, transaction.certificate_type, "GB"),
+            _transaction_amount_minor_units(star, option.code, normalized_country),
             transaction.currency,
+        )
+        transaction.certificate_type = option.code
+        transaction.shipping_required = option.shipping_required
+        transaction.shipping_amount = _decimal_amount(
+            quote.shipping_price.amount_minor_units if option.shipping_required else 0,
+            quote.currency,
         )
 
     primary_transaction.stripe_checkout_session_id = None
@@ -637,20 +646,49 @@ async def create_bulk_embedded_checkout_session(
         "internal_order_id": str(primary_transaction.id),
         "owner_name": owner_name.strip(),
         "bulk_count": str(len(transactions)),
+        "certificate_type_code": option.code,
+        "country_code": normalized_country,
     }
     frontend_origin = _frontend_origin().rstrip("/")
     session = await _run_stripe_call(
         stripe.checkout.Session.create,
-        mode="payment",
-        ui_mode="embedded_page",
-        return_url=f"{frontend_origin}/checkout/complete?session_id={{CHECKOUT_SESSION_ID}}",
-        customer_email=user.email,
-        line_items=line_items,
-        metadata=metadata,
-        payment_intent_data={
-            "description": f"Aster Atlas bulk registration ({len(transactions)} stars)",
+        **({
+            "mode": "payment",
+            "ui_mode": "embedded_page",
+            "return_url": f"{frontend_origin}/checkout/complete?session_id={{CHECKOUT_SESSION_ID}}",
+            "customer_email": user.email,
+            "line_items": line_items,
             "metadata": metadata,
-        },
+            "payment_intent_data": {
+                "description": f"Aster Atlas bulk registration ({len(transactions)} stars, {option.label})",
+                "metadata": metadata,
+            },
+            **(
+                {
+                    "shipping_address_collection": {
+                        "allowed_countries": [normalized_country],
+                    },
+                    "shipping_options": [
+                        {
+                            "shipping_rate_data": {
+                                "display_name": shipping_display_name(normalized_country),
+                                "type": "fixed_amount",
+                                "fixed_amount": {
+                                    "amount": quote.shipping_price.amount_minor_units,
+                                    "currency": quote.currency,
+                                },
+                                "delivery_estimate": {
+                                    "minimum": {"unit": "business_day", "value": 2},
+                                    "maximum": {"unit": "business_day", "value": 7},
+                                },
+                            }
+                        },
+                    ],
+                    "phone_number_collection": {"enabled": True},
+                }
+                if option.shipping_required else {}
+            ),
+        }),
     )
 
     session_id = _stripe_value(session, "id")

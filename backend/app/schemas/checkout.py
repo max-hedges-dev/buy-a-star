@@ -36,8 +36,8 @@ class CheckoutSessionCreateRequest(BaseModel):
 class BulkCheckoutSessionCreateRequest(BaseModel):
     transaction_ids: list[int]
     owner_name: str
-    dedication: str | None = None
-    gift_message: str | None = None
+    certificate_type: str = "digital"
+    country_code: str = "GB"
     accepted_terms: bool
     accepted_privacy: bool
 
